@@ -1,0 +1,87 @@
+{
+  "manifest_version": 3,
+  "name": "PromptVault — AI Prompt Library",
+  "version": "1.0.0",
+  "description": "Your personal AI prompt library with quick insert, hotkeys, folders, tags, and a public prompt marketplace. Works with ChatGPT, Claude, Gemini, Perplexity, Poe & more.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "PromptVault"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://www.perplexity.ai/*",
+        "https://poe.com/*",
+        "https://*.genspark.ai/*"
+      ],
+      "js": ["content/content-script.js"],
+      "css": ["content/content-style.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "clipboardWrite",
+    "contextMenus"
+  ],
+  "optional_permissions": [
+    "tabs"
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Open PromptVault quick search"
+    },
+    "hotkey-1": {
+      "suggested_key": {
+        "default": "Alt+1",
+        "mac": "Alt+1"
+      },
+      "description": "Insert prompt slot 1"
+    },
+    "hotkey-2": {
+      "suggested_key": {
+        "default": "Alt+2",
+        "mac": "Alt+2"
+      },
+      "description": "Insert prompt slot 2"
+    },
+    "hotkey-3": {
+      "suggested_key": {
+        "default": "Alt+3",
+        "mac": "Alt+3"
+      },
+      "description": "Insert prompt slot 3"
+    }
+  },
+  "options_page": "options/options.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
