@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PromptVault Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      background: #050508;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      overflow: auto;
+    }
+    .preview-wrapper {
+      display: flex;
+      gap: 40px;
+      align-items: flex-start;
+      padding: 40px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .preview-frame {
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(124,58,237,0.1);
+      border: 1px solid rgba(255,255,255,0.06);
+      position: relative;
+    }
+    .preview-label {
+      color: #a0a0be;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      text-align: center;
+      letter-spacing: 0.5px;
+    }
+    .preview-col { display: flex; flex-direction: column; align-items: center; }
+    iframe {
+      border: none;
+      display: block;
+    }
+    h1 {
+      color: #f0f0f8;
+      font-size: 28px;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #7c3aed, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      color: #666680;
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .full-page { width: 100%; max-width: 1200px; }
+    .btn-dl {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      background: linear-gradient(135deg, #7c3aed, #06b6d4);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      box-shadow: 0 4px 20px rgba(124,58,237,0.4);
+      margin-top: 32px;
+    }
+    .btn-dl:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(124,58,237,0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="full-page">
+    <h1>PromptVault</h1>
+    <p class="subtitle">AI Prompt Library — Chrome Extension Preview</p>
+    
+    <div class="preview-wrapper">
+      <div class="preview-col">
+        <div class="preview-label">POPUP (400x600)</div>
+        <div class="preview-frame">
+          <iframe src="extension/popup/popup.html" width="400" height="600"></iframe>
+        </div>
+      </div>
+    </div>
+    
+    <div style="text-align:center">
+      <a href="PromptVault-v1.0.zip" class="btn-dl" download>Download Extension ZIP</a>
+    </div>
+  </div>
+</body>
+</html>
