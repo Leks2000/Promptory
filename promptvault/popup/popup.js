@@ -7,6 +7,7 @@
 // ==================== CONSTANTS ====================
 const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0';
+const FREE_PROMPT_LIMIT = 20;
 
 // ==================== STATE ====================
 const state = {
@@ -17,7 +18,11 @@ const state = {
   session: null,
   isFirstLaunch: false,
   libraryPrompts: [],
-  searchOriginalPrompts: null
+  searchOriginalPrompts: null,
+  userLikes: new Set(),
+  userReports: new Set(),
+  isPremium: false,
+  promptLimit: FREE_PROMPT_LIMIT
 };
 
 // ==================== UTILITIES ====================
@@ -57,15 +62,57 @@ function formatDate(ts) {
   return 'Just now';
 }
 
+function supabaseMsg(params) {
+  return new Promise(resolve => chrome.runtime.sendMessage(params, resolve));
+}
+
+// ==================== FREE TIER LIMIT ====================
+function canCreatePrompt() {
+  if (state.isPremium) return true;
+  return state.prompts.length < state.promptLimit;
+}
+
+function getPromptsRemaining() {
+  if (state.isPremium) return Infinity;
+  return Math.max(0, state.promptLimit - state.prompts.length);
+}
+
+function renderLimitBanner() {
+  const existing = document.getElementById('limit-banner');
+  if (existing) existing.remove();
+
+  if (state.isPremium || !state.user) return;
+
+  const remaining = getPromptsRemaining();
+  if (remaining > 5) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'limit-banner';
+  banner.className = 'limit-banner';
+  if (remaining === 0) {
+    banner.innerHTML = `
+      <span class="limit-banner-text">Free limit reached. Upgrade to Premium for unlimited prompts.</span>
+      <span class="limit-banner-count">${state.prompts.length}/${state.promptLimit}</span>`;
+  } else {
+    banner.innerHTML = `
+      <span class="limit-banner-text">${remaining} prompt${remaining !== 1 ? 's' : ''} remaining on free plan</span>
+      <span class="limit-banner-count">${state.prompts.length}/${state.promptLimit}</span>`;
+  }
+  const content = document.querySelector('.content');
+  if (content) content.insertBefore(banner, content.firstChild);
+}
+
 // ==================== DATA LOADING ====================
 async function loadData() {
   return new Promise(resolve => {
-    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched'], result => {
+    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit'], result => {
       if (result.prompts) state.prompts = result.prompts;
       if (result.folders) state.folders = result.folders;
       if (result.settings) state.settings = { ...state.settings, ...result.settings };
       if (result.user) state.user = result.user;
       if (result.session) state.session = result.session;
+      if (result.isPremium) state.isPremium = result.isPremium;
+      if (result.promptLimit) state.promptLimit = result.promptLimit;
       if (!result.hasLaunched) {
         state.isFirstLaunch = true;
         chrome.storage.local.set({ hasLaunched: true });
@@ -94,8 +141,22 @@ function initTabs() {
       btn.classList.add('active');
       const target = document.getElementById(`${btn.dataset.tab}-tab`);
       if (target) target.classList.add('active');
+      // Lazy-load stats when tab is clicked
+      if (btn.dataset.tab === 'stats') renderStats();
     });
   });
+}
+
+// ==================== USAGE HISTORY TRACKING ====================
+async function trackUsage(prompt, action = 'insert', platform = null) {
+  if (!state.session || !state.user) return;
+  try {
+    await supabaseMsg({
+      action: 'supabaseRequest', method: 'POST',
+      path: 'rpc/record_usage',
+      body: { p_prompt_id: prompt.id, p_prompt_title: prompt.title, p_platform: platform || 'unknown', p_action: action }
+    });
+  } catch (e) { console.error('Track usage failed:', e); }
 }
 
 // ==================== PROMPTS ====================
@@ -141,6 +202,7 @@ function renderPrompts() {
 
   list.innerHTML = html;
   attachPromptCardListeners();
+  renderLimitBanner();
 }
 
 function renderFolderSection(folder, prompts) {
@@ -253,6 +315,7 @@ async function copyPrompt(id) {
     await saveData('prompts', state.prompts);
     showToast('Copied to clipboard', 'success');
     renderPrompts();
+    trackUsage(p, 'copy');
   } catch { showToast('Failed to copy', 'error'); }
 }
 
@@ -268,9 +331,15 @@ async function insertPromptToPage(id) {
     await saveData('prompts', state.prompts);
     showToast('Prompt inserted', 'success');
     renderPrompts();
+    const platform = new URL(tab.url || '').hostname.replace('www.','') || 'unknown';
+    trackUsage(p, 'insert', platform);
   } catch {
     await navigator.clipboard.writeText(p.text);
+    p.useCount = (p.useCount || 0) + 1;
+    p.updatedAt = Date.now();
+    await saveData('prompts', state.prompts);
     showToast('Copied to clipboard (page not supported)', 'success');
+    trackUsage(p, 'clipboard');
   }
 }
 
@@ -285,6 +354,7 @@ function showContextMenu(anchorEl, promptId) {
     <div class="context-menu-item" data-ctx="edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</div>
     <div class="context-menu-item" data-ctx="copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</div>
     <div class="context-menu-item" data-ctx="insert"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Insert to page</div>
+    ${state.user ? `<div class="context-menu-item share" data-ctx="share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share to Library</div>` : ''}
     <div class="context-menu-divider"></div>
     <div class="context-menu-item danger" data-ctx="delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</div>`;
   document.body.appendChild(menu);
@@ -302,6 +372,7 @@ function showContextMenu(anchorEl, promptId) {
       if (action === 'edit') openPromptEditor(promptId);
       else if (action === 'copy') await copyPrompt(promptId);
       else if (action === 'insert') await insertPromptToPage(promptId);
+      else if (action === 'share') await shareToLibrary(promptId);
       else if (action === 'delete') await deletePrompt(promptId);
     });
   });
@@ -320,12 +391,108 @@ async function deletePrompt(id) {
   showToast('Prompt deleted', 'success');
   renderPrompts();
   renderFavorites();
-  // Supabase delete
   syncPromptDeleteToSupabase(id);
+}
+
+// ==================== SHARE TO LIBRARY ====================
+async function shareToLibrary(promptId) {
+  const p = state.prompts.find(x => x.id === promptId);
+  if (!p) return;
+  if (!state.user || !state.session) {
+    showToast('Sign in to share prompts', 'error');
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'share-modal';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Share to Public Library</h2>
+        <button class="btn btn-icon btn-ghost close-modal-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input type="text" id="share-title" value="${escapeHtml(p.title)}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="share-desc" rows="2" placeholder="Brief description for the community">${escapeHtml(p.description || '')}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select id="share-category">
+            <option value="general">General</option>
+            <option value="business">Business</option>
+            <option value="development">Development</option>
+            <option value="marketing">Marketing</option>
+            <option value="creative">Creative</option>
+            <option value="learning">Learning</option>
+            <option value="ai">AI & Prompts</option>
+          </select>
+        </div>
+        <div style="padding:10px;background:var(--bg-tertiary);border-radius:var(--radius-md);margin-top:8px;">
+          <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.5;">
+            By sharing, your prompt will be visible to all PromptVault users.
+            Your name will appear as the author. You can remove it later.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost close-modal-btn">Cancel</button>
+        <button class="btn btn-primary ripple" id="share-confirm-btn">Share</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.add('visible'), 10);
+
+  document.getElementById('share-confirm-btn').addEventListener('click', async () => {
+    const title = document.getElementById('share-title').value.trim();
+    const desc = document.getElementById('share-desc').value.trim();
+    const category = document.getElementById('share-category').value;
+    if (!title) { showToast('Title is required', 'error'); return; }
+
+    const btn = document.getElementById('share-confirm-btn');
+    btn.classList.add('loading');
+    try {
+      const res = await supabaseMsg({
+        action: 'supabaseRequest', method: 'POST',
+        path: 'library_prompts',
+        body: {
+          title, text: p.text, description: desc,
+          author: state.user.name || state.user.email.split('@')[0],
+          author_id: state.user.id,
+          tags: p.tags || [], variables: p.variables || [],
+          category, is_approved: true
+        }
+      });
+      if (res?.error) throw new Error(res.error);
+      showToast('Prompt shared to library!', 'success');
+      closeModal('share-modal');
+      loadLibraryPrompts();
+    } catch (e) {
+      showToast('Failed to share: ' + (e.message || 'Unknown error'), 'error');
+    }
+    btn.classList.remove('loading');
+  });
+
+  modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('share-modal')));
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('share-modal'); });
 }
 
 // ==================== PROMPT EDITOR (CREATE/EDIT) ====================
 function openPromptEditor(promptId = null) {
+  // Check free tier limit for new prompts
+  if (!promptId && !canCreatePrompt()) {
+    showToast(`Free limit reached (${state.promptLimit} prompts). Upgrade to Premium for unlimited prompts.`, 'error');
+    return;
+  }
+
   const prompt = promptId ? state.prompts.find(p => p.id === promptId) : null;
   const isEdit = !!prompt;
 
@@ -395,15 +562,12 @@ function openPromptEditor(promptId = null) {
   document.body.appendChild(modal);
   setTimeout(() => modal.classList.add('visible'), 10);
 
-  // Focus
   document.getElementById('pe-title').focus();
 
-  // Variable detection
   const textArea = document.getElementById('pe-text');
   textArea.addEventListener('input', updateVarsDisplay);
   updateVarsDisplay();
 
-  // Tags
   document.getElementById('pe-tag-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -420,20 +584,16 @@ function openPromptEditor(promptId = null) {
     }
   });
 
-  // Save
   document.getElementById('pe-save-btn').addEventListener('click', () => savePrompt(promptId));
 
-  // Delete
   document.getElementById('pe-delete-btn')?.addEventListener('click', async () => {
     await deletePrompt(promptId);
     closeModal('prompt-editor-modal');
   });
 
-  // Close
   modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('prompt-editor-modal')));
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('prompt-editor-modal'); });
 
-  // ESC
   const escHandler = (e) => { if (e.key === 'Escape') { closeModal('prompt-editor-modal'); document.removeEventListener('keydown', escHandler); } };
   document.addEventListener('keydown', escHandler);
 }
@@ -488,6 +648,11 @@ async function savePrompt(editingId) {
       syncPromptToSupabase(p);
     }
   } else {
+    // Check limit again before creating
+    if (!canCreatePrompt()) {
+      showToast(`Free limit reached (${state.promptLimit} prompts). Upgrade to Premium.`, 'error');
+      return;
+    }
     const newP = { id: crypto.randomUUID(), title, text, description: desc, folderId, platform, tags, variables, isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() };
     state.prompts.unshift(newP);
     syncPromptToSupabase(newP);
@@ -535,7 +700,6 @@ function renderFolders() {
       </div>`;
   }).join('');
 
-  // Listeners
   document.querySelectorAll('[data-edit-folder]').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); openFolderEditor(btn.dataset.editFolder); });
   });
@@ -557,7 +721,6 @@ function renderFolders() {
       syncFolderDeleteToSupabase(fId);
     });
   });
-  // Click folder card to go to prompts tab
   document.querySelectorAll('.folder-card').forEach(card => {
     card.addEventListener('click', (e) => {
       if (e.target.closest('.folder-card-actions')) return;
@@ -669,7 +832,6 @@ function renderFavorites() {
 
   list.innerHTML = html;
 
-  // Listeners
   document.querySelectorAll('[data-fav-copy]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); copyPrompt(btn.dataset.favCopy); }));
   document.querySelectorAll('[data-fav-insert]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); insertPromptToPage(btn.dataset.favInsert); }));
   document.querySelectorAll('[data-fav-remove]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); toggleFavorite(btn.dataset.favRemove); }));
@@ -682,13 +844,24 @@ function renderFavorites() {
 async function loadLibraryPrompts() {
   if (!state.session) return;
   try {
-    const res = await new Promise(resolve => chrome.runtime.sendMessage({ action: 'supabaseRequest', method: 'GET', path: 'library_prompts?order=likes.desc' }, resolve));
+    const res = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_prompts?is_approved=eq.true&order=likes.desc' });
     if (res?.data) {
       state.libraryPrompts = res.data.map(p => ({
         id: p.id, title: p.title, text: p.text, description: p.description,
-        author: p.author, tags: p.tags || [], likes: p.likes, downloads: p.downloads,
+        author: p.author, authorId: p.author_id, tags: p.tags || [],
+        likes: p.likes, downloads: p.downloads,
         category: p.category, isFeatured: p.is_featured
       }));
+    }
+    // Load user's likes
+    const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
+    if (likesRes?.data) {
+      state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
+    }
+    // Load user's reports
+    const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
+    if (reportsRes?.data) {
+      state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
     }
   } catch (e) { console.error('Failed to load library:', e); }
   renderExplore();
@@ -706,13 +879,15 @@ function renderExplore() {
   }
 
   if (state.libraryPrompts.length === 0) {
-    list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">No public prompts yet</div><div class="empty-state-text">Check back soon for community prompts</div></div>`;
+    list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">No public prompts yet</div><div class="empty-state-text">Be the first to share! Use the context menu on any prompt.</div></div>`;
     return;
   }
 
   list.innerHTML = state.libraryPrompts.map((p, i) => {
     const isFlipped = flippedCards.has(p.id);
     const preview = p.text.substring(0, 120) + (p.text.length > 120 ? '...' : '');
+    const isLiked = state.userLikes.has(p.id);
+    const isReported = state.userReports.has(p.id);
     return `
       <div class="explore-card-wrapper" data-explore-id="${p.id}" style="animation-delay:${i*60}ms">
         <div class="explore-card ${isFlipped ? 'flipped' : ''}">
@@ -732,6 +907,15 @@ function renderExplore() {
               <button class="btn btn-secondary btn-sm ripple" data-explore-copy="${p.id}">Copy</button>
               <button class="btn btn-primary btn-sm ripple" data-explore-save="${p.id}">Save</button>
             </div>
+            <div class="explore-card-actions-row">
+              <button class="explore-action-btn ${isLiked ? 'liked' : ''}" data-explore-like="${p.id}" title="Like">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
+              <span style="font-size:11px;color:var(--text-tertiary);">${p.likes}</span>
+              <button class="explore-action-btn ${isReported ? 'reported' : ''}" data-explore-report="${p.id}" title="${isReported ? 'Reported' : 'Report'}" ${isReported ? 'disabled' : ''}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -748,7 +932,7 @@ function renderExplore() {
     });
   });
 
-  // Copy & Save
+  // Copy
   document.querySelectorAll('[data-explore-copy]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -757,21 +941,276 @@ function renderExplore() {
     });
   });
 
+  // Save
   document.querySelectorAll('[data-explore-save]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const id = btn.dataset.exploreSave;
       if (state.prompts.some(p => p.sourceId === id)) { showToast('Already in your library', 'error'); return; }
+      if (!canCreatePrompt()) { showToast(`Free limit reached (${state.promptLimit} prompts)`, 'error'); return; }
       const ep = state.libraryPrompts.find(x => x.id === id);
       if (!ep) return;
       const newP = { id: crypto.randomUUID(), sourceId: id, title: ep.title, text: ep.text, description: `From ${ep.author}`, tags: ep.tags || [], folderId: null, platform: 'universal', variables: [], isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() };
       state.prompts.unshift(newP);
       await saveData('prompts', state.prompts);
       showToast('Saved to your library', 'success');
-      // Increment download count
-      chrome.runtime.sendMessage({ action: 'supabaseRequest', method: 'POST', path: 'rpc/increment_download_count', body: { prompt_uuid: id } });
+      supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/increment_download_count', body: { prompt_uuid: id } });
     });
   });
+
+  // Like
+  document.querySelectorAll('[data-explore-like]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.exploreLike;
+      try {
+        const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/toggle_library_like', body: { prompt_uuid: id } });
+        if (res?.data) {
+          const result = Array.isArray(res.data) ? res.data[0] : res.data;
+          if (result.liked) { state.userLikes.add(id); } else { state.userLikes.delete(id); }
+          const lp = state.libraryPrompts.find(x => x.id === id);
+          if (lp) lp.likes = result.likes;
+          renderExplore();
+        }
+      } catch (err) { showToast('Failed to like', 'error'); }
+    });
+  });
+
+  // Report
+  document.querySelectorAll('[data-explore-report]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.userReports.has(btn.dataset.exploreReport)) return;
+      openReportModal(btn.dataset.exploreReport);
+    });
+  });
+}
+
+// ==================== REPORT MODAL ====================
+function openReportModal(promptId) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'report-modal';
+  const reasons = ['Inappropriate content', 'Spam or misleading', 'NSFW content', 'Copyright violation', 'Low quality / not useful', 'Other'];
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Report Prompt</h2>
+        <button class="btn btn-icon btn-ghost close-modal-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Reason for reporting</label>
+          <div class="report-reasons">
+            ${reasons.map((r, i) => `
+              <label class="report-reason-option" data-reason="${escapeHtml(r)}">
+                <input type="radio" name="report-reason" value="${escapeHtml(r)}" ${i === 0 ? 'checked' : ''}>
+                <span class="report-reason-label">${escapeHtml(r)}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Additional details (optional)</label>
+          <textarea id="report-details" rows="3" placeholder="Provide more context..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost close-modal-btn">Cancel</button>
+        <button class="btn btn-danger ripple" id="report-submit-btn">Submit Report</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.add('visible'), 10);
+
+  // Radio selection styling
+  modal.querySelectorAll('.report-reason-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      modal.querySelectorAll('.report-reason-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      opt.querySelector('input').checked = true;
+    });
+  });
+  modal.querySelector('.report-reason-option')?.classList.add('selected');
+
+  document.getElementById('report-submit-btn').addEventListener('click', async () => {
+    const reason = modal.querySelector('input[name="report-reason"]:checked')?.value;
+    const details = document.getElementById('report-details')?.value.trim();
+    if (!reason) return;
+
+    const btn = document.getElementById('report-submit-btn');
+    btn.classList.add('loading');
+    try {
+      const res = await supabaseMsg({
+        action: 'supabaseRequest', method: 'POST', path: 'prompt_reports',
+        body: { user_id: state.user.id, prompt_id: promptId, reason, details: details || null }
+      });
+      if (res?.error) throw new Error(typeof res.error === 'string' ? res.error : JSON.stringify(res.error));
+      state.userReports.add(promptId);
+      showToast('Report submitted. Thank you!', 'success');
+      closeModal('report-modal');
+      renderExplore();
+    } catch (e) {
+      if (e.message && e.message.includes('duplicate')) {
+        showToast('Already reported', 'error');
+        state.userReports.add(promptId);
+      } else {
+        showToast('Failed to submit report', 'error');
+      }
+    }
+    btn.classList.remove('loading');
+  });
+
+  modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('report-modal')));
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('report-modal'); });
+}
+
+// ==================== STATISTICS DASHBOARD ====================
+function renderStats() {
+  const container = document.getElementById('stats-content');
+  if (!container) return;
+
+  // Local stats from prompts data
+  const totalPrompts = state.prompts.length;
+  const totalUses = state.prompts.reduce((s, p) => s + (p.useCount || 0), 0);
+  const totalFavorites = state.prompts.filter(p => p.isFavorite).length;
+
+  // Top prompts by usage
+  const topPrompts = [...state.prompts]
+    .sort((a, b) => (b.useCount || 0) - (a.useCount || 0))
+    .slice(0, 5)
+    .filter(p => (p.useCount || 0) > 0);
+
+  // Tags frequency
+  const tagMap = {};
+  state.prompts.forEach(p => (p.tags || []).forEach(t => { tagMap[t] = (tagMap[t] || 0) + 1; }));
+  const topTags = Object.entries(tagMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  // Usage over last 7 days (approximation from updatedAt)
+  const now = Date.now();
+  const dayMs = 86400000;
+  const dailyUses = [];
+  for (let i = 6; i >= 0; i--) {
+    const dayStart = now - (i + 1) * dayMs;
+    const dayEnd = now - i * dayMs;
+    const dayLabel = new Date(dayEnd).toLocaleDateString('en', { weekday: 'short' });
+    const count = state.prompts.reduce((s, p) => {
+      if (p.updatedAt && p.updatedAt >= dayStart && p.updatedAt < dayEnd && (p.useCount || 0) > 0) return s + 1;
+      return s;
+    }, 0);
+    dailyUses.push({ label: dayLabel, count });
+  }
+  const maxDaily = Math.max(...dailyUses.map(d => d.count), 1);
+
+  // Platform breakdown from prompts
+  const platformMap = {};
+  state.prompts.forEach(p => {
+    const pl = p.platform || 'universal';
+    platformMap[pl] = (platformMap[pl] || 0) + (p.useCount || 0);
+  });
+  const platforms = Object.entries(platformMap).sort((a, b) => b[1] - a[1]);
+  const maxPlatform = Math.max(...platforms.map(p => p[1]), 1);
+
+  container.innerHTML = `
+    <div class="stats-dashboard">
+      <!-- Overview cards -->
+      <div class="stats-overview">
+        <div class="stat-card">
+          <div class="stat-card-value">${totalPrompts}</div>
+          <div class="stat-card-label">Total Prompts</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-value">${totalUses}</div>
+          <div class="stat-card-label">Total Uses</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-value">${totalFavorites}</div>
+          <div class="stat-card-label">Favorites</div>
+        </div>
+      </div>
+
+      <!-- Usage Chart -->
+      <div class="stats-section">
+        <div class="stats-section-title">Activity (Last 7 Days)</div>
+        <div class="usage-chart">
+          ${dailyUses.map(d => `
+            <div class="chart-bar-wrap">
+              <div class="chart-bar" style="height:${Math.max((d.count / maxDaily) * 80, 2)}px;" title="${d.count} uses"></div>
+              <div class="chart-bar-label">${d.label}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Top Prompts -->
+      <div class="stats-section">
+        <div class="stats-section-title">Most Used Prompts</div>
+        ${topPrompts.length > 0 ? topPrompts.map((p, i) => `
+          <div class="top-prompt-item">
+            <span class="top-prompt-rank">${i + 1}</span>
+            <span class="top-prompt-name">${escapeHtml(p.title)}</span>
+            <span class="top-prompt-uses">${p.useCount} uses</span>
+          </div>
+        `).join('') : '<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:8px 0;">No usage data yet. Start using prompts!</div>'}
+      </div>
+
+      <!-- Platform breakdown -->
+      ${platforms.length > 0 ? `
+      <div class="stats-section">
+        <div class="stats-section-title">Usage by Platform</div>
+        <div class="platform-stats">
+          ${platforms.map(([name, count]) => `
+            <div class="platform-stat-row">
+              <span class="platform-stat-name">${escapeHtml(name)}</span>
+              <div class="platform-stat-bar-bg">
+                <div class="platform-stat-bar" style="width:${(count / maxPlatform) * 100}%;"></div>
+              </div>
+              <span class="platform-stat-count">${count}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>` : ''}
+
+      <!-- Top Tags -->
+      ${topTags.length > 0 ? `
+      <div class="stats-section">
+        <div class="stats-section-title">Top Tags</div>
+        <div class="tags" style="flex-wrap:wrap;">
+          ${topTags.map(([tag, count]) => `<span class="tag">#${escapeHtml(tag)} (${count})</span>`).join('')}
+        </div>
+      </div>` : ''}
+
+      ${!state.isPremium && state.user ? `
+      <!-- Free tier info -->
+      <div class="stats-section" style="border-color:var(--accent);">
+        <div class="stats-section-title">Free Plan</div>
+        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">
+          ${state.prompts.length} / ${state.promptLimit} prompts used<br>
+          <div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${Math.min((state.prompts.length / state.promptLimit) * 100, 100)}%;background:${state.prompts.length >= state.promptLimit ? 'var(--error)' : 'var(--accent)'};border-radius:3px;"></div>
+          </div>
+          <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">Upgrade to Premium for unlimited prompts, priority library access, and more.</div>
+        </div>
+      </div>` : ''}
+    </div>`;
+
+  // If user is signed in, also try to load server-side stats
+  if (state.session) {
+    loadServerStats();
+  }
+}
+
+async function loadServerStats() {
+  try {
+    const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/get_usage_stats', body: { days_back: 30 } });
+    if (res?.data) {
+      // Server stats loaded - could enhance the local display with cloud data
+      console.log('Server usage stats:', res.data);
+    }
+  } catch (e) { console.error('Load server stats failed:', e); }
 }
 
 // ==================== SETTINGS ====================
@@ -779,6 +1218,15 @@ function openSettings() {
   const s = state.settings;
   const user = state.user;
   const hotkeys = s.hotkeys || {};
+
+  // Get current Chrome commands for display
+  const commandNames = {
+    'open-search': { label: 'Search Overlay', default: 'Ctrl+Shift+P' },
+    'hotkey-1': { label: 'Quick Insert Slot 1', default: 'Alt+1' },
+    'hotkey-2': { label: 'Quick Insert Slot 2', default: 'Alt+2' },
+    'hotkey-3': { label: 'Quick Insert Slot 3', default: 'Alt+3' },
+    'hotkey-4': { label: 'Quick Insert Slot 4', default: 'Alt+4' }
+  };
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -797,7 +1245,9 @@ function openSettings() {
             <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--bg-secondary);border-radius:var(--radius-md);border:1px solid var(--border);">
               <div>
                 <div style="font-weight:500;">${escapeHtml(user.email || user.name || 'Signed In')}</div>
-                <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:2px;">Cloud sync active</div>
+                <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:2px;">
+                  Cloud sync active${state.isPremium ? ' | Premium' : ` | Free (${state.prompts.length}/${state.promptLimit})`}
+                </div>
               </div>
               <button class="btn btn-secondary btn-sm" id="settings-signout-btn">Sign Out</button>
             </div>` : `
@@ -809,10 +1259,21 @@ function openSettings() {
         </div>
         <div class="divider"></div>
 
-        <!-- Hotkeys -->
+        <!-- Keyboard Shortcuts -->
         <div class="form-group">
-          <label class="form-label">Quick Insert Hotkeys</label>
-          <span class="form-hint" style="margin-bottom:12px;display:block;">Assign prompts to Alt+1 through Alt+4 for instant insertion. You can change keys at chrome://extensions/shortcuts</span>
+          <label class="form-label">Keyboard Shortcuts</label>
+          <span class="form-hint" style="margin-bottom:12px;display:block;">
+            Current key bindings. To change shortcuts, open
+            <a href="#" id="open-shortcuts-link" style="color:var(--accent);">chrome://extensions/shortcuts</a>
+          </span>
+          <div class="hotkey-rebind-section" id="shortcuts-display"></div>
+        </div>
+        <div class="divider"></div>
+
+        <!-- Hotkey Prompt Assignment -->
+        <div class="form-group">
+          <label class="form-label">Quick Insert Prompts</label>
+          <span class="form-hint" style="margin-bottom:12px;display:block;">Assign prompts to hotkey slots for instant insertion</span>
           <div class="hotkey-section">
             ${[1,2,3,4].map(n => {
               const slotId = `slot${n}`;
@@ -876,6 +1337,15 @@ function openSettings() {
   document.body.appendChild(modal);
   setTimeout(() => modal.classList.add('visible'), 10);
 
+  // Load and display current shortcuts
+  loadShortcutsDisplay(commandNames);
+
+  // Open shortcuts link
+  document.getElementById('open-shortcuts-link')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+  });
+
   // Sign in / Sign out
   document.getElementById('settings-signin-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('settings-signin-btn');
@@ -890,6 +1360,7 @@ function openSettings() {
       renderExplore();
       loadLibraryPrompts();
       syncAllData();
+      checkPremiumStatus();
     } else {
       showToast('Sign in failed: ' + (result?.error || 'Unknown error'), 'error');
     }
@@ -900,6 +1371,7 @@ function openSettings() {
     await new Promise(resolve => chrome.runtime.sendMessage({ action: 'signOut' }, resolve));
     state.user = null;
     state.session = null;
+    state.isPremium = false;
     showToast('Signed out', 'success');
     closeModal('settings-modal');
     renderExplore();
@@ -948,7 +1420,6 @@ function openSettings() {
   // Save Settings
   document.getElementById('settings-save-btn').addEventListener('click', async () => {
     state.settings.theme = document.getElementById('settings-theme').value;
-    // Hotkey slots
     document.querySelectorAll('[data-hotkey-slot]').forEach(sel => {
       const slotId = sel.dataset.hotkeySlot;
       if (!state.settings.hotkeys) state.settings.hotkeys = {};
@@ -964,6 +1435,65 @@ function openSettings() {
   // Close
   modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('settings-modal')));
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('settings-modal'); });
+}
+
+function loadShortcutsDisplay(commandNames) {
+  const container = document.getElementById('shortcuts-display');
+  if (!container) return;
+
+  // Try to get actual chrome commands
+  if (chrome.commands && chrome.commands.getAll) {
+    chrome.commands.getAll(commands => {
+      let html = '';
+      commands.forEach(cmd => {
+        if (cmd.name === '_execute_action') return; // Skip default action
+        const info = commandNames[cmd.name] || { label: cmd.description || cmd.name, default: '' };
+        const shortcut = cmd.shortcut || info.default || 'Not set';
+        html += `
+          <div class="hotkey-rebind-item">
+            <span class="hotkey-rebind-label">${escapeHtml(info.label)}</span>
+            <span class="hotkey-rebind-current">
+              <span class="hotkey-rebind-btn" title="Change in chrome://extensions/shortcuts">${escapeHtml(shortcut)}</span>
+            </span>
+          </div>`;
+      });
+      container.innerHTML = html || '<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);">No shortcuts configured</div>';
+
+      // Make shortcut buttons clickable to open chrome shortcuts page
+      container.querySelectorAll('.hotkey-rebind-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+        });
+      });
+    });
+  } else {
+    // Fallback: show defaults
+    let html = '';
+    Object.entries(commandNames).forEach(([name, info]) => {
+      html += `
+        <div class="hotkey-rebind-item">
+          <span class="hotkey-rebind-label">${escapeHtml(info.label)}</span>
+          <span class="hotkey-rebind-current">
+            <span class="hotkey-rebind-btn">${escapeHtml(info.default)}</span>
+          </span>
+        </div>`;
+    });
+    container.innerHTML = html;
+  }
+}
+
+// ==================== PREMIUM STATUS CHECK ====================
+async function checkPremiumStatus() {
+  if (!state.session || !state.user) return;
+  try {
+    const res = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}&select=is_premium,prompt_limit` });
+    if (res?.data?.[0]) {
+      state.isPremium = res.data[0].is_premium || false;
+      state.promptLimit = res.data[0].prompt_limit || FREE_PROMPT_LIMIT;
+      await saveData('isPremium', state.isPremium);
+      await saveData('promptLimit', state.promptLimit);
+    }
+  } catch (e) { console.error('Premium check failed:', e); }
 }
 
 // ==================== SEARCH ====================
@@ -1012,7 +1542,7 @@ function closeModal(id) {
 async function syncPromptToSupabase(prompt) {
   if (!state.session || !state.user) return;
   try {
-    await new Promise(resolve => chrome.runtime.sendMessage({
+    await supabaseMsg({
       action: 'supabaseRequest', method: 'POST',
       path: 'prompts',
       body: {
@@ -1022,52 +1552,44 @@ async function syncPromptToSupabase(prompt) {
         variables: prompt.variables || [], is_favorite: prompt.isFavorite || false,
         use_count: prompt.useCount || 0, updated_at: new Date().toISOString()
       }
-    }, resolve));
+    });
   } catch (e) { console.error('Sync prompt failed:', e); }
 }
 
 async function syncPromptDeleteToSupabase(id) {
   if (!state.session || !state.user) return;
   try {
-    await new Promise(resolve => chrome.runtime.sendMessage({
-      action: 'supabaseRequest', method: 'DELETE',
-      path: `prompts?id=eq.${id}`
-    }, resolve));
+    await supabaseMsg({ action: 'supabaseRequest', method: 'DELETE', path: `prompts?id=eq.${id}` });
   } catch (e) { console.error('Delete sync failed:', e); }
 }
 
 async function syncFolderToSupabase(folder) {
   if (!state.session || !state.user) return;
   try {
-    await new Promise(resolve => chrome.runtime.sendMessage({
+    await supabaseMsg({
       action: 'supabaseRequest', method: 'POST',
       path: 'folders',
       body: { id: folder.id, user_id: state.user.id, name: folder.name, updated_at: new Date().toISOString() }
-    }, resolve));
+    });
   } catch (e) { console.error('Sync folder failed:', e); }
 }
 
 async function syncFolderDeleteToSupabase(id) {
   if (!state.session || !state.user) return;
   try {
-    await new Promise(resolve => chrome.runtime.sendMessage({
-      action: 'supabaseRequest', method: 'DELETE',
-      path: `folders?id=eq.${id}`
-    }, resolve));
+    await supabaseMsg({ action: 'supabaseRequest', method: 'DELETE', path: `folders?id=eq.${id}` });
   } catch (e) { console.error('Delete folder sync failed:', e); }
 }
 
 async function syncAllData() {
   if (!state.session || !state.user) return;
   try {
-    // Pull folders from Supabase
-    const fRes = await new Promise(resolve => chrome.runtime.sendMessage({ action: 'supabaseRequest', method: 'GET', path: 'folders?order=created_at.asc' }, resolve));
+    const fRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'folders?order=created_at.asc' });
     if (fRes?.data?.length) {
       state.folders = fRes.data.map(f => ({ id: f.id, name: f.name, createdAt: new Date(f.created_at).getTime(), updatedAt: new Date(f.updated_at).getTime() }));
       await saveData('folders', state.folders);
     }
-    // Pull prompts
-    const pRes = await new Promise(resolve => chrome.runtime.sendMessage({ action: 'supabaseRequest', method: 'GET', path: 'prompts?order=created_at.desc' }, resolve));
+    const pRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompts?order=created_at.desc' });
     if (pRes?.data?.length) {
       state.prompts = pRes.data.map(p => ({ id: p.id, title: p.title, text: p.text, description: p.description, folderId: p.folder_id, platform: p.platform, tags: p.tags || [], variables: p.variables || [], isFavorite: p.is_favorite, useCount: p.use_count || 0, createdAt: new Date(p.created_at).getTime(), updatedAt: new Date(p.updated_at).getTime() }));
       await saveData('prompts', state.prompts);
@@ -1117,6 +1639,8 @@ async function init() {
     if (changes.folders) { state.folders = changes.folders.newValue || []; renderFolders(); renderPrompts(); }
     if (changes.user) { state.user = changes.user.newValue; renderExplore(); }
     if (changes.session) { state.session = changes.session.newValue; }
+    if (changes.isPremium) { state.isPremium = changes.isPremium.newValue; }
+    if (changes.promptLimit) { state.promptLimit = changes.promptLimit.newValue; }
   });
 
   // Theme listener
@@ -1124,9 +1648,10 @@ async function init() {
     if (state.settings.theme === 'system') applyTheme('system');
   });
 
-  // Load library if logged in
+  // Load library and check premium if logged in
   if (state.session) {
     loadLibraryPrompts();
+    checkPremiumStatus();
   }
 }
 

@@ -21,9 +21,12 @@ DROP POLICY IF EXISTS "Users can update own prompts" ON public.prompts;
 DROP POLICY IF EXISTS "Users can delete own prompts" ON public.prompts;
 
 DROP POLICY IF EXISTS "Anyone can view library prompts" ON public.library_prompts;
+DROP POLICY IF EXISTS "Authenticated can view library prompts" ON public.library_prompts;
 DROP POLICY IF EXISTS "Admins can insert library prompts" ON public.library_prompts;
+DROP POLICY IF EXISTS "Users can share to library" ON public.library_prompts;
 DROP POLICY IF EXISTS "Admins can update library prompts" ON public.library_prompts;
 DROP POLICY IF EXISTS "Admins can delete library prompts" ON public.library_prompts;
+DROP POLICY IF EXISTS "Authors can delete own library prompts" ON public.library_prompts;
 
 DROP POLICY IF EXISTS "Users can view own likes" ON public.library_likes;
 DROP POLICY IF EXISTS "Users can insert own likes" ON public.library_likes;
@@ -31,6 +34,14 @@ DROP POLICY IF EXISTS "Users can delete own likes" ON public.library_likes;
 
 DROP POLICY IF EXISTS "Users can view own hotkeys" ON public.hotkey_settings;
 DROP POLICY IF EXISTS "Users can manage own hotkeys" ON public.hotkey_settings;
+
+DROP POLICY IF EXISTS "Users can view own usage" ON public.usage_history;
+DROP POLICY IF EXISTS "Users can insert own usage" ON public.usage_history;
+
+DROP POLICY IF EXISTS "Users can view own reports" ON public.prompt_reports;
+DROP POLICY IF EXISTS "Users can insert reports" ON public.prompt_reports;
+DROP POLICY IF EXISTS "Admins can view all reports" ON public.prompt_reports;
+DROP POLICY IF EXISTS "Admins can update reports" ON public.prompt_reports;
 
 -- ===========================================
 -- SCHEMA CREATION
@@ -43,6 +54,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   full_name TEXT,
   avatar_url TEXT,
   is_admin BOOLEAN DEFAULT false,
+  is_premium BOOLEAN DEFAULT false,
+  prompt_limit INTEGER DEFAULT 20,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -75,22 +88,31 @@ CREATE TABLE IF NOT EXISTS public.prompts (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Public prompts library (curated by admins)
+-- Public prompts library (user submissions + admin curated)
 CREATE TABLE IF NOT EXISTS public.library_prompts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title TEXT NOT NULL,
   text TEXT NOT NULL,
   description TEXT,
   author TEXT NOT NULL,
+  author_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   tags TEXT[] DEFAULT '{}',
   variables TEXT[] DEFAULT '{}',
   likes INTEGER DEFAULT 0,
   downloads INTEGER DEFAULT 0,
   category TEXT,
   is_featured BOOLEAN DEFAULT false,
+  is_approved BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Add author_id column if table already exists without it
+DO $$ BEGIN
+  ALTER TABLE public.library_prompts ADD COLUMN IF NOT EXISTS author_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+  ALTER TABLE public.library_prompts ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT true;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- User likes on library prompts
 CREATE TABLE IF NOT EXISTS public.library_likes (
@@ -118,9 +140,37 @@ CREATE TABLE IF NOT EXISTS public.usage_history (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   prompt_id UUID NOT NULL,
+  prompt_title TEXT,
   platform TEXT,
+  action TEXT DEFAULT 'insert',
   used_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Add prompt_title and action columns if they don't exist
+DO $$ BEGIN
+  ALTER TABLE public.usage_history ADD COLUMN IF NOT EXISTS prompt_title TEXT;
+  ALTER TABLE public.usage_history ADD COLUMN IF NOT EXISTS action TEXT DEFAULT 'insert';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Prompt reports table (moderation)
+CREATE TABLE IF NOT EXISTS public.prompt_reports (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  prompt_id UUID REFERENCES public.library_prompts(id) ON DELETE CASCADE NOT NULL,
+  reason TEXT NOT NULL,
+  details TEXT,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'dismissed', 'actioned')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, prompt_id)
+);
+
+-- Add is_premium and prompt_limit to profiles if not present
+DO $$ BEGIN
+  ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT false;
+  ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS prompt_limit INTEGER DEFAULT 20;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- ===========================================
 -- ROW LEVEL SECURITY (RLS)
@@ -133,6 +183,7 @@ ALTER TABLE public.library_prompts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.library_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.hotkey_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usage_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.prompt_reports ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
 CREATE POLICY "Users can view own profile" ON public.profiles
@@ -170,23 +221,23 @@ CREATE POLICY "Users can update own prompts" ON public.prompts
 CREATE POLICY "Users can delete own prompts" ON public.prompts
   FOR DELETE USING (auth.uid() = user_id);
 
--- Library prompts policies (public read, admin write)
-CREATE POLICY "Anyone can view library prompts" ON public.library_prompts
+-- Library prompts policies (public read for authenticated, user can share, admin can manage)
+CREATE POLICY "Authenticated can view library prompts" ON public.library_prompts
   FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "Admins can insert library prompts" ON public.library_prompts
-  FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
-  );
+CREATE POLICY "Users can share to library" ON public.library_prompts
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
 CREATE POLICY "Admins can update library prompts" ON public.library_prompts
   FOR UPDATE USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+    OR author_id = auth.uid()
   );
 
-CREATE POLICY "Admins can delete library prompts" ON public.library_prompts
+CREATE POLICY "Authors can delete own library prompts" ON public.library_prompts
   FOR DELETE USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+    author_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
   );
 
 -- Library likes policies
@@ -207,12 +258,28 @@ CREATE POLICY "Users can manage own hotkeys" ON public.hotkey_settings
   FOR ALL USING (auth.uid() = user_id);
 
 -- Usage history policies
-DROP POLICY IF EXISTS "Users can view own usage" ON public.usage_history;
-DROP POLICY IF EXISTS "Users can insert own usage" ON public.usage_history;
 CREATE POLICY "Users can view own usage" ON public.usage_history
   FOR SELECT USING (auth.uid() = user_id);
+
 CREATE POLICY "Users can insert own usage" ON public.usage_history
   FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Report policies
+CREATE POLICY "Users can view own reports" ON public.prompt_reports
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert reports" ON public.prompt_reports
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can view all reports" ON public.prompt_reports
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  );
+
+CREATE POLICY "Admins can update reports" ON public.prompt_reports
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+  );
 
 -- ===========================================
 -- INDEXES
@@ -224,7 +291,11 @@ CREATE INDEX IF NOT EXISTS idx_prompts_folder_id ON public.prompts(folder_id);
 CREATE INDEX IF NOT EXISTS idx_prompts_is_favorite ON public.prompts(is_favorite);
 CREATE INDEX IF NOT EXISTS idx_library_prompts_category ON public.library_prompts(category);
 CREATE INDEX IF NOT EXISTS idx_library_prompts_is_featured ON public.library_prompts(is_featured);
+CREATE INDEX IF NOT EXISTS idx_library_prompts_author_id ON public.library_prompts(author_id);
 CREATE INDEX IF NOT EXISTS idx_usage_history_user_id ON public.usage_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_usage_history_used_at ON public.usage_history(used_at);
+CREATE INDEX IF NOT EXISTS idx_prompt_reports_prompt_id ON public.prompt_reports(prompt_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_reports_status ON public.prompt_reports(status);
 
 -- ===========================================
 -- FUNCTIONS
@@ -263,20 +334,102 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function to toggle like
 CREATE OR REPLACE FUNCTION toggle_library_like(prompt_uuid UUID)
-RETURNS void AS $$
+RETURNS JSON AS $$
 DECLARE
   existing_like UUID;
+  new_likes INTEGER;
+  liked BOOLEAN;
 BEGIN
   SELECT id INTO existing_like FROM public.library_likes
   WHERE user_id = auth.uid() AND prompt_id = prompt_uuid;
   
   IF existing_like IS NOT NULL THEN
     DELETE FROM public.library_likes WHERE id = existing_like;
-    UPDATE public.library_prompts SET likes = likes - 1 WHERE id = prompt_uuid;
+    UPDATE public.library_prompts SET likes = GREATEST(likes - 1, 0) WHERE id = prompt_uuid
+      RETURNING likes INTO new_likes;
+    liked := false;
   ELSE
     INSERT INTO public.library_likes (user_id, prompt_id) VALUES (auth.uid(), prompt_uuid);
-    UPDATE public.library_prompts SET likes = likes + 1 WHERE id = prompt_uuid;
+    UPDATE public.library_prompts SET likes = likes + 1 WHERE id = prompt_uuid
+      RETURNING likes INTO new_likes;
+    liked := true;
   END IF;
+  
+  RETURN json_build_object('liked', liked, 'likes', new_likes);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to record usage
+CREATE OR REPLACE FUNCTION record_usage(p_prompt_id UUID, p_prompt_title TEXT, p_platform TEXT, p_action TEXT DEFAULT 'insert')
+RETURNS void AS $$
+BEGIN
+  INSERT INTO public.usage_history (user_id, prompt_id, prompt_title, platform, action)
+  VALUES (auth.uid(), p_prompt_id, p_prompt_title, p_platform, p_action);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to get usage stats for a user
+CREATE OR REPLACE FUNCTION get_usage_stats(days_back INTEGER DEFAULT 30)
+RETURNS JSON AS $$
+DECLARE
+  result JSON;
+BEGIN
+  SELECT json_build_object(
+    'total_uses', (SELECT COUNT(*) FROM public.usage_history WHERE user_id = auth.uid() AND used_at >= NOW() - (days_back || ' days')::INTERVAL),
+    'daily_stats', (
+      SELECT COALESCE(json_agg(row_to_json(d)), '[]'::json)
+      FROM (
+        SELECT DATE(used_at) as date, COUNT(*) as count
+        FROM public.usage_history 
+        WHERE user_id = auth.uid() AND used_at >= NOW() - (days_back || ' days')::INTERVAL
+        GROUP BY DATE(used_at)
+        ORDER BY date DESC
+      ) d
+    ),
+    'top_prompts', (
+      SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json)
+      FROM (
+        SELECT prompt_title as title, COUNT(*) as uses
+        FROM public.usage_history 
+        WHERE user_id = auth.uid() AND used_at >= NOW() - (days_back || ' days')::INTERVAL
+        AND prompt_title IS NOT NULL
+        GROUP BY prompt_title
+        ORDER BY uses DESC
+        LIMIT 10
+      ) t
+    ),
+    'by_platform', (
+      SELECT COALESCE(json_agg(row_to_json(p)), '[]'::json)
+      FROM (
+        SELECT COALESCE(platform, 'unknown') as platform, COUNT(*) as count
+        FROM public.usage_history 
+        WHERE user_id = auth.uid() AND used_at >= NOW() - (days_back || ' days')::INTERVAL
+        GROUP BY platform
+        ORDER BY count DESC
+      ) p
+    )
+  ) INTO result;
+  
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to check if user can create more prompts (free tier limit)
+CREATE OR REPLACE FUNCTION check_prompt_limit()
+RETURNS JSON AS $$
+DECLARE
+  user_profile public.profiles%ROWTYPE;
+  prompt_count INTEGER;
+BEGIN
+  SELECT * INTO user_profile FROM public.profiles WHERE id = auth.uid();
+  SELECT COUNT(*) INTO prompt_count FROM public.prompts WHERE user_id = auth.uid();
+  
+  RETURN json_build_object(
+    'can_create', user_profile.is_premium OR prompt_count < user_profile.prompt_limit,
+    'current_count', prompt_count,
+    'limit', user_profile.prompt_limit,
+    'is_premium', user_profile.is_premium
+  );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

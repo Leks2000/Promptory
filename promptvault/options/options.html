@@ -78,6 +78,134 @@
     .success-message.visible {
       display: block;
     }
+
+    .shortcut-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .shortcut-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .shortcut-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .shortcut-name {
+      font-size: var(--font-size-md);
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .shortcut-desc {
+      font-size: var(--font-size-sm);
+      color: var(--text-tertiary);
+    }
+
+    .shortcut-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+    }
+
+    .shortcut-key.not-set {
+      color: var(--text-placeholder);
+      font-style: italic;
+    }
+
+    .open-shortcuts-btn {
+      margin-top: 12px;
+    }
+
+    .hotkey-assignment {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .hotkey-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .hotkey-row-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .hotkey-row-label {
+      font-size: var(--font-size-md);
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .hotkey-row-assigned {
+      font-size: var(--font-size-sm);
+      color: var(--text-tertiary);
+    }
+
+    .hotkey-row select {
+      width: 200px;
+      padding: 6px 10px;
+      font-size: var(--font-size-sm);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .stat-box {
+      flex: 1;
+      min-width: 120px;
+      padding: 16px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      text-align: center;
+    }
+
+    .stat-box-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.2;
+    }
+
+    .stat-box-label {
+      font-size: var(--font-size-sm);
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
@@ -86,6 +214,29 @@
   
   <div class="success-message" id="success-message">
     Settings saved successfully!
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="section">
+    <h2 class="section-title">Overview</h2>
+    <div class="stats-row" id="overview-stats">
+      <div class="stat-box">
+        <div class="stat-box-value" id="stat-prompts">0</div>
+        <div class="stat-box-label">Prompts</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-value" id="stat-folders">0</div>
+        <div class="stat-box-label">Folders</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-value" id="stat-uses">0</div>
+        <div class="stat-box-label">Total Uses</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-value" id="stat-favorites">0</div>
+        <div class="stat-box-label">Favorites</div>
+      </div>
+    </div>
   </div>
   
   <div class="section">
@@ -106,23 +257,31 @@
   
   <div class="section">
     <h2 class="section-title">Keyboard Shortcuts</h2>
+    <p style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:16px;">
+      These are your current keyboard shortcuts. To change them, use the Chrome shortcuts page.
+    </p>
     
-    <div class="option-row">
-      <div class="option-info">
-        <h3>Open PromptVault</h3>
-        <p>Keyboard shortcut to open the extension</p>
-      </div>
-      <kbd style="padding: 6px 12px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: var(--font-size-sm);">
-        Ctrl+Shift+P
-      </kbd>
+    <div class="shortcut-list" id="shortcut-list">
+      <!-- Populated by JS -->
     </div>
+
+    <button class="btn btn-secondary open-shortcuts-btn" id="open-shortcuts-btn">
+      Open Chrome Shortcuts Settings
+    </button>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Quick Insert Prompt Assignment</h2>
+    <p style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:16px;">
+      Assign prompts to each hotkey slot. When you press the shortcut, the assigned prompt will be instantly inserted.
+    </p>
     
-    <div class="option-row">
-      <div class="option-info">
-        <p style="color: var(--text-tertiary); font-size: var(--font-size-xs);">
-          To customize keyboard shortcuts, go to chrome://extensions/shortcuts
-        </p>
-      </div>
+    <div class="hotkey-assignment" id="hotkey-assignment">
+      <!-- Populated by JS -->
+    </div>
+
+    <div style="margin-top:12px;">
+      <button class="btn btn-primary" id="save-hotkeys-btn">Save Assignments</button>
     </div>
   </div>
   
@@ -160,9 +319,8 @@
       <div class="option-info">
         <h3>Links</h3>
         <p>
-          <a href="https://github.com" target="_blank" style="color: var(--accent);">GitHub</a> •
-          <a href="https://github.com" target="_blank" style="color: var(--accent);">Report Issue</a> •
-          <a href="https://github.com" target="_blank" style="color: var(--accent);">Documentation</a>
+          <a href="https://github.com/Leks2000/PromptVault" target="_blank" style="color: var(--accent);">GitHub</a> &bull;
+          <a href="https://github.com/Leks2000/PromptVault/issues" target="_blank" style="color: var(--accent);">Report Issue</a>
         </p>
       </div>
     </div>
