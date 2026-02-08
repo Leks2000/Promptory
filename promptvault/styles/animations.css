@@ -33,21 +33,26 @@
   }
 }
 
-/* Card hover */
+/* Card hover - unified for all cards */
 .prompt-card,
-.folder-card,
-.explore-card {
-  transition: background-color var(--transition-fast), 
-              box-shadow var(--transition-fast);
+.folder-card {
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 150ms ease,
+              box-shadow 200ms ease,
+              border-color 150ms ease;
 }
 
 .prompt-card:hover,
 .folder-card:hover {
+  transform: translateY(-2px);
   background-color: var(--bg-hover);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-hover);
 }
 
-.explore-card:hover {
-  box-shadow: var(--shadow-md);
+.prompt-card:active,
+.folder-card:active {
+  transform: translateY(0) scale(0.99);
 }
 
 /* Loading skeleton */
@@ -68,16 +73,20 @@
   100% { background-position: -200% 0; }
 }
 
-/* Flip card for Explore */
+/* Flip card for Explore - completely redesigned */
 .explore-card-wrapper {
   perspective: 1000px;
+  height: 200px;
+  margin-bottom: 12px;
 }
 
 .explore-card {
   position: relative;
+  width: 100%;
+  height: 100%;
   transform-style: preserve-3d;
-  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1);
-  min-height: 200px;
+  transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
 }
 
 .explore-card.flipped {
@@ -87,17 +96,39 @@
 .explore-card-front,
 .explore-card-back {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.explore-card-front {
+  display: flex;
+  flex-direction: column;
 }
 
 .explore-card-back {
   transform: rotateY(180deg);
-  background: var(--bg-secondary);
-  padding: 16px;
-  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Hover effect for explore cards */
+.explore-card-wrapper:hover .explore-card:not(.flipped) {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: var(--shadow-lg);
+}
+
+.explore-card-wrapper:hover .explore-card.flipped {
+  transform: rotateY(180deg) translateY(-4px) scale(1.02);
+  box-shadow: var(--shadow-lg);
 }
 
 /* Ripple effect */
@@ -166,22 +197,27 @@
   border-color: var(--error);
 }
 
-/* Collapse/Expand folders */
+/* Collapse/Expand folders - improved animation */
 .folder-content {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 300ms cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 250ms ease;
   opacity: 0;
+  transition: max-height 350ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 250ms ease,
+              padding 250ms ease;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .folder-section.expanded .folder-content {
   max-height: 2000px;
   opacity: 1;
+  padding-top: 8px;
+  padding-bottom: 0;
 }
 
 .folder-arrow {
-  transition: transform var(--transition-normal);
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .folder-section.expanded .folder-arrow {
@@ -214,14 +250,14 @@
 }
 
 .modal {
-  transform: translateY(-20px);
+  transform: translateY(-20px) scale(0.95);
   opacity: 0;
-  transition: transform var(--transition-normal), 
-              opacity var(--transition-normal);
+  transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 200ms ease;
 }
 
 .modal-overlay.visible .modal {
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
   opacity: 1;
 }
 
@@ -291,14 +327,14 @@ html {
 /* Context menu slide in */
 .context-menu {
   opacity: 0;
-  transform: translateY(-8px);
-  animation: slideDown 200ms ease forwards;
+  transform: translateY(-8px) scale(0.95);
+  animation: menuSlideDown 200ms ease forwards;
 }
 
-@keyframes slideDown {
+@keyframes menuSlideDown {
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -312,18 +348,21 @@ html {
   50% { transform: scale(1.3); }
 }
 
-/* Folder header hover animation */
+/* Folder header hover animation - unified with cards */
 .folder-header {
-  transition: background-color var(--transition-fast),
-              transform var(--transition-fast);
+  transition: background-color 150ms ease,
+              transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 200ms ease;
 }
 
 .folder-header:hover {
-  transform: translateX(2px);
+  background-color: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .folder-header:active {
-  transform: translateX(0);
+  transform: translateY(0);
 }
 
 /* Loading dots animation */
@@ -373,23 +412,23 @@ textarea:focus {
 }
 
 /* Stagger animation for explore cards */
-.explore-card {
+.explore-card-wrapper {
   opacity: 0;
-  transform: translateY(10px) scale(0.95);
+  transform: translateY(10px);
   animation: cardAppear 300ms ease forwards;
 }
 
-.explore-card:nth-child(1) { animation-delay: 0ms; }
-.explore-card:nth-child(2) { animation-delay: 50ms; }
-.explore-card:nth-child(3) { animation-delay: 100ms; }
-.explore-card:nth-child(4) { animation-delay: 150ms; }
-.explore-card:nth-child(5) { animation-delay: 200ms; }
-.explore-card:nth-child(6) { animation-delay: 250ms; }
+.explore-card-wrapper:nth-child(1) { animation-delay: 0ms; }
+.explore-card-wrapper:nth-child(2) { animation-delay: 50ms; }
+.explore-card-wrapper:nth-child(3) { animation-delay: 100ms; }
+.explore-card-wrapper:nth-child(4) { animation-delay: 150ms; }
+.explore-card-wrapper:nth-child(5) { animation-delay: 200ms; }
+.explore-card-wrapper:nth-child(6) { animation-delay: 250ms; }
 
 @keyframes cardAppear {
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
@@ -401,4 +440,80 @@ textarea:focus {
 
 .pulse {
   animation: pulse 2s ease-in-out infinite;
+}
+
+/* Glow effect for active favorite */
+.prompt-action-btn.active {
+  color: var(--warning);
+}
+
+.prompt-action-btn.active:hover {
+  color: #F5A623;
+}
+
+/* Hotkey badge animation */
+.hotkey-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-family: 'SF Mono', 'Menlo', monospace;
+  color: var(--text-secondary);
+  transition: all 150ms ease;
+}
+
+.hotkey-badge:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Flip indicator */
+.flip-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.explore-card-front:hover .flip-indicator {
+  opacity: 1;
+}
+
+/* Code preview styling */
+.code-preview {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  max-height: 80px;
+  position: relative;
+}
+
+.code-preview::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: linear-gradient(transparent, var(--bg-tertiary));
 }

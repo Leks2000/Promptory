@@ -3,6 +3,8 @@ import { showToast, saveData } from '../popup.js';
 import { renderPrompts } from './prompts.js';
 import { renderFavorites } from './favorites.js';
 
+let currentEditingPromptId = null;
+
 export function initPromptEditor() {
   // New prompt button
   document.getElementById('new-prompt-btn').addEventListener('click', () => {
@@ -16,16 +18,18 @@ export function initPromptEditor() {
 }
 
 function openPromptEditor(promptId = null) {
+  currentEditingPromptId = promptId;
   const prompt = promptId ? window.appState.prompts.find(p => p.id === promptId) : null;
   const isEdit = !!prompt;
   
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
+  modal.id = 'prompt-editor-modal';
   modal.innerHTML = `
     <div class="modal" style="max-width: 600px;">
       <div class="modal-header">
         <h2 class="modal-title">${isEdit ? 'Edit Prompt' : 'New Prompt'}</h2>
-        <button class="btn btn-icon btn-ghost" onclick="closePromptEditor()">
+        <button class="btn btn-icon btn-ghost" onclick="closePromptEditorModal()">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6 6 18M6 6l12 12"/>
           </svg>
@@ -69,7 +73,7 @@ function openPromptEditor(promptId = null) {
               ${prompt && prompt.tags ? prompt.tags.map(tag => `
                 <span class="tag tag-removable" data-tag="${escapeHtml(tag)}">
                   #${escapeHtml(tag)}
-                  <span class="tag-remove" onclick="removeTag('${escapeHtml(tag)}')">×</span>
+                  <span class="tag-remove" onclick="removeTagFromEditor('${escapeHtml(tag)}')">×</span>
                 </span>
               `).join('') : ''}
             </div>
@@ -90,7 +94,7 @@ function openPromptEditor(promptId = null) {
       </div>
       <div class="modal-footer" style="justify-content: space-between;">
         ${isEdit ? `
-          <button class="btn btn-danger" onclick="deletePromptFromEditor('${prompt.id}')">
+          <button class="btn btn-danger" onclick="deletePromptFromEditorModal('${prompt.id}')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
             </svg>
@@ -98,8 +102,8 @@ function openPromptEditor(promptId = null) {
           </button>
         ` : '<div></div>'}
         <div style="display: flex; gap: 8px;">
-          <button class="btn btn-ghost" onclick="closePromptEditor()">Cancel</button>
-          <button class="btn btn-primary ripple" id="save-prompt-btn">
+          <button class="btn btn-ghost" onclick="closePromptEditorModal()">Cancel</button>
+          <button class="btn btn-primary ripple" onclick="savePromptFromEditor()">
             ${isEdit ? 'Save Changes' : 'Create Prompt'}
           </button>
         </div>
@@ -116,36 +120,49 @@ function openPromptEditor(promptId = null) {
   
   // Auto-detect variables
   const textInput = document.getElementById('prompt-text-input');
-  textInput.addEventListener('input', updateVariables);
-  updateVariables();
+  textInput.addEventListener('input', updateVariablesDisplay);
+  updateVariablesDisplay();
   
   // Tag input
   const tagInput = document.getElementById('tag-input');
   tagInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      addTag(tagInput.value.trim());
+      addTagToEditor(tagInput.value.trim());
       tagInput.value = '';
     }
   });
   
-  // Save button
-  document.getElementById('save-prompt-btn').addEventListener('click', () => {
-    savePrompt(promptId);
+  // Close on overlay click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closePromptEditorModal();
+    }
   });
+  
+  // ESC to close
+  document.addEventListener('keydown', handleEscapeKey);
 }
 
-function updateVariables() {
-  const text = document.getElementById('prompt-text-input').value;
+function handleEscapeKey(e) {
+  if (e.key === 'Escape') {
+    closePromptEditorModal();
+  }
+}
+
+function updateVariablesDisplay() {
+  const text = document.getElementById('prompt-text-input')?.value || '';
   const variables = extractVariables(text);
   const hint = document.getElementById('variables-hint');
   const list = document.getElementById('variables-list');
   
-  if (variables.length > 0) {
-    list.innerHTML = variables.map(v => `<span class="tag">{${escapeHtml(v)}}</span>`).join(' ');
-    hint.style.display = 'block';
-  } else {
-    hint.style.display = 'none';
+  if (hint && list) {
+    if (variables.length > 0) {
+      list.innerHTML = variables.map(v => `<span class="tag">{${escapeHtml(v)}}</span>`).join(' ');
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
+    }
   }
 }
 
@@ -163,14 +180,14 @@ function extractVariables(text) {
   return variables;
 }
 
-function addTag(tag) {
+function addTagToEditor(tag) {
   if (!tag) return;
   
   // Remove # if user typed it
   tag = tag.replace(/^#/, '');
   
   // Check if tag already exists
-  const existingTags = Array.from(document.querySelectorAll('[data-tag]')).map(el => el.getAttribute('data-tag'));
+  const existingTags = Array.from(document.querySelectorAll('#tags-list [data-tag]')).map(el => el.getAttribute('data-tag'));
   if (existingTags.includes(tag)) return;
   
   const tagsList = document.getElementById('tags-list');
@@ -179,26 +196,26 @@ function addTag(tag) {
   tagEl.setAttribute('data-tag', tag);
   tagEl.innerHTML = `
     #${escapeHtml(tag)}
-    <span class="tag-remove" onclick="removeTag('${escapeHtml(tag)}')">×</span>
+    <span class="tag-remove" onclick="removeTagFromEditor('${escapeHtml(tag)}')">×</span>
   `;
   
   tagsList.appendChild(tagEl);
 }
 
-window.removeTag = function(tag) {
-  const tagEl = document.querySelector(`[data-tag="${tag}"]`);
+window.removeTagFromEditor = function(tag) {
+  const tagEl = document.querySelector(`#tags-list [data-tag="${tag}"]`);
   if (tagEl) {
     tagEl.remove();
   }
 };
 
-async function savePrompt(promptId) {
-  const title = document.getElementById('prompt-title-input').value.trim();
-  const text = document.getElementById('prompt-text-input').value.trim();
-  const description = document.getElementById('prompt-description-input').value.trim();
-  const folderId = document.getElementById('prompt-folder-select').value || null;
-  const platform = document.getElementById('prompt-platform-select').value;
-  const tags = Array.from(document.querySelectorAll('[data-tag]')).map(el => el.getAttribute('data-tag'));
+window.savePromptFromEditor = async function() {
+  const title = document.getElementById('prompt-title-input')?.value.trim();
+  const text = document.getElementById('prompt-text-input')?.value.trim();
+  const description = document.getElementById('prompt-description-input')?.value.trim();
+  const folderId = document.getElementById('prompt-folder-select')?.value || null;
+  const platform = document.getElementById('prompt-platform-select')?.value;
+  const tags = Array.from(document.querySelectorAll('#tags-list [data-tag]')).map(el => el.getAttribute('data-tag'));
   
   // Validation
   const titleError = document.getElementById('title-error');
@@ -206,26 +223,26 @@ async function savePrompt(promptId) {
   let hasError = false;
   
   if (!title) {
-    titleError.style.display = 'block';
+    if (titleError) titleError.style.display = 'block';
     hasError = true;
   } else {
-    titleError.style.display = 'none';
+    if (titleError) titleError.style.display = 'none';
   }
   
   if (!text) {
-    textError.style.display = 'block';
+    if (textError) textError.style.display = 'block';
     hasError = true;
   } else {
-    textError.style.display = 'none';
+    if (textError) textError.style.display = 'none';
   }
   
   if (hasError) return;
   
   const variables = extractVariables(text);
   
-  if (promptId) {
+  if (currentEditingPromptId) {
     // Update existing prompt
-    const prompt = window.appState.prompts.find(p => p.id === promptId);
+    const prompt = window.appState.prompts.find(p => p.id === currentEditingPromptId);
     if (prompt) {
       prompt.title = title;
       prompt.text = text;
@@ -256,14 +273,14 @@ async function savePrompt(promptId) {
   }
   
   await saveData('prompts', window.appState.prompts);
-  showToast(promptId ? 'Prompt updated' : 'Prompt created', 'success');
+  showToast(currentEditingPromptId ? 'Prompt updated' : 'Prompt created', 'success');
   
-  closePromptEditor();
+  closePromptEditorModal();
   renderPrompts();
   renderFavorites();
-}
+};
 
-window.deletePromptFromEditor = async function(promptId) {
+window.deletePromptFromEditorModal = async function(promptId) {
   if (!confirm('Are you sure you want to delete this prompt?')) {
     return;
   }
@@ -272,13 +289,16 @@ window.deletePromptFromEditor = async function(promptId) {
   await saveData('prompts', window.appState.prompts);
   
   showToast('Prompt deleted', 'success');
-  closePromptEditor();
+  closePromptEditorModal();
   renderPrompts();
   renderFavorites();
 };
 
-window.closePromptEditor = function() {
-  const modal = document.querySelector('.modal-overlay');
+window.closePromptEditorModal = function() {
+  currentEditingPromptId = null;
+  document.removeEventListener('keydown', handleEscapeKey);
+  
+  const modal = document.getElementById('prompt-editor-modal');
   if (modal) {
     modal.classList.remove('visible');
     setTimeout(() => modal.remove(), 250);

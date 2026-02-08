@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PromptVault - UI Demo</title>
+  <link rel="stylesheet" href="styles/variables.css">
+  <link rel="stylesheet" href="styles/animations.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="popup/popup.css">
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      padding: 40px 20px;
+      background: #0a0a0a;
+      min-height: 100vh;
+    }
+    
+    .demo-wrapper {
+      display: flex;
+      gap: 40px;
+      align-items: flex-start;
+    }
+    
+    .extension-preview {
+      width: 400px;
+      min-height: 600px;
+      background: var(--bg-primary);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    
+    .sidebar {
+      width: 300px;
+      color: white;
+      font-family: var(--font-family);
+    }
+    
+    .sidebar h2 {
+      font-size: 20px;
+      margin-bottom: 16px;
+      color: #fff;
+    }
+    
+    .sidebar p {
+      font-size: 14px;
+      color: rgba(255,255,255,0.7);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    
+    .test-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .test-btn {
+      padding: 10px 16px;
+      background: #2383E2;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .test-btn:hover {
+      background: #1B6EC2;
+    }
+    
+    .test-btn.secondary {
+      background: #333;
+    }
+    
+    .test-btn.secondary:hover {
+      background: #444;
+    }
+  </style>
+</head>
+<body data-theme="dark">
+  <div class="demo-wrapper">
+    <div class="extension-preview" id="extension-root">
+      <!-- Main App -->
+      <div id="main-app" class="main-app" style="display: flex;">
+        <!-- Header -->
+        <header class="header">
+          <div class="header-left">
+            <h1 class="app-title">PromptVault</h1>
+          </div>
+          <div class="header-right">
+            <button class="btn btn-ghost btn-sm ripple" id="new-prompt-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              New
+            </button>
+            <button class="btn btn-icon btn-ghost settings-btn" id="settings-btn" title="Settings">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 1v6m0 6v6M6.3 3.7l4.2 4.2m4.2 4.2l4.2 4.2M1 12h6m6 0h6M3.7 6.3l4.2 4.2m4.2 4.2l4.2 4.2"/>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- Search Bar -->
+        <div class="search-bar">
+          <div class="search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input type="search" id="search-input" placeholder="Search prompts...">
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <nav class="tabs">
+          <button class="tab-btn active" data-tab="prompts">Prompts</button>
+          <button class="tab-btn" data-tab="folders">Folders</button>
+          <button class="tab-btn" data-tab="favorites">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          </button>
+          <button class="tab-btn" data-tab="explore">Explore</button>
+        </nav>
+
+        <!-- Tab Contents -->
+        <main class="content">
+          <!-- Prompts Tab -->
+          <div id="prompts-tab" class="tab-content active">
+            <div id="prompts-list"></div>
+          </div>
+
+          <!-- Folders Tab -->
+          <div id="folders-tab" class="tab-content">
+            <div class="tab-header">
+              <button class="btn btn-secondary btn-sm ripple" id="new-folder-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                New Folder
+              </button>
+            </div>
+            <div id="folders-list"></div>
+          </div>
+
+          <!-- Favorites Tab -->
+          <div id="favorites-tab" class="tab-content">
+            <div id="favorites-list"></div>
+          </div>
+
+          <!-- Explore Tab -->
+          <div id="explore-tab" class="tab-content">
+            <div id="explore-list"></div>
+          </div>
+        </main>
+      </div>
+
+      <!-- Toast Notifications -->
+      <div id="toast" class="toast"></div>
+    </div>
+    
+    <div class="sidebar">
+      <h2>UI Demo</h2>
+      <p>This is a standalone demo of the PromptVault UI. Click the buttons below to populate with test data and interact with the interface.</p>
+      
+      <div class="test-actions">
+        <button class="test-btn" onclick="loadTestData()">Load Test Data</button>
+        <button class="test-btn secondary" onclick="clearData()">Clear Data</button>
+        <button class="test-btn secondary" onclick="toggleTheme()">Toggle Theme</button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Mock chrome storage API for demo
+    window.chrome = {
+      storage: {
+        local: {
+          data: {},
+          get: function(keys, callback) {
+            const result = {};
+            if (Array.isArray(keys)) {
+              keys.forEach(k => { result[k] = this.data[k]; });
+            } else if (typeof keys === 'object') {
+              Object.keys(keys).forEach(k => { 
+                result[k] = this.data[k] !== undefined ? this.data[k] : keys[k];
+              });
+            } else {
+              result[keys] = this.data[keys];
+            }
+            callback(result);
+          },
+          set: function(items, callback) {
+            Object.assign(this.data, items);
+            if (callback) callback();
+          }
+        },
+        onChanged: {
+          addListener: function() {}
+        }
+      },
+      runtime: {
+        getURL: function(path) { return path; },
+        onMessage: { addListener: function() {} },
+        sendMessage: function() {}
+      },
+      tabs: {
+        query: function() { return Promise.resolve([]); },
+        sendMessage: function() { return Promise.resolve(); }
+      },
+      commands: {
+        onCommand: { addListener: function() {} }
+      }
+    };
+    
+    // Initialize app state
+    window.appState = {
+      prompts: [],
+      folders: [],
+      settings: {
+        theme: 'dark',
+        hotkeys: {
+          slot1: { key: 'Ctrl+Shift+1', promptId: null },
+          slot2: { key: 'Ctrl+Shift+2', promptId: null },
+          slot3: { key: 'Ctrl+Shift+3', promptId: null },
+          slot4: { key: 'Ctrl+Shift+4', promptId: null }
+        },
+        defaultFolder: null
+      },
+      user: { id: 'demo-user', email: 'demo@example.com', name: 'Demo User' },
+      isFirstLaunch: false
+    };
+    
+    // Test data
+    function loadTestData() {
+      window.appState.folders = [
+        { id: '1', name: 'Marketing', icon: '📢', createdAt: Date.now() },
+        { id: '2', name: 'Development', icon: '💻', createdAt: Date.now() },
+        { id: '3', name: 'Writing', icon: '✍️', createdAt: Date.now() }
+      ];
+      
+      window.appState.prompts = [
+        {
+          id: '1',
+          title: 'Email Writer',
+          text: 'Write a professional email about {topic} to {recipient}.',
+          folderId: '1',
+          tags: ['email', 'business'],
+          isFavorite: true,
+          useCount: 15,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        },
+        {
+          id: '2',
+          title: 'Code Review',
+          text: 'Review this code for bugs and improvements:\n{code}',
+          folderId: '2',
+          tags: ['coding', 'review'],
+          isFavorite: false,
+          useCount: 8,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        },
+        {
+          id: '3',
+          title: 'Blog Outline',
+          text: 'Create a blog post outline about {topic} for {audience}.',
+          folderId: '3',
+          tags: ['content', 'writing'],
+          isFavorite: true,
+          useCount: 12,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        },
+        {
+          id: '4',
+          title: 'Quick Summary',
+          text: 'Summarize the following text in 3 bullet points:\n{text}',
+          folderId: null,
+          tags: ['summary'],
+          isFavorite: false,
+          useCount: 5,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        }
+      ];
+      
+      chrome.storage.local.data.prompts = window.appState.prompts;
+      chrome.storage.local.data.folders = window.appState.folders;
+      chrome.storage.local.data.user = window.appState.user;
+      
+      renderAll();
+      showToast('Test data loaded', 'success');
+    }
+    
+    function clearData() {
+      window.appState.prompts = [];
+      window.appState.folders = [];
+      chrome.storage.local.data = {};
+      renderAll();
+      showToast('Data cleared', 'success');
+    }
+    
+    function toggleTheme() {
+      const current = document.body.getAttribute('data-theme');
+      const newTheme = current === 'dark' ? 'light' : 'dark';
+      document.body.setAttribute('data-theme', newTheme);
+      showToast(`Theme: ${newTheme}`, 'success');
+    }
+    
+    function renderAll() {
+      if (typeof renderPrompts === 'function') renderPrompts();
+      if (typeof renderFolders === 'function') renderFolders();
+      if (typeof renderFavorites === 'function') renderFavorites();
+      if (typeof renderExplore === 'function') renderExplore();
+    }
+    
+    // Toast
+    function showToast(message, type = 'default') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast visible';
+      if (type === 'success') toast.classList.add('success');
+      if (type === 'error') toast.classList.add('error');
+      
+      setTimeout(() => {
+        toast.classList.remove('visible');
+        setTimeout(() => { toast.className = 'toast'; }, 250);
+      }, 3000);
+    }
+    window.showToast = showToast;
+    
+    // Save data function
+    function saveData(key, value) {
+      return new Promise((resolve) => {
+        chrome.storage.local.set({ [key]: value }, resolve);
+        window.appState[key] = value;
+      });
+    }
+    window.saveData = saveData;
+  </script>
+  
+  <script type="module">
+    import { initTabs } from './popup/components/tabs.js';
+    import { initPrompts, renderPrompts } from './popup/components/prompts.js';
+    import { initFolders, renderFolders } from './popup/components/folders.js';
+    import { initFavorites, renderFavorites } from './popup/components/favorites.js';
+    import { initExplore, renderExplore } from './popup/components/explore.js';
+    import { initSettings } from './popup/components/settings.js';
+    import { initPromptEditor } from './popup/components/prompt-editor.js';
+    import { initSearch } from './popup/components/search.js';
+    
+    // Make render functions global
+    window.renderPrompts = renderPrompts;
+    window.renderFolders = renderFolders;
+    window.renderFavorites = renderFavorites;
+    window.renderExplore = renderExplore;
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      initTabs();
+      initPrompts();
+      initFolders();
+      initFavorites();
+      initExplore();
+      initSettings();
+      initPromptEditor();
+      initSearch();
+      
+      // Auto-load test data
+      setTimeout(() => {
+        loadTestData();
+      }, 500);
+    });
+  </script>
+</body>
+</html>

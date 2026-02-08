@@ -17,7 +17,7 @@ async function loadExplorePrompts() {
     {
       id: 'explore-1',
       title: 'Professional Email Writer',
-      text: 'Write a professional email about {topic} to {recipient}. The tone should be {tone}.',
+      text: 'Write a professional email about {topic} to {recipient}. The tone should be {tone}.\n\nMake sure to:\n- Start with a proper greeting\n- Be clear and concise\n- Include a call to action\n- End professionally',
       author: 'PromptMaster',
       likes: 245,
       downloads: 1200,
@@ -27,7 +27,7 @@ async function loadExplorePrompts() {
     {
       id: 'explore-2',
       title: 'Code Review Assistant',
-      text: 'Review the following code and provide constructive feedback on:\n1. Code quality\n2. Best practices\n3. Potential bugs\n4. Performance improvements\n\nCode: {code}',
+      text: 'Review the following code and provide constructive feedback on:\n1. Code quality\n2. Best practices\n3. Potential bugs\n4. Performance improvements\n5. Security concerns\n\nCode:\n{code}',
       author: 'DevGuru',
       likes: 189,
       downloads: 950,
@@ -37,7 +37,7 @@ async function loadExplorePrompts() {
     {
       id: 'explore-3',
       title: 'Social Media Caption',
-      text: 'Create an engaging social media caption for {platform} about {topic}. Include relevant hashtags and emojis.',
+      text: 'Create an engaging social media caption for {platform} about {topic}.\n\nRequirements:\n- Use attention-grabbing hooks\n- Include relevant hashtags\n- Add appropriate emojis\n- Keep it concise but impactful',
       author: 'ContentQueen',
       likes: 312,
       downloads: 1500,
@@ -47,7 +47,7 @@ async function loadExplorePrompts() {
     {
       id: 'explore-4',
       title: 'Meeting Summarizer',
-      text: 'Summarize the following meeting notes into:\n1. Key decisions made\n2. Action items with owners\n3. Next steps\n\nNotes: {notes}',
+      text: 'Summarize the following meeting notes into:\n1. Key decisions made\n2. Action items with owners\n3. Next steps and deadlines\n4. Open questions\n\nMeeting notes:\n{notes}',
       author: 'ProductivityPro',
       likes: 156,
       downloads: 780,
@@ -94,37 +94,51 @@ export function renderExplore() {
 
 function renderExploreCard(prompt, index) {
   const isFlipped = flippedCards.has(prompt.id);
+  const truncatedText = prompt.text.substring(0, 150) + (prompt.text.length > 150 ? '...' : '');
   
   return `
-    <div class="explore-card-wrapper" data-prompt-id="${prompt.id}" style="animation-delay: ${index * 40}ms">
+    <div class="explore-card-wrapper" data-prompt-id="${prompt.id}" style="animation-delay: ${index * 60}ms">
       <div class="explore-card ${isFlipped ? 'flipped' : ''}">
         <div class="explore-card-front">
-          <div class="explore-card-thumbnail">${prompt.icon || '📝'}</div>
+          <div class="explore-card-thumbnail">
+            ${prompt.icon || '📝'}
+            <div class="flip-hint">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 1l4 4-4 4"/>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                <path d="M7 23l-4-4 4-4"/>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+              </svg>
+            </div>
+          </div>
           <div class="explore-card-title">${escapeHtml(prompt.title)}</div>
           <div class="explore-card-meta">
             <span class="explore-card-author">${escapeHtml(prompt.author)}</span>
             <div class="explore-card-stats">
-              <span title="Likes">❤️ ${prompt.likes}</span>
+              <span>❤️ ${prompt.likes}</span>
             </div>
           </div>
         </div>
         <div class="explore-card-back">
-          <div class="explore-card-text">${escapeHtml(prompt.text)}</div>
+          <div class="explore-card-back-header">
+            <div class="explore-card-back-title">${escapeHtml(prompt.title)}</div>
+          </div>
+          <div class="explore-card-text">${escapeHtml(truncatedText)}</div>
           ${prompt.tags && prompt.tags.length > 0 ? `
-            <div class="tags">
-              ${prompt.tags.map(tag => `<span class="tag">#${escapeHtml(tag)}</span>`).join('')}
+            <div class="tags" style="margin-top: 8px;">
+              ${prompt.tags.slice(0, 2).map(tag => `<span class="tag">#${escapeHtml(tag)}</span>`).join('')}
             </div>
           ` : ''}
           <div class="explore-card-actions">
-            <button class="btn btn-secondary btn-sm ripple" onclick="copyExplorePrompt('${prompt.id}')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="btn btn-secondary btn-sm ripple" onclick="event.stopPropagation(); copyExplorePrompt('${prompt.id}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
               Copy
             </button>
-            <button class="btn btn-primary btn-sm ripple" onclick="saveExplorePrompt('${prompt.id}')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="btn btn-primary btn-sm ripple" onclick="event.stopPropagation(); saveExplorePrompt('${prompt.id}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
               </svg>
               Save
@@ -137,29 +151,34 @@ function renderExploreCard(prompt, index) {
 }
 
 function attachExploreListeners() {
-  const cards = document.querySelectorAll('.explore-card-wrapper');
+  const wrappers = document.querySelectorAll('.explore-card-wrapper');
   
-  cards.forEach(wrapper => {
+  wrappers.forEach(wrapper => {
     const card = wrapper.querySelector('.explore-card');
     const promptId = wrapper.getAttribute('data-prompt-id');
     
+    // Click to flip
     wrapper.addEventListener('click', (e) => {
       // Don't flip if clicking on buttons
       if (e.target.closest('button')) {
         return;
       }
       
-      const isFlipped = card.classList.contains('flipped');
-      
-      if (isFlipped) {
-        card.classList.remove('flipped');
-        flippedCards.delete(promptId);
-      } else {
-        card.classList.add('flipped');
-        flippedCards.add(promptId);
-      }
+      toggleFlip(card, promptId);
     });
   });
+}
+
+function toggleFlip(card, promptId) {
+  const isFlipped = card.classList.contains('flipped');
+  
+  if (isFlipped) {
+    card.classList.remove('flipped');
+    flippedCards.delete(promptId);
+  } else {
+    card.classList.add('flipped');
+    flippedCards.add(promptId);
+  }
 }
 
 window.copyExplorePrompt = async function(promptId) {
@@ -178,9 +197,17 @@ window.saveExplorePrompt = async function(promptId) {
   const explorePrompt = explorePrompts.find(p => p.id === promptId);
   if (!explorePrompt) return;
   
+  // Check if already saved
+  const alreadySaved = window.appState.prompts.some(p => p.sourceId === promptId);
+  if (alreadySaved) {
+    showToast('Already in your library', 'error');
+    return;
+  }
+  
   // Create a new prompt from the explore prompt
   const newPrompt = {
     id: Date.now().toString(),
+    sourceId: promptId,
     title: explorePrompt.title,
     text: explorePrompt.text,
     description: `From ${explorePrompt.author}`,
@@ -201,6 +228,39 @@ window.saveExplorePrompt = async function(promptId) {
   setTimeout(() => {
     document.querySelector('[data-tab="prompts"]').click();
   }, 500);
+};
+
+window.addExploreToFavorites = async function(promptId) {
+  const explorePrompt = explorePrompts.find(p => p.id === promptId);
+  if (!explorePrompt) return;
+  
+  // First save, then add to favorites
+  const existingPrompt = window.appState.prompts.find(p => p.sourceId === promptId);
+  
+  if (existingPrompt) {
+    existingPrompt.isFavorite = !existingPrompt.isFavorite;
+    await saveData('prompts', window.appState.prompts);
+    showToast(existingPrompt.isFavorite ? 'Added to favorites' : 'Removed from favorites', 'success');
+  } else {
+    // Save first, then add to favorites
+    const newPrompt = {
+      id: Date.now().toString(),
+      sourceId: promptId,
+      title: explorePrompt.title,
+      text: explorePrompt.text,
+      description: `From ${explorePrompt.author}`,
+      tags: explorePrompt.tags || [],
+      folderId: null,
+      isFavorite: true,
+      useCount: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    
+    window.appState.prompts.push(newPrompt);
+    await saveData('prompts', window.appState.prompts);
+    showToast('Saved and added to favorites', 'success');
+  }
 };
 
 function escapeHtml(text) {

@@ -21,6 +21,13 @@ export function initFolders() {
       renderPrompts(); // Re-render prompts when folders change
     }
   });
+  
+  // Close context menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (contextMenuVisible && !e.target.closest('.context-menu')) {
+      closeContextMenu();
+    }
+  });
 }
 
 export function renderFolders() {
@@ -62,7 +69,7 @@ function renderFolderCard(folder, index) {
       </div>
       <div class="folder-card-actions">
         <button class="prompt-action-btn" 
-                onclick="editFolder('${folder.id}')" 
+                onclick="event.stopPropagation(); editFolderById('${folder.id}')" 
                 title="Edit folder">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -70,7 +77,7 @@ function renderFolderCard(folder, index) {
           </svg>
         </button>
         <button class="prompt-action-btn" 
-                onclick="deleteFolder('${folder.id}')" 
+                onclick="event.stopPropagation(); deleteFolderById('${folder.id}')" 
                 title="Delete folder">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -95,9 +102,8 @@ function attachFolderListeners() {
       }
       
       const folderId = card.getAttribute('data-folder-id');
-      // Switch to prompts tab and filter by folder
+      // Switch to prompts tab
       document.querySelector('[data-tab="prompts"]').click();
-      // Could implement filtering here
     });
   });
 }
@@ -106,13 +112,17 @@ function openFolderEditor(folderId = null) {
   const folder = folderId ? window.appState.folders.find(f => f.id === folderId) : null;
   const isEdit = !!folder;
   
+  // Icon picker options
+  const iconOptions = ['📁', '📂', '📋', '📝', '💼', '🎨', '🔧', '💡', '🎯', '🚀', '📊', '💻', '🎮', '📱', '🌐', '⚡'];
+  
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
+  modal.id = 'folder-editor-modal';
   modal.innerHTML = `
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">${isEdit ? 'Edit Folder' : 'New Folder'}</h2>
-        <button class="btn btn-icon btn-ghost close-modal-btn">
+        <button class="btn btn-icon btn-ghost" onclick="closeFolderEditorModal()">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6 6 18M6 6l12 12"/>
           </svg>
@@ -126,15 +136,23 @@ function openFolderEditor(folderId = null) {
         </div>
         <div class="form-group">
           <label class="form-label">Icon</label>
-          <div class="icon-picker">
-            <input type="text" id="folder-icon-input" placeholder="Choose an emoji" value="${folder ? folder.icon : '📁'}" maxlength="2">
+          <div class="icon-picker" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+            ${iconOptions.map(icon => `
+              <button type="button" 
+                      class="icon-picker-btn ${folder?.icon === icon || (!folder && icon === '📁') ? 'active' : ''}" 
+                      onclick="selectFolderIcon('${icon}')"
+                      style="width: 36px; height: 36px; font-size: 18px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                ${icon}
+              </button>
+            `).join('')}
           </div>
+          <input type="hidden" id="folder-icon-input" value="${folder ? folder.icon : '📁'}">
           <span class="form-hint">Pick an emoji to represent this folder</span>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-ghost cancel-modal-btn">Cancel</button>
-        <button class="btn btn-primary ripple" id="save-folder-btn">
+        <button class="btn btn-ghost" onclick="closeFolderEditorModal()">Cancel</button>
+        <button class="btn btn-primary ripple" onclick="saveFolderFromEditor('${folderId || ''}')">
           ${isEdit ? 'Save Changes' : 'Create Folder'}
         </button>
       </div>
@@ -150,67 +168,86 @@ function openFolderEditor(folderId = null) {
   const nameInput = document.getElementById('folder-name-input');
   nameInput.focus();
   
-  // Close button handlers
-  const closeBtn = modal.querySelector('.close-modal-btn');
-  const cancelBtn = modal.querySelector('.cancel-modal-btn');
-  
-  const closeModal = () => {
-    modal.classList.remove('visible');
-    setTimeout(() => modal.remove(), 250);
-  };
-  
-  closeBtn.addEventListener('click', closeModal);
-  cancelBtn.addEventListener('click', closeModal);
-  
   // Close on overlay click
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {
-      closeModal();
+      closeFolderEditorModal();
     }
-  });
-  
-  // Save button handler
-  document.getElementById('save-folder-btn').addEventListener('click', async () => {
-    const name = nameInput.value.trim();
-    const icon = document.getElementById('folder-icon-input').value.trim();
-    const error = document.getElementById('folder-name-error');
-    
-    if (!name) {
-      error.style.display = 'block';
-      nameInput.focus();
-      return;
-    }
-    
-    error.style.display = 'none';
-    
-    if (isEdit) {
-      // Update existing folder
-      folder.name = name;
-      folder.icon = icon || '📁';
-    } else {
-      // Create new folder
-      const newFolder = {
-        id: Date.now().toString(),
-        name,
-        icon: icon || '📁',
-        createdAt: Date.now()
-      };
-      window.appState.folders.push(newFolder);
-    }
-    
-    await saveData('folders', window.appState.folders);
-    showToast(isEdit ? 'Folder updated' : 'Folder created', 'success');
-    
-    closeModal();
-    renderFolders();
   });
 }
 
-window.editFolder = function(folderId) {
+window.selectFolderIcon = function(icon) {
+  // Update hidden input
+  const input = document.getElementById('folder-icon-input');
+  if (input) input.value = icon;
+  
+  // Update active state
+  const buttons = document.querySelectorAll('.icon-picker-btn');
+  buttons.forEach(btn => {
+    btn.classList.remove('active');
+    btn.style.borderColor = 'var(--border)';
+    btn.style.background = 'var(--bg-secondary)';
+    if (btn.textContent.trim() === icon) {
+      btn.classList.add('active');
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.background = 'var(--accent-light)';
+    }
+  });
+};
+
+window.saveFolderFromEditor = async function(folderId) {
+  const name = document.getElementById('folder-name-input')?.value.trim();
+  const icon = document.getElementById('folder-icon-input')?.value.trim();
+  const error = document.getElementById('folder-name-error');
+  
+  if (!name) {
+    if (error) error.style.display = 'block';
+    document.getElementById('folder-name-input')?.focus();
+    return;
+  }
+  
+  if (error) error.style.display = 'none';
+  
+  if (folderId) {
+    // Update existing folder
+    const folder = window.appState.folders.find(f => f.id === folderId);
+    if (folder) {
+      folder.name = name;
+      folder.icon = icon || '📁';
+      folder.updatedAt = Date.now();
+    }
+  } else {
+    // Create new folder
+    const newFolder = {
+      id: Date.now().toString(),
+      name,
+      icon: icon || '📁',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    window.appState.folders.push(newFolder);
+  }
+  
+  await saveData('folders', window.appState.folders);
+  showToast(folderId ? 'Folder updated' : 'Folder created', 'success');
+  
+  closeFolderEditorModal();
+  renderFolders();
+};
+
+window.closeFolderEditorModal = function() {
+  const modal = document.getElementById('folder-editor-modal');
+  if (modal) {
+    modal.classList.remove('visible');
+    setTimeout(() => modal.remove(), 250);
+  }
+};
+
+window.editFolderById = function(folderId) {
   openFolderEditor(folderId);
 };
 
-window.deleteFolder = async function(folderId) {
+window.deleteFolderById = async function(folderId) {
   const folder = window.appState.folders.find(f => f.id === folderId);
   if (!folder) return;
   
@@ -242,6 +279,14 @@ window.deleteFolder = async function(folderId) {
   renderFolders();
   renderPrompts();
 };
+
+function closeContextMenu() {
+  if (currentContextMenu) {
+    currentContextMenu.remove();
+    currentContextMenu = null;
+    contextMenuVisible = false;
+  }
+}
 
 function escapeHtml(text) {
   const div = document.createElement('div');

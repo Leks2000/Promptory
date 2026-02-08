@@ -460,3 +460,93 @@ textarea {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border);
 }
+
+/* Prompt folder badge */
+.prompt-folder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.prompt-folder-badge svg {
+  opacity: 0.7;
+}
+
+/* Favorite card special styling */
+.favorite-card {
+  position: relative;
+}
+
+.favorite-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--warning);
+  border-radius: 3px 0 0 3px;
+}
+
+/* Icon picker button active state */
+.icon-picker-btn.active {
+  border-color: var(--accent) !important;
+  background: var(--accent-light) !important;
+}
+
+/* Hotkey recording animation */
+@keyframes recording-pulse {
+  0%, 100% { border-color: var(--accent); }
+  50% { border-color: var(--accent-light); }
+}
+
+.hotkey-badge.recording {
+  animation: recording-pulse 1s ease infinite;
+}
+
+/* Select dropdown styling */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B6B6B' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+/* Link styling */
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Copy button success state */
+.copy-btn.copied {
+  color: var(--success) !important;
+}
+
+/* Tooltip */
+[title] {
+  position: relative;
+}
+
+/* Code block in explore cards */
+.code-block {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 11px;
+  background: var(--bg-tertiary);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

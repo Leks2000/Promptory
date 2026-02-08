@@ -87,11 +87,12 @@ export function renderPrompts() {
 }
 
 function renderFolderSection(folder, prompts) {
-  const isExpanded = !folder.id || localStorage.getItem(`folder-${folder.id}-expanded`) !== 'false';
+  const folderId = folder.id || 'uncategorized';
+  const isExpanded = localStorage.getItem(`folder-${folderId}-expanded`) !== 'false';
   
   return `
-    <div class="folder-section ${isExpanded ? 'expanded' : ''}" data-folder-id="${folder.id || 'uncategorized'}">
-      <div class="folder-header" onclick="toggleFolder('${folder.id || 'uncategorized'}')">
+    <div class="folder-section ${isExpanded ? 'expanded' : ''}" data-folder-id="${folderId}">
+      <div class="folder-header" onclick="toggleFolderSection('${folderId}')">
         <div class="folder-info">
           <span class="folder-arrow">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -99,7 +100,7 @@ function renderFolderSection(folder, prompts) {
             </svg>
           </span>
           <span class="folder-icon">${folder.icon || '📁'}</span>
-          <span class="folder-name">${folder.name}</span>
+          <span class="folder-name">${escapeHtml(folder.name)}</span>
         </div>
         <span class="folder-count">(${prompts.length})</span>
       </div>
@@ -117,14 +118,14 @@ function renderPromptCard(prompt, index) {
         <div class="prompt-title">${escapeHtml(prompt.title)}</div>
         <div class="prompt-actions">
           <button class="prompt-action-btn ${prompt.isFavorite ? 'active' : ''}" 
-                  onclick="toggleFavorite('${prompt.id}')" 
-                  title="Toggle favorite">
+                  onclick="event.stopPropagation(); togglePromptFavorite('${prompt.id}')" 
+                  title="${prompt.isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="${prompt.isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
           </button>
           <button class="prompt-action-btn" 
-                  onclick="showContextMenu(event, '${prompt.id}')" 
+                  onclick="event.stopPropagation(); showPromptContextMenu(event, '${prompt.id}')" 
                   title="More actions">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="1"/>
@@ -136,7 +137,8 @@ function renderPromptCard(prompt, index) {
       </div>
       ${prompt.tags && prompt.tags.length > 0 ? `
         <div class="tags">
-          ${prompt.tags.map(tag => `<span class="tag">#${escapeHtml(tag)}</span>`).join('')}
+          ${prompt.tags.slice(0, 3).map(tag => `<span class="tag">#${escapeHtml(tag)}</span>`).join('')}
+          ${prompt.tags.length > 3 ? `<span class="tag">+${prompt.tags.length - 3}</span>` : ''}
         </div>
       ` : ''}
       <div class="prompt-meta">
@@ -168,7 +170,7 @@ function openPromptEditor(promptId) {
 }
 
 // Global functions (accessible from HTML)
-window.toggleFolder = function(folderId) {
+window.toggleFolderSection = function(folderId) {
   const section = document.querySelector(`[data-folder-id="${folderId}"]`);
   if (!section) return;
   
@@ -176,12 +178,10 @@ window.toggleFolder = function(folderId) {
   section.classList.toggle('expanded');
   
   // Save state
-  if (folderId !== 'uncategorized') {
-    localStorage.setItem(`folder-${folderId}-expanded`, !isExpanded);
-  }
+  localStorage.setItem(`folder-${folderId}-expanded`, !isExpanded);
 };
 
-window.toggleFavorite = async function(promptId) {
+window.togglePromptFavorite = async function(promptId) {
   const prompt = window.appState.prompts.find(p => p.id === promptId);
   if (!prompt) return;
   
@@ -192,7 +192,7 @@ window.toggleFavorite = async function(promptId) {
   renderPrompts();
 };
 
-window.showContextMenu = function(event, promptId) {
+window.showPromptContextMenu = function(event, promptId) {
   event.preventDefault();
   event.stopPropagation();
   
@@ -204,20 +204,20 @@ window.showContextMenu = function(event, promptId) {
   const menu = document.createElement('div');
   menu.className = 'context-menu';
   menu.innerHTML = `
-    <div class="context-menu-item" onclick="copyPromptText('${promptId}')">
+    <div class="context-menu-item" onclick="copyPromptToClipboard('${promptId}')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
       </svg>
       Copy prompt
     </div>
-    <div class="context-menu-item" onclick="insertPrompt('${promptId}')">
+    <div class="context-menu-item" onclick="insertPromptToPage('${promptId}')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
       </svg>
       Insert to page
     </div>
-    <div class="context-menu-item" onclick="openPromptEditor('${promptId}')">
+    <div class="context-menu-item" onclick="editPromptById('${promptId}')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -225,7 +225,7 @@ window.showContextMenu = function(event, promptId) {
       Edit
     </div>
     <div class="context-menu-divider"></div>
-    <div class="context-menu-item danger" onclick="deletePrompt('${promptId}')">
+    <div class="context-menu-item danger" onclick="deletePromptById('${promptId}')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
       </svg>
@@ -262,7 +262,7 @@ function closeContextMenu() {
   }
 }
 
-window.copyPromptText = async function(promptId) {
+window.copyPromptToClipboard = async function(promptId) {
   const prompt = window.appState.prompts.find(p => p.id === promptId);
   if (!prompt) return;
   
@@ -281,7 +281,7 @@ window.copyPromptText = async function(promptId) {
   closeContextMenu();
 };
 
-window.insertPrompt = async function(promptId) {
+window.insertPromptToPage = async function(promptId) {
   const prompt = window.appState.prompts.find(p => p.id === promptId);
   if (!prompt) return;
   
@@ -299,7 +299,7 @@ window.insertPrompt = async function(promptId) {
     await chrome.tabs.sendMessage(tab.id, {
       action: 'insertPrompt',
       text: prompt.text,
-      variables: extractVariables(prompt.text)
+      variables: prompt.variables || []
     });
     
     // Increment use count
@@ -317,7 +317,13 @@ window.insertPrompt = async function(promptId) {
   closeContextMenu();
 };
 
-window.deletePrompt = async function(promptId) {
+window.editPromptById = function(promptId) {
+  const event = new CustomEvent('open-prompt-editor', { detail: { promptId } });
+  document.dispatchEvent(event);
+  closeContextMenu();
+};
+
+window.deletePromptById = async function(promptId) {
   if (!confirm('Are you sure you want to delete this prompt?')) {
     closeContextMenu();
     return;
@@ -330,26 +336,6 @@ window.deletePrompt = async function(promptId) {
   renderPrompts();
   closeContextMenu();
 };
-
-window.openPromptEditor = function(promptId) {
-  const event = new CustomEvent('open-prompt-editor', { detail: { promptId } });
-  document.dispatchEvent(event);
-  closeContextMenu();
-};
-
-function extractVariables(text) {
-  const regex = /\{([^}]+)\}/g;
-  const variables = [];
-  let match;
-  
-  while ((match = regex.exec(text)) !== null) {
-    if (!variables.includes(match[1])) {
-      variables.push(match[1]);
-    }
-  }
-  
-  return variables;
-}
 
 function escapeHtml(text) {
   const div = document.createElement('div');
