@@ -16,12 +16,13 @@
     "storage",
     "activeTab",
     "scripting",
-    "identity",
     "contextMenus",
     "notifications",
-    "clipboardWrite"
+    "clipboardWrite",
+    "tabs"
   ],
   "host_permissions": [
+    "https://vofgfvlgchqheksvlibl.supabase.co/*",
     "*://chat.openai.com/*",
     "*://chatgpt.com/*",
     "*://claude.ai/*",
@@ -47,7 +48,8 @@
         "*://bard.google.com/*",
         "*://copilot.microsoft.com/*",
         "*://bing.com/*",
-        "*://pi.ai/*"
+        "*://pi.ai/*",
+        "<all_urls>"
       ],
       "js": ["content/content.js"],
       "css": ["content/content.css"],
@@ -58,12 +60,40 @@
     "service_worker": "background/background.js"
   },
   "commands": {
-    "_execute_action": {
-      "suggested_key": { 
-        "default": "Ctrl+Shift+P", 
-        "mac": "MacCtrl+Shift+P" 
+    "open-search": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "MacCtrl+Shift+P"
       },
-      "description": "Open PromptVault"
+      "description": "Open prompt search overlay"
+    },
+    "hotkey-1": {
+      "suggested_key": {
+        "default": "Alt+1",
+        "mac": "Alt+1"
+      },
+      "description": "Insert prompt from slot 1"
+    },
+    "hotkey-2": {
+      "suggested_key": {
+        "default": "Alt+2",
+        "mac": "Alt+2"
+      },
+      "description": "Insert prompt from slot 2"
+    },
+    "hotkey-3": {
+      "suggested_key": {
+        "default": "Alt+3",
+        "mac": "Alt+3"
+      },
+      "description": "Insert prompt from slot 3"
+    },
+    "hotkey-4": {
+      "suggested_key": {
+        "default": "Alt+4",
+        "mac": "Alt+4"
+      },
+      "description": "Insert prompt from slot 4"
     }
   },
   "options_page": "options/options.html",
