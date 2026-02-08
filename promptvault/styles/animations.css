@@ -1,0 +1,236 @@
+/* Tab transitions */
+.tab-content {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  display: none;
+}
+
+.tab-content.active {
+  opacity: 1;
+  transform: translateY(0);
+  display: block;
+}
+
+/* Prompt card slide in (staggered) */
+.prompt-card {
+  opacity: 0;
+  transform: translateY(6px);
+  animation: slideIn 200ms ease forwards;
+}
+
+.prompt-card:nth-child(1) { animation-delay: 0ms; }
+.prompt-card:nth-child(2) { animation-delay: 40ms; }
+.prompt-card:nth-child(3) { animation-delay: 80ms; }
+.prompt-card:nth-child(4) { animation-delay: 120ms; }
+.prompt-card:nth-child(5) { animation-delay: 160ms; }
+.prompt-card:nth-child(6) { animation-delay: 200ms; }
+
+@keyframes slideIn {
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+/* Card hover */
+.prompt-card,
+.folder-card,
+.explore-card {
+  transition: background-color var(--transition-fast), 
+              box-shadow var(--transition-fast);
+}
+
+.prompt-card:hover,
+.folder-card:hover {
+  background-color: var(--bg-hover);
+}
+
+.explore-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Flip card for Explore */
+.explore-card-wrapper {
+  perspective: 1000px;
+}
+
+.explore-card {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 200px;
+}
+
+.explore-card.flipped {
+  transform: rotateY(180deg);
+}
+
+.explore-card-front,
+.explore-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: var(--radius-md);
+}
+
+.explore-card-back {
+  transform: rotateY(180deg);
+  background: var(--bg-secondary);
+  padding: 16px;
+  overflow-y: auto;
+}
+
+/* Ripple effect */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.06);
+  width: 100px;
+  height: 100px;
+  margin-left: -50px;
+  margin-top: -50px;
+  transform: scale(0);
+  pointer-events: none;
+}
+
+.ripple:active::after {
+  animation: ripple-anim 400ms ease-out;
+}
+
+@keyframes ripple-anim {
+  to { 
+    transform: scale(4); 
+    opacity: 0; 
+  }
+}
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100%);
+  opacity: 0;
+  transition: all 250ms ease;
+  z-index: 10000;
+  padding: 12px 20px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+.toast.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.toast.success {
+  background: var(--success);
+  color: white;
+  border-color: var(--success);
+}
+
+.toast.error {
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
+}
+
+/* Collapse/Expand folders */
+.folder-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 250ms ease;
+}
+
+.folder.expanded .folder-content {
+  max-height: 2000px;
+}
+
+.folder-arrow {
+  transition: transform var(--transition-fast);
+}
+
+.folder.expanded .folder-arrow {
+  transform: rotate(90deg);
+}
+
+/* Modal fade in */
+.modal-overlay {
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+  pointer-events: none;
+}
+
+.modal-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal {
+  transform: translateY(-20px);
+  opacity: 0;
+  transition: transform var(--transition-normal), 
+              opacity var(--transition-normal);
+}
+
+.modal-overlay.visible .modal {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* Button press */
+button {
+  transition: transform 50ms ease, 
+              background-color var(--transition-fast);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 300ms ease;
+}
+
+/* Empty state */
+.empty-state {
+  opacity: 0;
+  animation: fadeIn 400ms ease 200ms forwards;
+}

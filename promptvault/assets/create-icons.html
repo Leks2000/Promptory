@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Icons</title>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script>
+    function createIcon(size) {
+      const canvas = document.getElementById('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      
+      // Background gradient
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#2383E2');
+      gradient.addColorStop(1, '#1B6EC2');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      
+      // Draw document icon
+      const scale = size / 128;
+      ctx.fillStyle = 'white';
+      
+      // Document shape
+      const x = size * 0.25;
+      const y = size * 0.2;
+      const w = size * 0.5;
+      const h = size * 0.6;
+      const r = size * 0.08;
+      
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.fill();
+      
+      // Lines
+      ctx.fillStyle = '#2383E2';
+      const lineY = y + h * 0.35;
+      const lineW = w * 0.6;
+      const lineH = size * 0.03;
+      ctx.fillRect(x + w * 0.2, lineY, lineW, lineH);
+      ctx.fillRect(x + w * 0.2, lineY + h * 0.2, lineW, lineH);
+      ctx.fillRect(x + w * 0.2, lineY + h * 0.4, lineW * 0.7, lineH);
+      
+      return canvas.toDataURL();
+    }
+    
+    // Generate icons
+    const sizes = [16, 32, 48, 128];
+    sizes.forEach(size => {
+      const dataUrl = createIcon(size);
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `icon-${size}.png`;
+      a.click();
+    });
+  </script>
+</body>
+</html>

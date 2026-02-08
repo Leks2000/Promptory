@@ -1,105 +1,291 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PromptVault Preview</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>PromptVault - AI Prompt Manager</title>
   <style>
-    body {
+    * {
       margin: 0;
-      background: #050508;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      font-family: 'Inter', sans-serif;
-      overflow: auto;
+      padding: 20px;
     }
-    .preview-wrapper {
+    
+    .container {
+      max-width: 900px;
+      background: white;
+      border-radius: 20px;
+      padding: 60px 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      text-align: center;
+    }
+    
+    .icon {
+      width: 128px;
+      height: 128px;
+      margin: 0 auto 30px;
+      background: linear-gradient(135deg, #2383E2, #1B6EC2);
+      border-radius: 24px;
       display: flex;
-      gap: 40px;
-      align-items: flex-start;
-      padding: 40px;
-      flex-wrap: wrap;
+      align-items: center;
       justify-content: center;
+      font-size: 64px;
+      box-shadow: 0 10px 30px rgba(35, 131, 226, 0.3);
     }
-    .preview-frame {
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(124,58,237,0.1);
-      border: 1px solid rgba(255,255,255,0.06);
-      position: relative;
-    }
-    .preview-label {
-      color: #a0a0be;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      text-align: center;
-      letter-spacing: 0.5px;
-    }
-    .preview-col { display: flex; flex-direction: column; align-items: center; }
-    iframe {
-      border: none;
-      display: block;
-    }
+    
     h1 {
-      color: #f0f0f8;
-      font-size: 28px;
-      font-weight: 800;
-      text-align: center;
-      margin-bottom: 8px;
-      background: linear-gradient(135deg, #7c3aed, #06b6d4);
+      font-size: 48px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
+    
     .subtitle {
-      color: #666680;
-      font-size: 14px;
-      text-align: center;
+      font-size: 20px;
+      color: #666;
       margin-bottom: 40px;
+      line-height: 1.6;
     }
-    .full-page { width: 100%; max-width: 1200px; }
-    .btn-dl {
+    
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 24px;
+      margin: 40px 0;
+      text-align: left;
+    }
+    
+    .feature {
+      padding: 24px;
+      background: #f8f9fa;
+      border-radius: 12px;
+      transition: transform 200ms ease;
+    }
+    
+    .feature:hover {
+      transform: translateY(-4px);
+    }
+    
+    .feature-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+    
+    .feature h3 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 8px;
+    }
+    
+    .feature p {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.5;
+    }
+    
+    .buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 40px;
+    }
+    
+    .btn {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 12px 28px;
-      background: linear-gradient(135deg, #7c3aed, #06b6d4);
-      color: #fff;
+      padding: 16px 32px;
       border: none;
       border-radius: 12px;
-      font-size: 14px;
-      font-weight: 700;
+      font-size: 16px;
+      font-weight: 600;
       cursor: pointer;
+      transition: all 200ms ease;
       text-decoration: none;
-      transition: all 0.2s;
-      box-shadow: 0 4px 20px rgba(124,58,237,0.4);
-      margin-top: 32px;
     }
-    .btn-dl:hover {
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-primary:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 32px rgba(124,58,237,0.5);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    }
+    
+    .btn-secondary {
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+    }
+    
+    .btn-secondary:hover {
+      background: #f8f9fa;
+    }
+    
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      margin: 40px 0;
+      padding: 24px;
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+      border-radius: 12px;
+    }
+    
+    .stat {
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 36px;
+      font-weight: 700;
+      color: #667eea;
+      margin-bottom: 4px;
+    }
+    
+    .stat-label {
+      font-size: 14px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .footer {
+      margin-top: 60px;
+      padding-top: 30px;
+      border-top: 1px solid #e5e5e5;
+      color: #999;
+      font-size: 14px;
+    }
+    
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
+    
+    @media (max-width: 768px) {
+      .container {
+        padding: 40px 24px;
+      }
+      
+      h1 {
+        font-size: 36px;
+      }
+      
+      .features {
+        grid-template-columns: 1fr;
+      }
+      
+      .stats {
+        flex-direction: column;
+        gap: 24px;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="full-page">
-    <h1>PromptVault</h1>
-    <p class="subtitle">AI Prompt Library — Chrome Extension Preview</p>
+  <div class="container">
+    <div class="icon">📝</div>
     
-    <div class="preview-wrapper">
-      <div class="preview-col">
-        <div class="preview-label">POPUP (400x600)</div>
-        <div class="preview-frame">
-          <iframe src="extension/popup/popup.html" width="400" height="600"></iframe>
-        </div>
+    <h1>PromptVault</h1>
+    <p class="subtitle">
+      Your personal AI prompt manager. Save, organize, and instantly insert prompts into ChatGPT, Claude, Gemini, and more.
+    </p>
+    
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value">∞</div>
+        <div class="stat-label">Prompts</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">6+</div>
+        <div class="stat-label">Platforms</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">100%</div>
+        <div class="stat-label">Free</div>
       </div>
     </div>
     
-    <div style="text-align:center">
-      <a href="PromptVault-v1.0.zip" class="btn-dl" download>Download Extension ZIP</a>
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">📝</div>
+        <h3>Smart Organization</h3>
+        <p>Create folders, add tags, and organize your prompts your way</p>
+      </div>
+      
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <h3>Quick Insert</h3>
+        <p>One-click insertion into any AI chat interface</p>
+      </div>
+      
+      <div class="feature">
+        <div class="feature-icon">🔍</div>
+        <h3>Instant Search</h3>
+        <p>Find any prompt in milliseconds with smart search</p>
+      </div>
+      
+      <div class="feature">
+        <div class="feature-icon">🌐</div>
+        <h3>Public Library</h3>
+        <p>Discover and save prompts from the community</p>
+      </div>
+      
+      <div class="feature">
+        <div class="feature-icon">🎨</div>
+        <h3>Beautiful UI</h3>
+        <p>Clean, minimal design with dark mode support</p>
+      </div>
+      
+      <div class="feature">
+        <div class="feature-icon">{x}</div>
+        <h3>Variables</h3>
+        <p>Create dynamic prompts with variable substitution</p>
+      </div>
+    </div>
+    
+    <div class="buttons">
+      <a href="https://github.com" class="btn btn-primary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+        </svg>
+        Download Extension
+      </a>
+      <a href="https://github.com" class="btn btn-secondary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+        View on GitHub
+      </a>
+    </div>
+    
+    <div class="footer">
+      <p>Made with ❤️ for AI power users</p>
+      <p style="margin-top: 8px;">
+        <a href="#">Documentation</a> •
+        <a href="#">Support</a> •
+        <a href="#">Privacy</a>
+      </p>
     </div>
   </div>
 </body>

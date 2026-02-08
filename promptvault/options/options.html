@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PromptVault Options</title>
+  <link rel="stylesheet" href="../styles/variables.css">
+  <link rel="stylesheet" href="../styles/components.css">
+  <style>
+    body {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      font-family: var(--font-family);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+    
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      font-size: var(--font-size-md);
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+    
+    .section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    
+    .section-title {
+      font-size: var(--font-size-lg);
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    
+    .option-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--divider);
+    }
+    
+    .option-row:last-child {
+      border-bottom: none;
+    }
+    
+    .option-info h3 {
+      font-size: var(--font-size-md);
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    
+    .option-info p {
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+      margin: 0;
+    }
+    
+    .success-message {
+      background: var(--success);
+      color: white;
+      padding: 12px 20px;
+      border-radius: var(--radius-md);
+      margin-bottom: 20px;
+      display: none;
+    }
+    
+    .success-message.visible {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>PromptVault Settings</h1>
+  <p class="subtitle">Customize your prompt management experience</p>
+  
+  <div class="success-message" id="success-message">
+    Settings saved successfully!
+  </div>
+  
+  <div class="section">
+    <h2 class="section-title">Appearance</h2>
+    
+    <div class="option-row">
+      <div class="option-info">
+        <h3>Theme</h3>
+        <p>Choose your preferred color scheme</p>
+      </div>
+      <select id="theme-select" class="btn btn-secondary">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2 class="section-title">Keyboard Shortcuts</h2>
+    
+    <div class="option-row">
+      <div class="option-info">
+        <h3>Open PromptVault</h3>
+        <p>Keyboard shortcut to open the extension</p>
+      </div>
+      <kbd style="padding: 6px 12px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: var(--font-size-sm);">
+        Ctrl+Shift+P
+      </kbd>
+    </div>
+    
+    <div class="option-row">
+      <div class="option-info">
+        <p style="color: var(--text-tertiary); font-size: var(--font-size-xs);">
+          To customize keyboard shortcuts, go to chrome://extensions/shortcuts
+        </p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2 class="section-title">Data</h2>
+    
+    <div class="option-row">
+      <div class="option-info">
+        <h3>Export Data</h3>
+        <p>Download all your prompts and folders as JSON</p>
+      </div>
+      <button class="btn btn-secondary" id="export-btn">Export</button>
+    </div>
+    
+    <div class="option-row">
+      <div class="option-info">
+        <h3>Import Data</h3>
+        <p>Import prompts from a backup file</p>
+      </div>
+      <button class="btn btn-secondary" id="import-btn">Import</button>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2 class="section-title">About</h2>
+    
+    <div class="option-row">
+      <div class="option-info">
+        <h3>Version</h3>
+        <p id="version">1.0.0</p>
+      </div>
+    </div>
+    
+    <div class="option-row">
+      <div class="option-info">
+        <h3>Links</h3>
+        <p>
+          <a href="https://github.com" target="_blank" style="color: var(--accent);">GitHub</a> •
+          <a href="https://github.com" target="_blank" style="color: var(--accent);">Report Issue</a> •
+          <a href="https://github.com" target="_blank" style="color: var(--accent);">Documentation</a>
+        </p>
+      </div>
+    </div>
+  </div>
+  
+  <script src="options.js"></script>
+</body>
+</html>
