@@ -64,6 +64,26 @@
   justify-content: center;
 }
 
+/* Settings button special styling */
+.btn-icon.settings-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-icon.settings-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--accent);
+}
+
+.btn-icon.settings-btn svg {
+  transition: transform 300ms ease;
+}
+
+.btn-icon.settings-btn:hover svg {
+  transform: rotate(90deg);
+}
+
 .btn-sm {
   padding: 6px 10px;
   font-size: var(--font-size-xs);

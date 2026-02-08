@@ -16,7 +16,7 @@ function openSettings() {
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">Settings</h2>
-        <button class="btn btn-icon btn-ghost" onclick="this.closest('.modal-overlay').remove()">
+        <button class="btn btn-icon btn-ghost close-modal-btn">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6 6 18M6 6l12 12"/>
           </svg>
@@ -32,10 +32,10 @@ function openSettings() {
                 <div style="font-weight: 500;">${escapeHtml(user.email || 'Signed In')}</div>
                 <div style="font-size: var(--font-size-xs); color: var(--text-tertiary); margin-top: 2px;">Premium Account</div>
               </div>
-              <button class="btn btn-secondary btn-sm" onclick="signOut()">Sign Out</button>
+              <button class="btn btn-secondary btn-sm" id="sign-out-btn">Sign Out</button>
             </div>
           ` : `
-            <button class="btn btn-primary" onclick="signIn()">
+            <button class="btn btn-primary" id="sign-in-btn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13.8 12H3"/>
               </svg>
@@ -63,13 +63,13 @@ function openSettings() {
         <div class="form-group">
           <label class="form-label">Data Management</label>
           <div style="display: flex; flex-direction: column; gap: 8px;">
-            <button class="btn btn-secondary" onclick="exportData()">
+            <button class="btn btn-secondary" id="export-data-btn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
               </svg>
               Export All Data (JSON)
             </button>
-            <button class="btn btn-secondary" onclick="importData()">
+            <button class="btn btn-secondary" id="import-data-btn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
               </svg>
@@ -87,19 +87,61 @@ function openSettings() {
             <strong>PromptVault</strong> v1.0.0<br>
             AI Prompt Manager for power users<br>
             <br>
-            <a href="#" style="color: var(--accent);">View on GitHub</a> •
-            <a href="#" style="color: var(--accent);">Report Issue</a>
+            <a href="https://github.com/yourusername/promptvault" target="_blank" style="color: var(--accent);">View on GitHub</a> •
+            <a href="https://github.com/yourusername/promptvault/issues" target="_blank" style="color: var(--accent);">Report Issue</a>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" onclick="saveSettings()">Done</button>
+        <button class="btn btn-primary" id="save-settings-btn">Done</button>
       </div>
     </div>
   `;
   
   document.body.appendChild(modal);
   setTimeout(() => modal.classList.add('visible'), 10);
+  
+  // Event listeners
+  const closeBtn = modal.querySelector('.close-modal-btn');
+  const saveBtn = modal.querySelector('#save-settings-btn');
+  
+  const closeModal = () => {
+    modal.classList.remove('visible');
+    setTimeout(() => modal.remove(), 250);
+  };
+  
+  closeBtn.addEventListener('click', closeModal);
+  saveBtn.addEventListener('click', () => saveSettings(modal));
+  
+  // Close on overlay click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+  
+  // Sign in/out handlers
+  const signInBtn = modal.querySelector('#sign-in-btn');
+  const signOutBtn = modal.querySelector('#sign-out-btn');
+  const exportBtn = modal.querySelector('#export-data-btn');
+  const importBtn = modal.querySelector('#import-data-btn');
+  
+  if (signInBtn) {
+    signInBtn.addEventListener('click', () => {
+      closeModal();
+      setTimeout(() => window.signIn(), 300);
+    });
+  }
+  
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', () => {
+      closeModal();
+      setTimeout(() => window.signOut(), 300);
+    });
+  }
+  
+  exportBtn.addEventListener('click', () => window.exportData());
+  importBtn.addEventListener('click', () => window.importData());
 }
 
 window.signIn = async function() {
@@ -145,8 +187,11 @@ window.signOut = async function() {
   }, 300);
 };
 
-window.saveSettings = async function() {
-  const theme = document.getElementById('theme-select').value;
+window.saveSettings = async function(modal = null) {
+  const themeSelect = document.getElementById('theme-select');
+  if (!themeSelect) return;
+  
+  const theme = themeSelect.value;
   
   window.appState.settings.theme = theme;
   await saveData('settings', window.appState.settings);
@@ -161,9 +206,17 @@ window.saveSettings = async function() {
   
   showToast('Settings saved', 'success');
   
-  const modal = document.querySelector('.modal-overlay');
-  modal.classList.remove('visible');
-  setTimeout(() => modal.remove(), 250);
+  // Close modal if provided
+  if (modal) {
+    modal.classList.remove('visible');
+    setTimeout(() => modal.remove(), 250);
+  } else {
+    const existingModal = document.querySelector('.modal-overlay');
+    if (existingModal) {
+      existingModal.classList.remove('visible');
+      setTimeout(() => existingModal.remove(), 250);
+    }
+  }
 };
 
 window.exportData = async function() {

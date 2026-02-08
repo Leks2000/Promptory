@@ -127,10 +127,10 @@ For cloud sync and public library features:
 curl -o lib/supabase.min.js https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
 ```
 
-4. Update `popup/components/auth.js` with your credentials:
+4. Update `popup/components/auth.js` with your credentials (already configured):
 ```javascript
-const SUPABASE_URL = 'your-project-url';
-const SUPABASE_ANON_KEY = 'your-anon-key';
+const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
 ```
 
 ### Database Schema

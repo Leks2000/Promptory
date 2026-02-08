@@ -2,6 +2,9 @@
 import { showToast, saveData } from '../popup.js';
 import { renderPrompts } from './prompts.js';
 
+let contextMenuVisible = false;
+let currentContextMenu = null;
+
 export function initFolders() {
   renderFolders();
   
@@ -83,7 +86,11 @@ function attachFolderListeners() {
   
   folderCards.forEach(card => {
     card.addEventListener('click', (e) => {
+      // Don't trigger card click if clicking on action buttons
       if (e.target.closest('.folder-card-actions')) {
+        return;
+      }
+      if (e.target.closest('.prompt-action-btn')) {
         return;
       }
       
@@ -105,7 +112,7 @@ function openFolderEditor(folderId = null) {
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">${isEdit ? 'Edit Folder' : 'New Folder'}</h2>
-        <button class="btn btn-icon btn-ghost" onclick="this.closest('.modal-overlay').remove()">
+        <button class="btn btn-icon btn-ghost close-modal-btn">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6 6 18M6 6l12 12"/>
           </svg>
@@ -126,7 +133,7 @@ function openFolderEditor(folderId = null) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-ghost cancel-modal-btn">Cancel</button>
         <button class="btn btn-primary ripple" id="save-folder-btn">
           ${isEdit ? 'Save Changes' : 'Create Folder'}
         </button>
@@ -142,6 +149,25 @@ function openFolderEditor(folderId = null) {
   // Focus name input
   const nameInput = document.getElementById('folder-name-input');
   nameInput.focus();
+  
+  // Close button handlers
+  const closeBtn = modal.querySelector('.close-modal-btn');
+  const cancelBtn = modal.querySelector('.cancel-modal-btn');
+  
+  const closeModal = () => {
+    modal.classList.remove('visible');
+    setTimeout(() => modal.remove(), 250);
+  };
+  
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+  
+  // Close on overlay click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
   
   // Save button handler
   document.getElementById('save-folder-btn').addEventListener('click', async () => {
@@ -175,9 +201,7 @@ function openFolderEditor(folderId = null) {
     await saveData('folders', window.appState.folders);
     showToast(isEdit ? 'Folder updated' : 'Folder created', 'success');
     
-    modal.classList.remove('visible');
-    setTimeout(() => modal.remove(), 250);
-    
+    closeModal();
     renderFolders();
   });
 }

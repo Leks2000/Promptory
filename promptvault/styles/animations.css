@@ -170,20 +170,36 @@
 .folder-content {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 250ms ease;
+  transition: max-height 300ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 250ms ease;
+  opacity: 0;
 }
 
-.folder.expanded .folder-content {
+.folder-section.expanded .folder-content {
   max-height: 2000px;
+  opacity: 1;
 }
 
 .folder-arrow {
-  transition: transform var(--transition-fast);
+  transition: transform var(--transition-normal);
 }
 
-.folder.expanded .folder-arrow {
+.folder-section.expanded .folder-arrow {
   transform: rotate(90deg);
 }
+
+/* Smooth folder card animation */
+.folder-card {
+  opacity: 0;
+  transform: translateY(6px);
+  animation: slideIn 200ms ease forwards;
+}
+
+.folder-card:nth-child(1) { animation-delay: 0ms; }
+.folder-card:nth-child(2) { animation-delay: 40ms; }
+.folder-card:nth-child(3) { animation-delay: 80ms; }
+.folder-card:nth-child(4) { animation-delay: 120ms; }
+.folder-card:nth-child(5) { animation-delay: 160ms; }
 
 /* Modal fade in */
 .modal-overlay {
@@ -233,4 +249,156 @@ button:active {
 .empty-state {
   opacity: 0;
   animation: fadeIn 400ms ease 200ms forwards;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Hover scale animation for action buttons */
+.prompt-action-btn,
+.btn-icon {
+  transition: transform var(--transition-fast),
+              background-color var(--transition-fast),
+              color var(--transition-fast);
+}
+
+.prompt-action-btn:hover,
+.btn-icon:hover {
+  transform: scale(1.1);
+}
+
+.prompt-action-btn:active,
+.btn-icon:active {
+  transform: scale(0.95);
+}
+
+/* Tag chip animation */
+.tag {
+  opacity: 0;
+  transform: scale(0.8);
+  animation: tagPop 200ms cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes tagPop {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Context menu slide in */
+.context-menu {
+  opacity: 0;
+  transform: translateY(-8px);
+  animation: slideDown 200ms ease forwards;
+}
+
+@keyframes slideDown {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Favorite star animation */
+.prompt-action-btn.active svg {
+  animation: starBounce 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes starBounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
+/* Folder header hover animation */
+.folder-header {
+  transition: background-color var(--transition-fast),
+              transform var(--transition-fast);
+}
+
+.folder-header:hover {
+  transform: translateX(2px);
+}
+
+.folder-header:active {
+  transform: translateX(0);
+}
+
+/* Loading dots animation */
+@keyframes loadingDots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
+}
+
+/* Smooth height transition for textarea */
+textarea {
+  transition: height 200ms ease;
+}
+
+/* Button loading state */
+.btn.loading {
+  position: relative;
+  color: transparent;
+  pointer-events: none;
+}
+
+.btn.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 50%;
+  margin-left: -8px;
+  margin-top: -8px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 600ms linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Search input focus glow */
+input[type="text"]:focus,
+input[type="search"]:focus,
+textarea:focus {
+  transition: border-color var(--transition-fast),
+              box-shadow var(--transition-fast);
+}
+
+/* Stagger animation for explore cards */
+.explore-card {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+  animation: cardAppear 300ms ease forwards;
+}
+
+.explore-card:nth-child(1) { animation-delay: 0ms; }
+.explore-card:nth-child(2) { animation-delay: 50ms; }
+.explore-card:nth-child(3) { animation-delay: 100ms; }
+.explore-card:nth-child(4) { animation-delay: 150ms; }
+.explore-card:nth-child(5) { animation-delay: 200ms; }
+.explore-card:nth-child(6) { animation-delay: 250ms; }
+
+@keyframes cardAppear {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Pulse animation for notification */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.pulse {
+  animation: pulse 2s ease-in-out infinite;
 }

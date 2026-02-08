@@ -1,0 +1,128 @@
+{
+  "prompts": [
+    {
+      "id": "1",
+      "title": "Summarize Article",
+      "text": "Please summarize the following article in {length} sentences, focusing on the key points and main arguments:\n\n{article_text}",
+      "description": "Condense long articles into concise summaries",
+      "folderId": "f1",
+      "platform": "universal",
+      "tags": ["productivity", "writing", "research"],
+      "variables": ["length", "article_text"],
+      "isFavorite": true,
+      "useCount": 12,
+      "createdAt": 1707350400000,
+      "updatedAt": 1707350400000
+    },
+    {
+      "id": "2",
+      "title": "Code Review",
+      "text": "Review the following {language} code for:\n1. Performance issues\n2. Security vulnerabilities\n3. Best practices\n4. Code readability\n\nProvide specific suggestions for improvement.\n\nCode:\n```\n{code}\n```",
+      "description": "Get detailed code reviews and improvement suggestions",
+      "folderId": "f2",
+      "platform": "chatgpt",
+      "tags": ["coding", "review", "programming"],
+      "variables": ["language", "code"],
+      "isFavorite": true,
+      "useCount": 8,
+      "createdAt": 1707350500000,
+      "updatedAt": 1707350500000
+    },
+    {
+      "id": "3",
+      "title": "Social Media Caption",
+      "text": "Create an engaging {platform} caption for a post about {topic}. \n\nTone: {tone}\nTarget audience: {audience}\n\nInclude relevant hashtags and emojis.",
+      "description": "Generate catchy social media captions",
+      "folderId": "f1",
+      "platform": "universal",
+      "tags": ["marketing", "social-media", "content"],
+      "variables": ["platform", "topic", "tone", "audience"],
+      "isFavorite": false,
+      "useCount": 15,
+      "createdAt": 1707350600000,
+      "updatedAt": 1707350600000
+    },
+    {
+      "id": "4",
+      "title": "Bug Report Template",
+      "text": "Create a detailed bug report for the following issue:\n\n**Bug Description:**\n{description}\n\n**Steps to Reproduce:**\n{steps}\n\n**Expected Behavior:**\n{expected}\n\n**Actual Behavior:**\n{actual}\n\n**Environment:**\n{environment}",
+      "description": "Format bug reports professionally",
+      "folderId": "f2",
+      "platform": "universal",
+      "tags": ["programming", "documentation", "qa"],
+      "variables": ["description", "steps", "expected", "actual", "environment"],
+      "isFavorite": false,
+      "useCount": 5,
+      "createdAt": 1707350700000,
+      "updatedAt": 1707350700000
+    },
+    {
+      "id": "5",
+      "title": "Email Professional Reply",
+      "text": "Write a professional reply to the following email:\n\n{email_content}\n\nTone: {tone}\nKey points to address:\n{key_points}",
+      "description": "Craft professional email responses",
+      "folderId": "f3",
+      "platform": "universal",
+      "tags": ["email", "communication", "business"],
+      "variables": ["email_content", "tone", "key_points"],
+      "isFavorite": true,
+      "useCount": 20,
+      "createdAt": 1707350800000,
+      "updatedAt": 1707350800000
+    },
+    {
+      "id": "6",
+      "title": "Brainstorm Ideas",
+      "text": "Help me brainstorm {number} creative ideas for {topic}.\n\nContext: {context}\nTarget outcome: {outcome}\n\nFor each idea, provide a brief description and potential benefits.",
+      "description": "Generate creative ideas quickly",
+      "folderId": null,
+      "platform": "universal",
+      "tags": ["creativity", "brainstorming", "productivity"],
+      "variables": ["number", "topic", "context", "outcome"],
+      "isFavorite": false,
+      "useCount": 3,
+      "createdAt": 1707350900000,
+      "updatedAt": 1707350900000
+    },
+    {
+      "id": "7",
+      "title": "Explain Like I'm Five",
+      "text": "Explain {concept} in simple terms that a 5-year-old could understand. Use analogies and everyday examples.",
+      "description": "Simplify complex concepts",
+      "folderId": null,
+      "platform": "universal",
+      "tags": ["education", "explanation", "learning"],
+      "variables": ["concept"],
+      "isFavorite": false,
+      "useCount": 7,
+      "createdAt": 1707351000000,
+      "updatedAt": 1707351000000
+    }
+  ],
+  "folders": [
+    {
+      "id": "f1",
+      "name": "Marketing",
+      "icon": "📢",
+      "createdAt": 1707350000000
+    },
+    {
+      "id": "f2",
+      "name": "Development",
+      "icon": "💻",
+      "createdAt": 1707350100000
+    },
+    {
+      "id": "f3",
+      "name": "Business",
+      "icon": "💼",
+      "createdAt": 1707350200000
+    }
+  ],
+  "settings": {
+    "theme": "system",
+    "hotkeys": {},
+    "defaultFolder": null
+  },
+  "exportDate": "2024-02-08T10:00:00.000Z"
+}
