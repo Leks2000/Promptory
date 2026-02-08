@@ -22,7 +22,9 @@ chrome.runtime.onInstalled.addListener((details) => {
       },
       user: null,
       session: null,
-      hasLaunched: false
+      hasLaunched: false,
+      isPremium: false,
+      promptLimit: 20
     });
   }
 });
@@ -72,28 +74,31 @@ chrome.commands.onCommand.addListener(async (command) => {
   console.log('Command:', command);
 
   if (command === 'open-search') {
-    // Send message to content script to open search overlay
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
       try {
         await chrome.tabs.sendMessage(tab.id, { action: 'openSearchOverlay' });
       } catch (e) {
         // Content script not loaded, inject it
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content/content.js']
-        });
-        await chrome.scripting.insertCSS({
-          target: { tabId: tab.id },
-          files: ['content/content.css']
-        });
-        setTimeout(async () => {
-          try {
-            await chrome.tabs.sendMessage(tab.id, { action: 'openSearchOverlay' });
-          } catch (err) {
-            console.error('Failed to open search overlay:', err);
-          }
-        }, 300);
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content/content.js']
+          });
+          await chrome.scripting.insertCSS({
+            target: { tabId: tab.id },
+            files: ['content/content.css']
+          });
+          setTimeout(async () => {
+            try {
+              await chrome.tabs.sendMessage(tab.id, { action: 'openSearchOverlay' });
+            } catch (err) {
+              console.error('Failed to open search overlay:', err);
+            }
+          }, 300);
+        } catch (injectErr) {
+          console.error('Failed to inject content script:', injectErr);
+        }
       }
     }
     return;
@@ -104,7 +109,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (match) {
     const slotNum = match[1];
     const slotId = `slot${slotNum}`;
-    const result = await chrome.storage.local.get(['settings', 'prompts']);
+    const result = await chrome.storage.local.get(['settings', 'prompts', 'session', 'user']);
     const hotkeys = result.settings?.hotkeys || {};
     const slot = hotkeys[slotId];
     if (slot?.promptId) {
@@ -123,6 +128,12 @@ chrome.commands.onCommand.addListener(async (command) => {
             prompt.useCount = (prompt.useCount || 0) + 1;
             prompt.updatedAt = Date.now();
             await chrome.storage.local.set({ prompts });
+
+            // Track usage in Supabase
+            if (result.session?.access_token && result.user?.id) {
+              const platform = new URL(tab.url || '').hostname.replace('www.','');
+              trackUsageInBackground(result.session, prompt, platform);
+            }
           } catch (e) {
             console.error('Failed to insert hotkey prompt:', e);
           }
@@ -131,6 +142,27 @@ chrome.commands.onCommand.addListener(async (command) => {
     }
   }
 });
+
+// Track usage asynchronously (fire-and-forget)
+async function trackUsageInBackground(session, prompt, platform) {
+  try {
+    const token = session.access_token;
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/record_usage`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        p_prompt_id: prompt.id,
+        p_prompt_title: prompt.title,
+        p_platform: platform || 'unknown',
+        p_action: 'hotkey'
+      })
+    });
+  } catch (e) { console.error('Background usage tracking failed:', e); }
+}
 
 // ---------- Message Handler ----------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -188,8 +220,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ---------- Supabase Auth via REST API ----------
 async function handleGoogleSignIn() {
   try {
-    // Use Supabase OAuth - opens in a new tab
     const redirectUrl = chrome.identity.getRedirectURL();
+    console.log('Redirect URL:', redirectUrl);
     const authUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUrl)}`;
 
     const responseUrl = await new Promise((resolve, reject) => {
@@ -230,7 +262,7 @@ async function handleGoogleSignIn() {
     const session = {
       access_token: accessToken,
       refresh_token: refreshToken,
-      expires_at: Date.now() + 3600000 // 1 hour
+      expires_at: Date.now() + 3600000
     };
 
     const user = {
@@ -260,10 +292,10 @@ async function handleSignOut() {
         }
       });
     }
-    await chrome.storage.local.set({ session: null, user: null });
+    await chrome.storage.local.set({ session: null, user: null, isPremium: false });
     return { success: true };
   } catch (err) {
-    await chrome.storage.local.set({ session: null, user: null });
+    await chrome.storage.local.set({ session: null, user: null, isPremium: false });
     return { success: true };
   }
 }
@@ -312,9 +344,15 @@ async function handleSupabaseRequest(message) {
   const headers = {
     'Authorization': `Bearer ${token}`,
     'apikey': SUPABASE_ANON_KEY,
-    'Content-Type': 'application/json',
-    'Prefer': method === 'POST' ? 'return=representation' : undefined
+    'Content-Type': 'application/json'
   };
+
+  // For POST to tables (not rpc), add upsert handling
+  if (method === 'POST' && !path.startsWith('rpc/')) {
+    headers['Prefer'] = 'return=representation,resolution=merge-duplicates';
+  } else if (method === 'POST') {
+    headers['Prefer'] = 'return=representation';
+  }
 
   // Clean undefined headers
   Object.keys(headers).forEach(k => headers[k] === undefined && delete headers[k]);
@@ -329,6 +367,12 @@ async function handleSupabaseRequest(message) {
     if (!res.ok) {
       const text = await res.text();
       return { error: text };
+    }
+
+    // Handle empty responses (204 No Content for DELETE)
+    const contentType = res.headers.get('content-type');
+    if (res.status === 204 || !contentType || !contentType.includes('application/json')) {
+      return { data: null };
     }
 
     const data = await res.json();
