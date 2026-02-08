@@ -1,5 +1,36 @@
 -- PromptVault Database Schema and Test Data
 -- Supabase PostgreSQL
+-- Use: Run in Supabase SQL Editor
+
+-- ===========================================
+-- DROP EXISTING POLICIES (prevents "already exists" errors)
+-- ===========================================
+
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+
+DROP POLICY IF EXISTS "Users can view own folders" ON public.folders;
+DROP POLICY IF EXISTS "Users can insert own folders" ON public.folders;
+DROP POLICY IF EXISTS "Users can update own folders" ON public.folders;
+DROP POLICY IF EXISTS "Users can delete own folders" ON public.folders;
+
+DROP POLICY IF EXISTS "Users can view own prompts" ON public.prompts;
+DROP POLICY IF EXISTS "Users can insert own prompts" ON public.prompts;
+DROP POLICY IF EXISTS "Users can update own prompts" ON public.prompts;
+DROP POLICY IF EXISTS "Users can delete own prompts" ON public.prompts;
+
+DROP POLICY IF EXISTS "Anyone can view library prompts" ON public.library_prompts;
+DROP POLICY IF EXISTS "Admins can insert library prompts" ON public.library_prompts;
+DROP POLICY IF EXISTS "Admins can update library prompts" ON public.library_prompts;
+DROP POLICY IF EXISTS "Admins can delete library prompts" ON public.library_prompts;
+
+DROP POLICY IF EXISTS "Users can view own likes" ON public.library_likes;
+DROP POLICY IF EXISTS "Users can insert own likes" ON public.library_likes;
+DROP POLICY IF EXISTS "Users can delete own likes" ON public.library_likes;
+
+DROP POLICY IF EXISTS "Users can view own hotkeys" ON public.hotkey_settings;
+DROP POLICY IF EXISTS "Users can manage own hotkeys" ON public.hotkey_settings;
 
 -- ===========================================
 -- SCHEMA CREATION
@@ -21,7 +52,6 @@ CREATE TABLE IF NOT EXISTS public.folders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
-  icon TEXT DEFAULT '📁',
   parent_id UUID REFERENCES public.folders(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -52,7 +82,6 @@ CREATE TABLE IF NOT EXISTS public.library_prompts (
   text TEXT NOT NULL,
   description TEXT,
   author TEXT NOT NULL,
-  icon TEXT DEFAULT '📝',
   tags TEXT[] DEFAULT '{}',
   variables TEXT[] DEFAULT '{}',
   likes INTEGER DEFAULT 0,
@@ -84,6 +113,15 @@ CREATE TABLE IF NOT EXISTS public.hotkey_settings (
   UNIQUE(user_id, slot_number)
 );
 
+-- Usage history table
+CREATE TABLE IF NOT EXISTS public.usage_history (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  prompt_id UUID NOT NULL,
+  platform TEXT,
+  used_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ===========================================
 -- ROW LEVEL SECURITY (RLS)
 -- ===========================================
@@ -94,6 +132,7 @@ ALTER TABLE public.prompts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.library_prompts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.library_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.hotkey_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.usage_history ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
 CREATE POLICY "Users can view own profile" ON public.profiles
@@ -101,6 +140,9 @@ CREATE POLICY "Users can view own profile" ON public.profiles
 
 CREATE POLICY "Users can update own profile" ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile" ON public.profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- Folders policies
 CREATE POLICY "Users can view own folders" ON public.folders
@@ -164,6 +206,14 @@ CREATE POLICY "Users can view own hotkeys" ON public.hotkey_settings
 CREATE POLICY "Users can manage own hotkeys" ON public.hotkey_settings
   FOR ALL USING (auth.uid() = user_id);
 
+-- Usage history policies
+DROP POLICY IF EXISTS "Users can view own usage" ON public.usage_history;
+DROP POLICY IF EXISTS "Users can insert own usage" ON public.usage_history;
+CREATE POLICY "Users can view own usage" ON public.usage_history
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own usage" ON public.usage_history
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
 -- ===========================================
 -- INDEXES
 -- ===========================================
@@ -174,10 +224,32 @@ CREATE INDEX IF NOT EXISTS idx_prompts_folder_id ON public.prompts(folder_id);
 CREATE INDEX IF NOT EXISTS idx_prompts_is_favorite ON public.prompts(is_favorite);
 CREATE INDEX IF NOT EXISTS idx_library_prompts_category ON public.library_prompts(category);
 CREATE INDEX IF NOT EXISTS idx_library_prompts_is_featured ON public.library_prompts(is_featured);
+CREATE INDEX IF NOT EXISTS idx_usage_history_user_id ON public.usage_history(user_id);
 
 -- ===========================================
 -- FUNCTIONS
 -- ===========================================
+
+-- Function to auto-create profile on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, avatar_url)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'avatar_url', NEW.raw_user_meta_data->>'picture', '')
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger for auto profile creation
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Function to increment download count
 CREATE OR REPLACE FUNCTION increment_download_count(prompt_uuid UUID)
@@ -212,11 +284,14 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- TEST DATA - PUBLIC LIBRARY PROMPTS
 -- ===========================================
 
-INSERT INTO public.library_prompts (title, text, description, author, icon, tags, variables, likes, downloads, category, is_featured) VALUES
+-- Only insert if table is empty
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.library_prompts LIMIT 1) THEN
+    INSERT INTO public.library_prompts (title, text, description, author, tags, variables, likes, downloads, category, is_featured) VALUES
 
--- Business & Communication
-('Professional Email Writer', 
-'Write a professional email about {topic} to {recipient}. The tone should be {tone}.
+    ('Professional Email Writer', 
+    'Write a professional email about {topic} to {recipient}. The tone should be {tone}.
 
 Requirements:
 - Start with an appropriate greeting
@@ -226,123 +301,116 @@ Requirements:
 - End with a professional sign-off
 
 Additional context: {context}',
-'Craft professional emails for any business situation', 
-'PromptMaster', '✉️', 
-ARRAY['business', 'communication', 'email'], 
-ARRAY['topic', 'recipient', 'tone', 'context'],
-245, 1200, 'business', true),
+    'Craft professional emails for any business situation', 
+    'PromptMaster',
+    ARRAY['business', 'communication', 'email'], 
+    ARRAY['topic', 'recipient', 'tone', 'context'],
+    245, 1200, 'business', true),
 
-('Meeting Summarizer',
-'Summarize the following meeting notes into a clear, actionable format:
+    ('Meeting Summarizer',
+    'Summarize the following meeting notes into a clear, actionable format:
 
 Meeting Notes:
 {notes}
 
 Please provide:
-1. **Key Decisions Made** - List all decisions with brief context
-2. **Action Items** - Format as: [Owner] - Task - [Due Date]
-3. **Discussion Points** - Main topics discussed
-4. **Next Steps** - Upcoming milestones or follow-ups
-5. **Open Questions** - Unresolved items needing attention',
-'Transform messy meeting notes into structured summaries',
-'ProductivityPro', '📊',
-ARRAY['productivity', 'meetings', 'summary'],
-ARRAY['notes'],
-156, 780, 'business', false),
+1. Key Decisions Made
+2. Action Items (Owner - Task - Due Date)
+3. Discussion Points
+4. Next Steps
+5. Open Questions',
+    'Transform messy meeting notes into structured summaries',
+    'ProductivityPro',
+    ARRAY['productivity', 'meetings', 'summary'],
+    ARRAY['notes'],
+    156, 780, 'business', false),
 
--- Development & Coding
-('Code Review Assistant',
-'Review the following code and provide constructive feedback:
+    ('Code Review Assistant',
+    'Review the following code and provide constructive feedback:
 
 ```{language}
 {code}
 ```
 
 Please analyze:
-1. **Code Quality** - Readability, naming conventions, structure
-2. **Best Practices** - Design patterns, coding standards
-3. **Potential Bugs** - Edge cases, error handling, logic issues
-4. **Performance** - Optimization opportunities, complexity analysis
-5. **Security** - Potential vulnerabilities, input validation
-6. **Suggestions** - Specific improvements with examples
+1. Code Quality
+2. Best Practices
+3. Potential Bugs
+4. Performance
+5. Security
+6. Suggestions with examples',
+    'Get thorough code reviews with actionable feedback',
+    'DevGuru',
+    ARRAY['coding', 'review', 'development'],
+    ARRAY['language', 'code'],
+    189, 950, 'development', true),
 
-Format your response with clear headings and code examples where helpful.',
-'Get thorough code reviews with actionable feedback',
-'DevGuru', '💻',
-ARRAY['coding', 'review', 'development'],
-ARRAY['language', 'code'],
-189, 950, 'development', true),
+    ('Debug Helper',
+    'I''m encountering an error in my {language} code. Help me debug it.
 
-('Debug Helper',
-'I''m encountering an error in my {language} code. Help me debug it.
+Error Message: {error}
 
-**Error Message:**
-{error}
-
-**Code:**
+Code:
 ```{language}
 {code}
 ```
 
-**What I''ve tried:**
-{attempts}
+What I''ve tried: {attempts}
 
 Please:
 1. Explain what''s causing the error
 2. Provide the corrected code
 3. Explain why the fix works
 4. Suggest how to prevent similar issues',
-'Get help debugging code errors with explanations',
-'CodeHelper', '🐛',
-ARRAY['coding', 'debug', 'errors'],
-ARRAY['language', 'error', 'code', 'attempts'],
-134, 620, 'development', false),
+    'Get help debugging code errors with explanations',
+    'CodeHelper',
+    ARRAY['coding', 'debug', 'errors'],
+    ARRAY['language', 'error', 'code', 'attempts'],
+    134, 620, 'development', false),
 
--- Content & Marketing
-('Social Media Caption',
-'Create an engaging social media caption for {platform} about {topic}.
+    ('Social Media Caption',
+    'Create an engaging social media caption for {platform} about {topic}.
 
 Target audience: {audience}
 Brand voice: {voice}
 Goal: {goal}
 
 Requirements:
-- Attention-grabbing hook in first line
-- Relevant to the platform''s style
-- Include a clear call-to-action
-- Add 3-5 relevant hashtags
-- Use appropriate emojis
+- Attention-grabbing hook
+- Platform-appropriate style
+- Clear call-to-action
+- 3-5 relevant hashtags
+- Appropriate emojis
 
-Optional: Include any key messages or promotions: {promotion}',
-'Generate engaging social media content',
-'ContentQueen', '📱',
-ARRAY['marketing', 'social media', 'content'],
-ARRAY['platform', 'topic', 'audience', 'voice', 'goal', 'promotion'],
-312, 1500, 'marketing', true),
+Optional promotion: {promotion}',
+    'Generate engaging social media content',
+    'ContentQueen',
+    ARRAY['marketing', 'social media', 'content'],
+    ARRAY['platform', 'topic', 'audience', 'voice', 'goal', 'promotion'],
+    312, 1500, 'marketing', true),
 
-('Blog Post Outline',
-'Create a detailed blog post outline about {topic}.
+    ('Blog Post Outline',
+    'Create a detailed blog post outline about {topic}.
 
 Target audience: {audience}
 Word count goal: {wordcount}
 SEO keywords: {keywords}
 
 Include:
-1. **Compelling Title Options** (3 variations)
-2. **Introduction Hook** - Opening paragraph approach
-3. **Main Sections** - H2 headings with bullet points for each
-4. **Key Takeaways** - What readers should remember
-5. **Call to Action** - How to engage readers further
-6. **Internal/External Link Suggestions**',
-'Plan structured blog posts that rank and engage',
-'ContentStrategist', '📝',
-ARRAY['content', 'blogging', 'SEO'],
-ARRAY['topic', 'audience', 'wordcount', 'keywords'],
-198, 890, 'marketing', false),
+1. Compelling Title Options (3 variations)
+2. Introduction Hook
+3. Main Sections with H2 headings
+4. Key Takeaways
+5. Call to Action
+6. Link Suggestions',
+    'Plan structured blog posts that rank and engage',
+    'ContentStrategist',
+    ARRAY['content', 'blogging', 'SEO'],
+    ARRAY['topic', 'audience', 'wordcount', 'keywords'],
+    198, 890, 'marketing', false),
 
--- Learning & Research
-('Explain Like I''m 5',
-'Explain {concept} in simple terms that a 5-year-old could understand.
+    ('Explain Like I''m 5',
+    'Explain {concept} in simple terms that a 5-year-old could understand.
 
 Use:
 - Simple words and short sentences
@@ -351,33 +419,32 @@ Use:
 - Visual descriptions when helpful
 
 Then provide a slightly more detailed explanation for someone with basic knowledge of {field}.',
-'Break down complex topics into simple explanations',
-'TeacherBot', '🎓',
-ARRAY['learning', 'explanation', 'education'],
-ARRAY['concept', 'field'],
-267, 1100, 'learning', true),
+    'Break down complex topics into simple explanations',
+    'TeacherBot',
+    ARRAY['learning', 'explanation', 'education'],
+    ARRAY['concept', 'field'],
+    267, 1100, 'learning', true),
 
-('Research Summary',
-'Summarize the key points from this research/article about {topic}:
+    ('Research Summary',
+    'Summarize the key points from this research/article about {topic}:
 
 {content}
 
 Please provide:
-1. **Main Thesis/Argument** - Core claim or finding
-2. **Key Evidence** - Supporting data and examples
-3. **Methodology** - How the research was conducted
-4. **Limitations** - Acknowledged weaknesses
-5. **Implications** - Why this matters
-6. **Critical Analysis** - Your assessment of the validity',
-'Extract insights from research papers and articles',
-'ResearchPro', '🔬',
-ARRAY['research', 'analysis', 'summary'],
-ARRAY['topic', 'content'],
-145, 560, 'learning', false),
+1. Main Thesis/Argument
+2. Key Evidence
+3. Methodology
+4. Limitations
+5. Implications
+6. Critical Analysis',
+    'Extract insights from research papers and articles',
+    'ResearchPro',
+    ARRAY['research', 'analysis', 'summary'],
+    ARRAY['topic', 'content'],
+    145, 560, 'learning', false),
 
--- Creative & Writing
-('Story Generator',
-'Write a short story with the following elements:
+    ('Story Generator',
+    'Write a short story with the following elements:
 
 Genre: {genre}
 Setting: {setting}
@@ -391,14 +458,14 @@ Requirements:
 - Rising tension and climax
 - Satisfying resolution
 - Approximately {length} words',
-'Generate creative short stories',
-'StoryWeaver', '📚',
-ARRAY['creative', 'writing', 'fiction'],
-ARRAY['genre', 'setting', 'character', 'conflict', 'tone', 'length'],
-223, 890, 'creative', false),
+    'Generate creative short stories',
+    'StoryWeaver',
+    ARRAY['creative', 'writing', 'fiction'],
+    ARRAY['genre', 'setting', 'character', 'conflict', 'tone', 'length'],
+    223, 890, 'creative', false),
 
-('Rewrite & Improve',
-'Rewrite the following text to be {style}:
+    ('Rewrite & Improve',
+    'Rewrite the following text to be {style}:
 
 Original text:
 {text}
@@ -412,15 +479,14 @@ Maintain the original meaning while improving:
 - Grammar and punctuation
 - Flow and engagement
 - Appropriate tone for {audience}',
-'Improve and rewrite text for different purposes',
-'EditPro', '✍️',
-ARRAY['writing', 'editing', 'improvement'],
-ARRAY['style', 'text', 'improvement1', 'improvement2', 'audience'],
-178, 720, 'creative', false),
+    'Improve and rewrite text for different purposes',
+    'EditPro',
+    ARRAY['writing', 'editing', 'improvement'],
+    ARRAY['style', 'text', 'improvement1', 'improvement2', 'audience'],
+    178, 720, 'creative', false),
 
--- AI & Prompts
-('Prompt Improver',
-'Improve this AI prompt to get better results:
+    ('Prompt Improver',
+    'Improve this AI prompt to get better results:
 
 Original prompt:
 {prompt}
@@ -430,20 +496,16 @@ AI model: {model}
 
 Please:
 1. Analyze weaknesses in the original
-2. Provide an improved version with:
-   - Clear instructions
-   - Specific constraints
-   - Output format guidance
-   - Examples if helpful
+2. Provide an improved version
 3. Explain your improvements',
-'Meta-prompt to improve your other prompts',
-'PromptEngineer', '🎯',
-ARRAY['prompts', 'AI', 'optimization'],
-ARRAY['prompt', 'use_case', 'model'],
-289, 1350, 'ai', true),
+    'Meta-prompt to improve your other prompts',
+    'PromptEngineer',
+    ARRAY['prompts', 'AI', 'optimization'],
+    ARRAY['prompt', 'use_case', 'model'],
+    289, 1350, 'ai', true),
 
-('System Prompt Builder',
-'Create a system prompt for a {type} AI assistant with these characteristics:
+    ('System Prompt Builder',
+    'Create a system prompt for a {type} AI assistant with these characteristics:
 
 Role: {role}
 Personality: {personality}
@@ -453,24 +515,21 @@ Response style: {style}
 
 The system prompt should:
 - Define clear behavioral boundaries
-- Establish the assistant''s knowledge scope
-- Set appropriate tone and formality
-- Include handling for edge cases',
-'Design effective system prompts for AI assistants',
-'AIArchitect', '🤖',
-ARRAY['AI', 'system prompts', 'chatbots'],
-ARRAY['type', 'role', 'personality', 'expertise', 'constraints', 'style'],
-167, 680, 'ai', false);
+- Establish knowledge scope
+- Set appropriate tone
+- Handle edge cases',
+    'Design effective system prompts for AI assistants',
+    'AIArchitect',
+    ARRAY['AI', 'system prompts', 'chatbots'],
+    ARRAY['type', 'role', 'personality', 'expertise', 'constraints', 'style'],
+    167, 680, 'ai', false);
+  END IF;
+END $$;
 
 -- ===========================================
 -- VERIFICATION QUERIES
 -- ===========================================
 
--- Check library prompts count
 SELECT COUNT(*) as total_library_prompts FROM public.library_prompts;
-
--- View all categories
 SELECT DISTINCT category FROM public.library_prompts;
-
--- View featured prompts
 SELECT title, author, likes, downloads FROM public.library_prompts WHERE is_featured = true;
