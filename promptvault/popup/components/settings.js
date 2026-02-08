@@ -87,8 +87,8 @@ function openSettings() {
             <strong>PromptVault</strong> v1.0.0<br>
             AI Prompt Manager for power users<br>
             <br>
-            <a href="https://github.com/yourusername/promptvault" target="_blank" style="color: var(--accent);">View on GitHub</a> •
-            <a href="https://github.com/yourusername/promptvault/issues" target="_blank" style="color: var(--accent);">Report Issue</a>
+            <a href="https://github.com/Leks2000/PromptVault" target="_blank" style="color: var(--accent);">View on GitHub</a> •
+            <a href="https://github.com/Leks2000/PromptVault/issues" target="_blank" style="color: var(--accent);">Report Issue</a>
           </div>
         </div>
       </div>

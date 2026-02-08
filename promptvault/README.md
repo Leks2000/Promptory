@@ -33,8 +33,8 @@
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/promptvault.git
-cd promptvault
+git clone https://github.com/Leks2000/PromptVault.git
+cd PromptVault
 ```
 
 2. Open Chrome and navigate to `chrome://extensions/`
@@ -254,8 +254,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 📬 Support
 
-- 🐛 [Report a bug](https://github.com/yourusername/promptvault/issues)
-- 💡 [Request a feature](https://github.com/yourusername/promptvault/issues)
+- 🐛 [Report a bug](https://github.com/Leks2000/PromptVault/issues)
+- 💡 [Request a feature](https://github.com/Leks2000/PromptVault/issues)
 - 📧 [Contact us](mailto:support@promptvault.com)
 
 ---
