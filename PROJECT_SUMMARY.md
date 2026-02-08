@@ -1,8 +1,48 @@
-# PromptVault - Project Summary
+# PromptVault - Project Summary (Updated)
 
-## 🎉 Project Complete!
+## 🎉 Project Complete & Enhanced!
 
 **PromptVault** is a fully functional Chrome Extension for managing AI prompts with a beautiful, minimal Notion-inspired design.
+
+## 🆕 Latest Updates (2024-02-08)
+
+### 🐛 Bug Fixes
+- ✅ **Fixed** Uncategorized folder collapse/expand functionality
+- ✅ **Fixed** Folder delete and edit buttons (switched from onclick to event listeners)
+- ✅ **Fixed** All modal close buttons (X and Cancel now work properly)
+- ✅ **Fixed** Done button in settings modal
+- ✅ **Fixed** Context menu positioning and click-outside-to-close
+
+### ✨ New Features
+- ✅ **Added** Supabase credentials configuration (URL and ANON_KEY)
+- ✅ **Added** GitHub repository URL to 'View on GitHub' link
+- ✅ **Added** Report Issue functionality (GitHub issues link)
+- ✅ **Added** Sample JSON test data (sample-data.json) with 7 prompts and 3 folders
+
+### 🎨 UI Enhancements
+- ✅ **Improved** Settings button visual clarity (special styling with rotation animation)
+- ✅ **Added** More smooth animations:
+  - Folder card appearances with stagger effect
+  - Context menu slide-in animation
+  - Tag pop animation
+  - Favorite star bounce effect
+  - Hover scale effects for buttons
+  - Improved folder collapse/expand with cubic-bezier easing
+  - Button loading states
+  - Smooth height transitions
+
+### 📚 Documentation
+- ✅ **Added** USAGE_GUIDE.md - Comprehensive usage instructions
+  - Getting started guide
+  - Creating prompts with examples
+  - Organizing with folders
+  - Using variables effectively
+  - Import/Export guide
+  - Tips & tricks
+  - Real-world examples
+  - Troubleshooting section
+- ✅ **Added** CHANGELOG.md - Version tracking and release notes
+- ✅ **Updated** README.md with correct repository URLs
 
 ## 📊 Project Statistics
 
