@@ -15,8 +15,7 @@ chrome.runtime.onInstalled.addListener((details) => {
         hotkeys: {
           slot1: { promptId: null },
           slot2: { promptId: null },
-          slot3: { promptId: null },
-          slot4: { promptId: null }
+          slot3: { promptId: null }
         },
         defaultFolder: null
       },
@@ -24,7 +23,14 @@ chrome.runtime.onInstalled.addListener((details) => {
       session: null,
       hasLaunched: false,
       isPremium: false,
-      promptLimit: 20
+      promptLimit: 20,
+      language: null
+    });
+
+    // Open onboarding page on first install
+    chrome.tabs.create({
+      url: chrome.runtime.getURL('onboarding/welcome.html'),
+      active: true
     });
   }
 });
@@ -79,7 +85,6 @@ chrome.commands.onCommand.addListener(async (command) => {
       try {
         await chrome.tabs.sendMessage(tab.id, { action: 'openSearchOverlay' });
       } catch (e) {
-        // Content script not loaded, inject it
         try {
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
@@ -104,10 +109,11 @@ chrome.commands.onCommand.addListener(async (command) => {
     return;
   }
 
-  // Handle hotkey-1 through hotkey-4
+  // Handle hotkey-1 through hotkey-3
   const match = command.match(/^hotkey-(\d)$/);
   if (match) {
-    const slotNum = match[1];
+    const slotNum = parseInt(match[1]);
+    if (slotNum > 3) return; // Only 3 slots now
     const slotId = `slot${slotNum}`;
     const result = await chrome.storage.local.get(['settings', 'prompts', 'session', 'user']);
     const hotkeys = result.settings?.hotkeys || {};
@@ -124,14 +130,12 @@ chrome.commands.onCommand.addListener(async (command) => {
               text: prompt.text,
               variables: prompt.variables || []
             });
-            // Update use count
             prompt.useCount = (prompt.useCount || 0) + 1;
             prompt.updatedAt = Date.now();
             await chrome.storage.local.set({ prompts });
 
-            // Track usage in Supabase
             if (result.session?.access_token && result.user?.id) {
-              const platform = new URL(tab.url || '').hostname.replace('www.','');
+              const platform = new URL(tab.url || '').hostname.replace('www.', '');
               trackUsageInBackground(result.session, prompt, platform);
             }
           } catch (e) {
@@ -217,19 +221,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// ---------- Supabase Auth via REST API ----------
+// ---------- Supabase Auth via Chrome Identity API ----------
 async function handleGoogleSignIn() {
   try {
+    // Get the redirect URL for this extension
     const redirectUrl = chrome.identity.getRedirectURL();
-    console.log('Redirect URL:', redirectUrl);
+    console.log('Extension redirect URL:', redirectUrl);
+
+    // Build the Supabase OAuth URL
+    // The key is that Supabase handles the full OAuth flow and returns tokens in the hash
     const authUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUrl)}`;
 
+    console.log('Auth URL:', authUrl);
+
+    // Launch the auth flow - Chrome handles the popup
     const responseUrl = await new Promise((resolve, reject) => {
       chrome.identity.launchWebAuthFlow(
         { url: authUrl, interactive: true },
         (callbackUrl) => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
+          } else if (!callbackUrl) {
+            reject(new Error('No callback URL received'));
           } else {
             resolve(callbackUrl);
           }
@@ -237,40 +250,41 @@ async function handleGoogleSignIn() {
       );
     });
 
-    // Extract tokens from the redirect URL
+    console.log('Response URL received');
+
+    // Parse the callback URL for tokens
+    // Supabase returns tokens in the hash fragment: #access_token=...&refresh_token=...
     const url = new URL(responseUrl);
-    // Supabase returns tokens in hash fragment
     const hashParams = new URLSearchParams(url.hash.substring(1));
     const accessToken = hashParams.get('access_token');
     const refreshToken = hashParams.get('refresh_token');
+    const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
 
     if (!accessToken) {
-      throw new Error('No access token received');
-    }
-
-    // Get user info
-    const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'apikey': SUPABASE_ANON_KEY
+      // Sometimes tokens are in query params instead of hash
+      const queryParams = new URLSearchParams(url.search);
+      const qAccessToken = queryParams.get('access_token');
+      if (qAccessToken) {
+        const session = {
+          access_token: qAccessToken,
+          refresh_token: queryParams.get('refresh_token'),
+          expires_at: Date.now() + (parseInt(queryParams.get('expires_in') || '3600') * 1000)
+        };
+        const userInfo = await fetchUserInfo(qAccessToken);
+        await chrome.storage.local.set({ session, user: userInfo });
+        return { success: true, user: userInfo, session };
       }
-    });
-
-    if (!userRes.ok) throw new Error('Failed to get user info');
-    const userData = await userRes.json();
+      throw new Error('No access token in callback. Make sure Google provider is enabled in Supabase Dashboard > Authentication > Providers > Google, and the redirect URI is configured correctly.');
+    }
 
     const session = {
       access_token: accessToken,
       refresh_token: refreshToken,
-      expires_at: Date.now() + 3600000
+      expires_at: Date.now() + (expiresIn * 1000)
     };
 
-    const user = {
-      id: userData.id,
-      email: userData.email,
-      name: userData.user_metadata?.full_name || userData.user_metadata?.name || userData.email?.split('@')[0],
-      avatar: userData.user_metadata?.avatar_url || userData.user_metadata?.picture || ''
-    };
+    // Get user info from Supabase
+    const user = await fetchUserInfo(accessToken);
 
     await chrome.storage.local.set({ session, user });
     return { success: true, user, session };
@@ -278,6 +292,28 @@ async function handleGoogleSignIn() {
     console.error('Google sign in error:', err);
     return { success: false, error: err.message };
   }
+}
+
+async function fetchUserInfo(accessToken) {
+  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'apikey': SUPABASE_ANON_KEY
+    }
+  });
+
+  if (!userRes.ok) {
+    const text = await userRes.text();
+    throw new Error('Failed to get user info: ' + text);
+  }
+  const userData = await userRes.json();
+
+  return {
+    id: userData.id,
+    email: userData.email,
+    name: userData.user_metadata?.full_name || userData.user_metadata?.name || userData.email?.split('@')[0],
+    avatar: userData.user_metadata?.avatar_url || userData.user_metadata?.picture || ''
+  };
 }
 
 async function handleSignOut() {
@@ -290,7 +326,7 @@ async function handleSignOut() {
           'Authorization': `Bearer ${session.access_token}`,
           'apikey': SUPABASE_ANON_KEY
         }
-      });
+      }).catch(() => {});
     }
     await chrome.storage.local.set({ session: null, user: null, isPremium: false });
     return { success: true };
@@ -304,9 +340,9 @@ async function getValidToken() {
   const { session } = await chrome.storage.local.get(['session']);
   if (!session) return null;
 
-  // Check if token is expired
+  // Check if token is expired (with 60s buffer)
   if (session.expires_at && Date.now() > session.expires_at - 60000) {
-    // Try refresh
+    if (!session.refresh_token) return null;
     try {
       const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
         method: 'POST',
@@ -326,11 +362,16 @@ async function getValidToken() {
         };
         await chrome.storage.local.set({ session: newSession });
         return newSession.access_token;
+      } else {
+        console.error('Token refresh failed with status:', res.status);
+        // Clear invalid session
+        await chrome.storage.local.set({ session: null, user: null });
+        return null;
       }
     } catch (e) {
-      console.error('Token refresh failed:', e);
+      console.error('Token refresh error:', e);
+      return null;
     }
-    return null;
   }
 
   return session.access_token;
@@ -354,7 +395,6 @@ async function handleSupabaseRequest(message) {
     headers['Prefer'] = 'return=representation';
   }
 
-  // Clean undefined headers
   Object.keys(headers).forEach(k => headers[k] === undefined && delete headers[k]);
 
   try {
@@ -369,7 +409,6 @@ async function handleSupabaseRequest(message) {
       return { error: text };
     }
 
-    // Handle empty responses (204 No Content for DELETE)
     const contentType = res.headers.get('content-type');
     if (res.status === 204 || !contentType || !contentType.includes('application/json')) {
       return { data: null };

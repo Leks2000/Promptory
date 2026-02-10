@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to PromptVault</title>
+  <link rel="stylesheet" href="../styles/variables.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 700px;
+      width: 100%;
+      text-align: center;
+    }
+    .logo {
+      width: 80px; height: 80px;
+      margin: 0 auto 24px;
+      background: var(--accent);
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 32px rgba(82, 156, 202, 0.3);
+    }
+    .logo svg { color: white; }
+    h1 {
+      font-size: 36px; font-weight: 700; margin-bottom: 8px;
+      background: linear-gradient(135deg, var(--accent), #6BB0D6);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: 18px; color: var(--text-secondary); margin-bottom: 48px;
+    }
+    .features {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+      margin-bottom: 48px; text-align: left;
+    }
+    .feature {
+      padding: 24px; background: var(--bg-secondary);
+      border: 1px solid var(--border); border-radius: 12px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .feature:hover {
+      transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .feature-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--accent-light); display: flex;
+      align-items: center; justify-content: center;
+      margin-bottom: 12px; color: var(--accent);
+    }
+    .feature h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .feature p { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+    .actions {
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+    }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 32px; background: var(--accent); color: white;
+      border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-link {
+      background: none; border: none; color: var(--text-tertiary);
+      font-size: 14px; cursor: pointer; text-decoration: underline;
+    }
+    .btn-link:hover { color: var(--text-secondary); }
+    .setup-hint {
+      margin-top: 40px; padding: 20px; background: var(--bg-secondary);
+      border: 1px solid var(--border); border-radius: 12px;
+      text-align: left; max-width: 500px;
+    }
+    .setup-hint h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+    .setup-hint p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+    .setup-hint code {
+      background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;
+      font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px;
+    }
+    .lang-switch {
+      position: fixed; top: 20px; right: 20px;
+      display: flex; gap: 8px;
+    }
+    .lang-btn {
+      padding: 6px 12px; background: var(--bg-secondary); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text-secondary); font-size: 13px;
+      cursor: pointer; font-family: inherit;
+    }
+    .lang-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+    @media (max-width: 600px) {
+      .features { grid-template-columns: 1fr; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="lang-switch">
+    <button class="lang-btn active" data-lang="en">EN</button>
+    <button class="lang-btn" data-lang="ru">RU</button>
+  </div>
+
+  <div class="container">
+    <div class="logo">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <line x1="10" y1="9" x2="8" y2="9"/>
+      </svg>
+    </div>
+
+    <h1 id="ob-title">Welcome to PromptVault</h1>
+    <p class="subtitle" id="ob-subtitle">Your AI Prompt Manager</p>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h3 id="ob-f1t">Save & Organize</h3>
+        <p id="ob-f1d">Store all your AI prompts in one place with folders and tags</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        </div>
+        <h3 id="ob-f2t">Instant Insert</h3>
+        <p id="ob-f2d">Insert prompts into ChatGPT, Claude, Gemini with one click or hotkey</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3 id="ob-f3t">Cloud Sync</h3>
+        <p id="ob-f3d">Sign in with Google to sync prompts across devices</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </div>
+        <h3 id="ob-f4t">Explore Library</h3>
+        <p id="ob-f4d">Discover and save prompts shared by the community</p>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="open-ext-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+        <span id="ob-open">Open Extension</span>
+      </button>
+      <button class="btn-link" id="skip-btn"><span id="ob-skip">Skip to extension</span></button>
+    </div>
+
+    <div class="setup-hint">
+      <h4>Google Sign-In Setup (Free)</h4>
+      <p>
+        To enable Google sign-in, you need to configure Supabase:<br><br>
+        1. Go to <strong>Supabase Dashboard</strong> &rarr; Authentication &rarr; Providers &rarr; Google<br>
+        2. Create a project in <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--accent);">Google Cloud Console</a><br>
+        3. Enable <strong>OAuth consent screen</strong> (External, Testing mode = free)<br>
+        4. Create <strong>OAuth 2.0 Client ID</strong> (Web application)<br>
+        5. Add Authorized redirect URI: <code>https://vofgfvlgchqheksvlibl.supabase.co/auth/v1/callback</code><br>
+        6. Copy <strong>Client ID</strong> and <strong>Client Secret</strong> to Supabase Google provider settings<br>
+        7. Also add your extension's redirect URL: <code id="redirect-url">Loading...</code><br><br>
+        <em>All free! Google Cloud Console in Testing mode allows up to 100 test users at no cost.</em>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // Language switching
+    const texts = {
+      en: {
+        title: 'Welcome to PromptVault', subtitle: 'Your AI Prompt Manager',
+        f1t: 'Save & Organize', f1d: 'Store all your AI prompts in one place with folders and tags',
+        f2t: 'Instant Insert', f2d: 'Insert prompts into ChatGPT, Claude, Gemini with one click or hotkey',
+        f3t: 'Cloud Sync', f3d: 'Sign in with Google to sync prompts across devices',
+        f4t: 'Explore Library', f4d: 'Discover and save prompts shared by the community',
+        open: 'Open Extension', skip: 'Skip to extension'
+      },
+      ru: {
+        title: 'Добро пожаловать в PromptVault', subtitle: 'Ваш AI Менеджер промптов',
+        f1t: 'Сохраняйте и организуйте', f1d: 'Храните все AI промпты в одном месте с папками и тегами',
+        f2t: 'Мгновенная вставка', f2d: 'Вставляйте промпты в ChatGPT, Claude, Gemini одним кликом или горячей клавишей',
+        f3t: 'Облачная синхронизация', f3d: 'Войдите через Google для синхронизации промптов между устройствами',
+        f4t: 'Библиотека промптов', f4d: 'Открывайте и сохраняйте промпты, которыми делится сообщество',
+        open: 'Открыть расширение', skip: 'Перейти к расширению'
+      }
+    };
+
+    function setLang(lang) {
+      const t = texts[lang];
+      document.getElementById('ob-title').textContent = t.title;
+      document.getElementById('ob-subtitle').textContent = t.subtitle;
+      document.getElementById('ob-f1t').textContent = t.f1t;
+      document.getElementById('ob-f1d').textContent = t.f1d;
+      document.getElementById('ob-f2t').textContent = t.f2t;
+      document.getElementById('ob-f2d').textContent = t.f2d;
+      document.getElementById('ob-f3t').textContent = t.f3t;
+      document.getElementById('ob-f3d').textContent = t.f3d;
+      document.getElementById('ob-f4t').textContent = t.f4t;
+      document.getElementById('ob-f4d').textContent = t.f4d;
+      document.getElementById('ob-open').textContent = t.open;
+      document.getElementById('ob-skip').textContent = t.skip;
+      document.querySelectorAll('.lang-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.lang === lang);
+      });
+      chrome.storage.local.set({ language: lang });
+    }
+
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+      btn.addEventListener('click', () => setLang(btn.dataset.lang));
+    });
+
+    // Show redirect URL
+    if (chrome.identity && chrome.identity.getRedirectURL) {
+      document.getElementById('redirect-url').textContent = chrome.identity.getRedirectURL();
+    }
+
+    // Detect language
+    chrome.storage.local.get(['language'], (res) => {
+      if (res.language) setLang(res.language);
+      else if (navigator.language.startsWith('ru')) setLang('ru');
+    });
+
+    // Button handlers
+    document.getElementById('open-ext-btn').addEventListener('click', () => {
+      chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true });
+      window.close();
+    });
+    document.getElementById('skip-btn').addEventListener('click', () => {
+      chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true });
+      window.close();
+    });
+  </script>
+</body>
+</html>
