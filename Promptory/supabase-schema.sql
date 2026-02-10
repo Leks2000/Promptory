@@ -1,4 +1,4 @@
--- PromptVault Database Schema and Test Data
+-- Promptory Database Schema and Test Data
 -- Supabase PostgreSQL
 -- Use: Run in Supabase SQL Editor
 

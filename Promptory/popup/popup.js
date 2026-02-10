@@ -1,4 +1,4 @@
-// PromptVault Popup - Main Controller
+// PromptVault -> Promptory Popup - Main Controller
 // Performance-optimized, i18n-enabled, 3 hotkey slots
 
 (function() {
@@ -809,7 +809,7 @@ function openSettings() {
         </div></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('theme')}</label><select id="settings-theme"><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>${t('themeDark')}</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>${t('themeLight')}</option><option value="system" ${s.theme === 'system' ? 'selected' : ''}>${t('themeSystem')}</option></select></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;"><button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button></div></div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>PromptVault</strong> v1.1.0<br>${t('aboutDescription')}</div></div>
+        <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v1.1.0<br>${t('aboutDescription')}</div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-ghost close-modal-btn">${t('cancel')}</button><button class="btn btn-primary" id="settings-save-btn">${t('saveChanges')}</button></div>
     </div>`;

@@ -40,16 +40,22 @@ body {
 
 /* Tabs */
 .tabs {
-  display: flex; gap: 4px; padding: 8px 16px;
+  display: flex; gap: 2px; padding: 8px 12px;
   border-bottom: 1px solid var(--divider); background: var(--bg-primary);
+  overflow-x: auto; /* Allow horizontal scroll if needed */
+  scrollbar-width: none; /* Hide scrollbar Firefox */
+  -ms-overflow-style: none; /* Hide scrollbar IE/Edge */
 }
+.tabs::-webkit-scrollbar { display: none; } /* Hide scrollbar Chrome/Safari */
 .tab-btn {
   display: flex; align-items: center; gap: 4px;
-  padding: 6px 12px; background: transparent; border: none;
+  padding: 6px 10px; background: transparent; border: none;
   border-radius: var(--radius-md); font-family: var(--font-family);
-  font-size: var(--font-size-sm); font-weight: 500;
+  font-size: var(--font-size-xs); font-weight: 500;
   color: var(--text-secondary); cursor: pointer;
   transition: background-color var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap; /* Prevent text wrapping */
+  flex-shrink: 0; /* Prevent tabs from shrinking */
 }
 .tab-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .tab-btn.active { background: var(--bg-secondary); color: var(--text-primary); }

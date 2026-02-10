@@ -17,6 +17,7 @@
     }
     .container {
       text-align: center;
+      padding: 20px;
     }
     .spinner {
       border: 3px solid rgba(255,255,255,0.1);
@@ -31,28 +32,47 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    .success { color: #4CAF50; }
+    .error { color: #f44336; }
+    .message { margin-top: 20px; font-size: 14px; color: #888; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="spinner"></div>
-    <p>Signing in...</p>
+    <div class="spinner" id="spinner"></div>
+    <p id="status">Signing in...</p>
+    <p class="message" id="message"></p>
   </div>
 
   <script>
     (async function() {
+      const statusEl = document.getElementById('status');
+      const messageEl = document.getElementById('message');
+      const spinnerEl = document.getElementById('spinner');
+      
       try {
         // Get tokens from URL hash
         const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
+        const queryParams = new URLSearchParams(window.location.search);
+        
+        // Check for error in query params (Supabase returns errors there)
+        const error = queryParams.get('error') || hashParams.get('error');
+        const errorDesc = queryParams.get('error_description') || hashParams.get('error_description');
+        
+        if (error) {
+          throw new Error(errorDesc || error);
+        }
+        
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
         const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
 
         if (!accessToken) {
-          throw new Error('No access token');
+          throw new Error('No access token received. Please try again.');
         }
 
         console.log('✅ Got access token, fetching user...');
+        statusEl.textContent = 'Getting user info...';
 
         // Fetch user info
         const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
@@ -65,7 +85,10 @@
           }
         });
 
-        if (!userRes.ok) throw new Error('Failed to get user');
+        if (!userRes.ok) {
+          const errText = await userRes.text();
+          throw new Error('Failed to get user info: ' + errText);
+        }
 
         const userData = await userRes.json();
         console.log('✅ Got user:', userData.email);
@@ -87,12 +110,24 @@
         await chrome.storage.local.set({ session, user });
         console.log('✅ Saved session');
 
-        // Close this window and notify popup
-        window.close();
+        // Show success
+        spinnerEl.style.display = 'none';
+        statusEl.textContent = '✅ Signed in successfully!';
+        statusEl.className = 'success';
+        messageEl.textContent = `Welcome, ${user.name || user.email}! This tab will close automatically.`;
+
+        // Close this window after a short delay
+        setTimeout(() => {
+          window.close();
+        }, 1500);
         
       } catch (error) {
         console.error('❌ Auth callback error:', error);
-        alert('Sign in failed: ' + error.message);
+        spinnerEl.style.display = 'none';
+        statusEl.textContent = '❌ Sign in failed';
+        statusEl.className = 'error';
+        messageEl.textContent = error.message || 'Unknown error occurred';
+        messageEl.innerHTML += '<br><br><small>You can close this tab and try again.</small>';
       }
     })();
   </script>

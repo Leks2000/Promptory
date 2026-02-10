@@ -1,12 +1,12 @@
 {
-  "extName": { "message": "PromptVault" },
+  "extName": { "message": "Promptory" },
   "extDescription": { "message": "AI Менеджер промптов — Сохраняйте, организуйте и мгновенно вставляйте промпты" },
 
-  "welcomeTitle": { "message": "Добро пожаловать в PromptVault" },
+  "welcomeTitle": { "message": "Добро пожаловать в Promptory" },
   "welcomeText": { "message": "Ваш личный менеджер AI промптов. Сохраняйте, организуйте и мгновенно вставляйте промпты в ChatGPT, Claude, Gemini и другие." },
   "getStarted": { "message": "Начать" },
 
-  "appTitle": { "message": "PromptVault" },
+  "appTitle": { "message": "Promptory" },
   "newBtn": { "message": "Новый" },
   "settings": { "message": "Настройки" },
   "searchPlaceholder": { "message": "Поиск промптов..." },
@@ -71,7 +71,7 @@
   "catCreative": { "message": "Творчество" },
   "catLearning": { "message": "Обучение" },
   "catAI": { "message": "AI и промпты" },
-  "shareDisclaimer": { "message": "При публикации ваш промпт станет виден всем пользователям PromptVault. Ваше имя будет указано как автор. Вы сможете удалить его позже." },
+  "shareDisclaimer": { "message": "При публикации ваш промпт станет виден всем пользователям Promptory. Ваше имя будет указано как автор. Вы сможете удалить его позже." },
   "cancel": { "message": "Отмена" },
   "share": { "message": "Поделиться" },
   "titleRequired": { "message": "Название обязательно" },
@@ -194,7 +194,7 @@
   "langEnglish": { "message": "English" },
   "langRussian": { "message": "Русский" },
 
-  "onboardingTitle": { "message": "Добро пожаловать в PromptVault" },
+  "onboardingTitle": { "message": "Добро пожаловать в Promptory" },
   "onboardingSubtitle": { "message": "Ваш AI Менеджер промптов" },
   "onboardingFeature1Title": { "message": "Сохраняйте и организуйте" },
   "onboardingFeature1Text": { "message": "Храните все AI промпты в одном месте с папками и тегами" },
