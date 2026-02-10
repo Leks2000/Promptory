@@ -394,7 +394,24 @@ function showContextMenu(anchorEl, promptId) {
       else if (action === 'delete') await deletePrompt(promptId);
     });
   });
-  setTimeout(() => document.addEventListener('click', closeContextMenu, { once: true }), 10);
+  
+  // Close on click outside
+  const clickOutsideHandler = (e) => {
+    if (activeContextMenu && !activeContextMenu.contains(e.target)) {
+      closeContextMenu();
+    }
+  };
+  setTimeout(() => document.addEventListener('click', clickOutsideHandler, { once: true }), 10);
+  
+  // Close on scroll (fix for context menu staying visible when scrolling)
+  const scrollHandler = () => {
+    closeContextMenu();
+  };
+  const content = document.querySelector('.content');
+  if (content) {
+    content.addEventListener('scroll', scrollHandler, { once: true });
+  }
+  document.addEventListener('scroll', scrollHandler, { once: true, capture: true });
 }
 
 function closeContextMenu() {
@@ -442,14 +459,51 @@ async function shareToLibrary(promptId) {
     const btn = document.getElementById('share-confirm-btn');
     btn.classList.add('loading');
     try {
-      const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'library_prompts',
-        body: { title, text: p.text, description: desc, author: state.user.name || state.user.email.split('@')[0], author_id: state.user.id, tags: p.tags || [], variables: p.variables || [], category, is_approved: true }
+      // Use the secure RPC function to share to library (bypasses RLS issues)
+      const res = await supabaseMsg({ 
+        action: 'supabaseRequest', 
+        method: 'POST', 
+        path: 'rpc/share_prompt_to_library',
+        body: { 
+          p_title: title, 
+          p_text: p.text, 
+          p_description: desc, 
+          p_author: state.user.name || state.user.email.split('@')[0], 
+          p_tags: p.tags || [], 
+          p_variables: p.variables || [], 
+          p_category: category
+        }
       });
-      if (res?.error) throw new Error(res.error);
+      if (res?.error) {
+        // Fallback to direct insert if RPC not available
+        console.warn('RPC failed, trying direct insert:', res.error);
+        const fallbackRes = await supabaseMsg({ 
+          action: 'supabaseRequest', 
+          method: 'POST', 
+          path: 'library_prompts',
+          body: { 
+            title, 
+            text: p.text, 
+            description: desc, 
+            author: state.user.name || state.user.email.split('@')[0], 
+            author_id: state.user.id, 
+            tags: p.tags || [], 
+            variables: p.variables || [], 
+            category, 
+            is_approved: true 
+          }
+        });
+        if (fallbackRes?.error) throw new Error(typeof fallbackRes.error === 'string' ? fallbackRes.error : JSON.stringify(fallbackRes.error));
+      } else if (res?.data && !res.data.success && res.data.error) {
+        throw new Error(res.data.error);
+      }
       showToast(t('promptShared'), 'success');
       closeModal('share-modal');
       loadLibraryPrompts();
-    } catch (e) { showToast(t('failedToShare') + ': ' + (e.message || ''), 'error'); }
+    } catch (e) { 
+      console.error('Share error:', e);
+      showToast(t('failedToShare') + ': ' + (e.message || ''), 'error'); 
+    }
     btn.classList.remove('loading');
   });
   modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('share-modal')));
@@ -1060,38 +1114,58 @@ async function syncAllData() {
   if (!state.session || !state.user) return;
   console.log('🔄 Syncing data with Supabase...');
   try {
-    // First, ensure user profile exists
-    const profileRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}` });
-    if (!profileRes?.data?.length) {
-      // Create profile if it doesn't exist
-      console.log('📝 Creating user profile...');
-      const createRes = await supabaseMsg({ 
-        action: 'supabaseRequest', 
-        method: 'POST', 
-        path: 'profiles', 
-        body: { 
-          id: state.user.id, 
-          email: state.user.email, 
-          full_name: state.user.name,
-          avatar_url: state.user.avatar || '',
-          is_premium: false,
-          prompt_limit: FREE_PROMPT_LIMIT
-        } 
-      });
-      if (createRes?.error) {
-        console.warn('⚠️ Profile creation via API failed, profile may be created by trigger:', createRes.error);
-      } else {
-        console.log('✅ Profile created successfully');
-      }
-    } else {
-      console.log('✅ Profile already exists');
-      // Update premium status from profile
-      const profile = profileRes.data[0];
-      if (profile.is_premium !== undefined) {
-        state.isPremium = profile.is_premium;
-        state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
+    // First, try to use the sync RPC function (ensures profile exists)
+    const syncRes = await supabaseMsg({ 
+      action: 'supabaseRequest', 
+      method: 'POST', 
+      path: 'rpc/sync_user_on_login',
+      body: {}
+    });
+    
+    if (syncRes?.data && !syncRes.data.error) {
+      console.log('✅ User sync via RPC successful');
+      const syncData = Array.isArray(syncRes.data) ? syncRes.data[0] : syncRes.data;
+      if (syncData) {
+        state.isPremium = syncData.is_premium || false;
+        state.promptLimit = syncData.prompt_limit || FREE_PROMPT_LIMIT;
         await saveData('isPremium', state.isPremium);
         await saveData('promptLimit', state.promptLimit);
+      }
+    } else {
+      // Fallback: manually ensure profile exists
+      console.log('⚠️ RPC sync failed, trying manual profile check...');
+      const profileRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}` });
+      if (!profileRes?.data?.length) {
+        // Create profile if it doesn't exist
+        console.log('📝 Creating user profile...');
+        const createRes = await supabaseMsg({ 
+          action: 'supabaseRequest', 
+          method: 'POST', 
+          path: 'profiles', 
+          body: { 
+            id: state.user.id, 
+            email: state.user.email, 
+            full_name: state.user.name,
+            avatar_url: state.user.avatar || '',
+            is_premium: false,
+            prompt_limit: FREE_PROMPT_LIMIT
+          } 
+        });
+        if (createRes?.error) {
+          console.warn('⚠️ Profile creation via API failed, profile may be created by trigger:', createRes.error);
+        } else {
+          console.log('✅ Profile created successfully');
+        }
+      } else {
+        console.log('✅ Profile already exists');
+        // Update premium status from profile
+        const profile = profileRes.data[0];
+        if (profile.is_premium !== undefined) {
+          state.isPremium = profile.is_premium;
+          state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
+          await saveData('isPremium', state.isPremium);
+          await saveData('promptLimit', state.promptLimit);
+        }
       }
     }
 
@@ -1100,7 +1174,9 @@ async function syncAllData() {
     if (fRes?.data?.length) { 
       state.folders = fRes.data.map(f => ({ id: f.id, name: f.name, createdAt: new Date(f.created_at).getTime(), updatedAt: new Date(f.updated_at).getTime() })); 
       await saveData('folders', state.folders); 
-      console.log('✅ Synced', state.folders.length, 'folders');
+      console.log('✅ Synced', state.folders.length, 'folders from cloud');
+    } else if (fRes?.error) {
+      console.warn('⚠️ Failed to fetch folders:', fRes.error);
     }
     
     // Sync prompts from cloud
@@ -1108,16 +1184,21 @@ async function syncAllData() {
     if (pRes?.data?.length) { 
       state.prompts = pRes.data.map(p => ({ id: p.id, title: p.title, text: p.text, description: p.description, folderId: p.folder_id, platform: p.platform, tags: p.tags || [], variables: p.variables || [], isFavorite: p.is_favorite, useCount: p.use_count || 0, createdAt: new Date(p.created_at).getTime(), updatedAt: new Date(p.updated_at).getTime() })); 
       await saveData('prompts', state.prompts); 
-      console.log('✅ Synced', state.prompts.length, 'prompts');
+      console.log('✅ Synced', state.prompts.length, 'prompts from cloud');
+    } else if (pRes?.error) {
+      console.warn('⚠️ Failed to fetch prompts:', pRes.error);
     } else if (!pRes?.error && state.prompts.length > 0) {
       // No prompts in cloud but have local - upload local prompts
-      console.log('📤 Uploading local prompts to cloud...');
-      for (const p of state.prompts) {
-        await syncPromptToSupabase(p);
-      }
+      console.log('📤 Uploading local data to cloud...');
+      // First upload folders (prompts may reference them)
       for (const f of state.folders) {
         await syncFolderToSupabase(f);
       }
+      // Then upload prompts
+      for (const p of state.prompts) {
+        await syncPromptToSupabase(p);
+      }
+      console.log('✅ Uploaded', state.prompts.length, 'prompts and', state.folders.length, 'folders to cloud');
     }
     
     renderPrompts(); 
