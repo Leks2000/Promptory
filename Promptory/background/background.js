@@ -460,7 +460,71 @@ async function handleSupabaseRequest(message) {
   const token = await getValidToken();
   if (!token) return { error: 'Not authenticated' };
 
-  const { method, path, body } = message;
+  const { method, path, body, isFile, fileData, contentType: fileContentType } = message;
+  
+  // Handle file uploads to Storage
+  if (isFile && path.startsWith('storage/v1/object/')) {
+    try {
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY
+      };
+      
+      let uploadBody;
+      let uploadContentType;
+      
+      // Handle different file data formats
+      if (fileData) {
+        // Base64 data passed from popup
+        const byteCharacters = atob(fileData.split(',')[1] || fileData);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        uploadBody = byteArray;
+        uploadContentType = fileContentType || 'image/png';
+      } else if (body && typeof body === 'string' && body.startsWith('data:')) {
+        // Data URL format
+        const matches = body.match(/^data:(.+?);base64,(.+)$/);
+        if (matches) {
+          uploadContentType = matches[1];
+          const byteCharacters = atob(matches[2]);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          uploadBody = new Uint8Array(byteNumbers);
+        }
+      }
+      
+      if (!uploadBody) {
+        return { error: 'Invalid file data' };
+      }
+      
+      headers['Content-Type'] = uploadContentType;
+      
+      const res = await fetch(`${SUPABASE_URL}/${path}`, {
+        method: 'POST',
+        headers,
+        body: uploadBody
+      });
+      
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Storage upload error:', text);
+        return { error: text };
+      }
+      
+      const data = await res.json().catch(() => ({}));
+      return { data };
+    } catch (err) {
+      console.error('File upload error:', err);
+      return { error: err.message };
+    }
+  }
+  
+  // Regular REST API request
   const headers = {
     'Authorization': `Bearer ${token}`,
     'apikey': SUPABASE_ANON_KEY,
@@ -468,7 +532,7 @@ async function handleSupabaseRequest(message) {
   };
 
   // For POST to tables (not rpc), add upsert handling
-  if (method === 'POST' && !path.startsWith('rpc/')) {
+  if (method === 'POST' && !path.startsWith('rpc/') && !path.startsWith('storage/')) {
     headers['Prefer'] = 'return=representation,resolution=merge-duplicates';
   } else if (method === 'POST') {
     headers['Prefer'] = 'return=representation';
