@@ -226,6 +226,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleStorageUpload(message).then(sendResponse);
     return true;
   }
+
+  if (message.action === 'getSignedUrl') {
+    handleGetSignedUrl(message).then(sendResponse);
+    return true;
+  }
+
+  if (message.action === 'getImageAsDataUrl') {
+    handleGetImageAsDataUrl(message).then(sendResponse);
+    return true;
+  }
 });
 
 // ---------- Supabase Storage Upload ----------
@@ -261,11 +271,118 @@ async function handleStorageUpload(message) {
       return { error: errorText };
     }
 
-    // Return public URL
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-    return { data: { publicUrl } };
+    // Generate a signed URL (valid for 1 year = 31536000 seconds)
+    // This works for private buckets unlike public URLs
+    try {
+      const signedRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${path}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ expiresIn: 31536000 })
+      });
+      
+      if (signedRes.ok) {
+        const signedData = await signedRes.json();
+        const signedUrl = signedData.signedURL 
+          ? `${SUPABASE_URL}/storage/v1${signedData.signedURL}` 
+          : null;
+        if (signedUrl) {
+          console.log('✅ Upload successful, signed URL generated');
+          return { data: { publicUrl: signedUrl, storagePath: `${bucket}/${path}` } };
+        }
+      }
+    } catch (signErr) {
+      console.warn('⚠️ Signed URL generation failed, using storage path:', signErr);
+    }
+    
+    // Fallback: return storage path for later resolution
+    return { data: { publicUrl: `supabase-storage://${bucket}/${path}`, storagePath: `${bucket}/${path}` } };
   } catch (err) {
     console.error('Storage upload error:', err);
+    return { error: err.message };
+  }
+}
+
+// ---------- Get Signed URL for Private Storage ----------
+async function handleGetSignedUrl(message) {
+  const token = await getValidToken();
+  if (!token) return { error: 'Not authenticated' };
+
+  const { bucket, path, expiresIn } = message;
+  
+  try {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ expiresIn: expiresIn || 3600 })
+    });
+    
+    if (!res.ok) {
+      const text = await res.text();
+      return { error: text };
+    }
+    
+    const data = await res.json();
+    const signedUrl = data.signedURL 
+      ? `${SUPABASE_URL}/storage/v1${data.signedURL}` 
+      : null;
+    return { data: { signedUrl } };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// ---------- Get Image as Data URL (for private bucket display) ----------
+async function handleGetImageAsDataUrl(message) {
+  const token = await getValidToken();
+  if (!token) return { error: 'Not authenticated' };
+
+  const { url, bucket, path } = message;
+  
+  try {
+    let fetchUrl;
+    if (bucket && path) {
+      fetchUrl = `${SUPABASE_URL}/storage/v1/object/authenticated/${bucket}/${path}`;
+    } else if (url) {
+      fetchUrl = url
+        .replace('/storage/v1/object/public/', '/storage/v1/object/authenticated/')
+        .replace('supabase-storage://', `${SUPABASE_URL}/storage/v1/object/authenticated/`);
+    } else {
+      return { error: 'No URL or path provided' };
+    }
+    
+    const res = await fetch(fetchUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY
+      }
+    });
+    
+    if (!res.ok) {
+      return { error: `HTTP ${res.status}` };
+    }
+    
+    // Use arrayBuffer approach (FileReader not available in service workers)
+    const buffer = await res.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    const base64 = btoa(binary);
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    return { data: { dataUrl: `data:${contentType};base64,${base64}` } };
+  } catch (err) {
+    console.error('getImageAsDataUrl error:', err);
     return { error: err.message };
   }
 }
@@ -503,6 +620,7 @@ async function handleSupabaseRequest(message) {
       }
       
       headers['Content-Type'] = uploadContentType;
+      headers['x-upsert'] = 'true';
       
       const res = await fetch(`${SUPABASE_URL}/${path}`, {
         method: 'POST',
@@ -517,6 +635,35 @@ async function handleSupabaseRequest(message) {
       }
       
       const data = await res.json().catch(() => ({}));
+      
+      // Also generate signed URL for the uploaded file (since bucket may be private)
+      const storagePath = path.replace('storage/v1/object/', '');
+      const bucketAndPath = storagePath.split('/');
+      const bucketName = bucketAndPath[0];
+      const filePath = bucketAndPath.slice(1).join('/');
+      
+      try {
+        const signedRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucketName}/${filePath}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ expiresIn: 31536000 }) // 1 year
+        });
+        
+        if (signedRes.ok) {
+          const signedData = await signedRes.json();
+          if (signedData.signedURL) {
+            data.signedUrl = `${SUPABASE_URL}/storage/v1${signedData.signedURL}`;
+          }
+        }
+      } catch (signErr) {
+        console.warn('Signed URL generation failed for handleSupabaseRequest upload:', signErr);
+      }
+      
+      data.storagePath = `${bucketName}/${filePath}`;
       return { data };
     } catch (err) {
       console.error('File upload error:', err);
