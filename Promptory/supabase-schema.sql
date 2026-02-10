@@ -236,8 +236,14 @@ CREATE POLICY "Users can delete own prompts" ON public.prompts
 CREATE POLICY "Authenticated can view library prompts" ON public.library_prompts
   FOR SELECT TO authenticated USING (true);
 
+-- Allow any authenticated user to insert into library_prompts
+-- The author_id must match the current user OR be NULL
 CREATE POLICY "Users can share to library" ON public.library_prompts
-  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() IS NOT NULL 
+    AND (author_id IS NULL OR author_id = auth.uid())
+  );
 
 CREATE POLICY "Admins can update library prompts" ON public.library_prompts
   FOR UPDATE USING (

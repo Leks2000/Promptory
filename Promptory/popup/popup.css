@@ -40,22 +40,24 @@ body {
 
 /* Tabs */
 .tabs {
-  display: flex; gap: 2px; padding: 8px 12px;
+  display: flex; gap: 2px; padding: 8px 8px;
   border-bottom: 1px solid var(--divider); background: var(--bg-primary);
   overflow-x: auto; /* Allow horizontal scroll if needed */
   scrollbar-width: none; /* Hide scrollbar Firefox */
   -ms-overflow-style: none; /* Hide scrollbar IE/Edge */
+  justify-content: space-between; /* Spread tabs evenly */
 }
 .tabs::-webkit-scrollbar { display: none; } /* Hide scrollbar Chrome/Safari */
 .tab-btn {
   display: flex; align-items: center; gap: 4px;
-  padding: 6px 10px; background: transparent; border: none;
+  padding: 6px 8px; background: transparent; border: none;
   border-radius: var(--radius-md); font-family: var(--font-family);
-  font-size: var(--font-size-sm); font-weight: 500;
+  font-size: var(--font-size-xs); font-weight: 500;
   color: var(--text-secondary); cursor: pointer;
   transition: background-color var(--transition-fast), color var(--transition-fast);
   white-space: nowrap; /* Prevent text wrapping */
   flex-shrink: 0; /* Prevent tabs from shrinking */
+  min-width: 0; /* Allow flex items to shrink below content size if needed */
 }
 .tab-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .tab-btn.active { background: var(--bg-secondary); color: var(--text-primary); }
@@ -313,17 +315,19 @@ body {
 
 /* Free tier limit banner */
 .limit-banner {
-  padding: 10px 14px; background: var(--accent-light);
+  padding: 8px 12px; background: var(--accent-light);
   border: 1px solid var(--accent); border-radius: var(--radius-md);
   margin-bottom: 12px; display: flex; align-items: center;
-  justify-content: space-between; gap: 8px;
+  justify-content: space-between; gap: 6px;
+  flex-wrap: wrap; /* Allow wrapping on small screens */
 }
 .limit-banner-content {
   flex: 1;
 }
 .limit-banner-text {
-  font-size: var(--font-size-xs); color: var(--text-primary);
-  line-height: 1.4;
+  font-size: 10px; color: var(--text-primary);
+  line-height: 1.3;
+  word-break: break-word; /* Prevent text overflow */
 }
 .limit-banner-actions {
   display: flex; align-items: center; gap: 8px;

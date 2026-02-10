@@ -188,6 +188,8 @@ async function showVariableDialog(text, variables) {
 }
 
 // ---------- Search Overlay (Ctrl+Shift+P) - performance-optimized ----------
+let searchOverlayPrompts = []; // Cache prompts to avoid repeated fetches
+
 function toggleSearchOverlay() {
   const existing = document.getElementById('promptvault-search-overlay');
   if (existing) {
@@ -212,32 +214,49 @@ function toggleSearchOverlay() {
       <div class="promptvault-search-footer"><span>${ct('enterToInsert')}</span><span>${ct('escToClose')}</span></div>
     </div>`;
   document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add('visible'));
+  
+  // Use requestAnimationFrame for smoother animation
+  requestAnimationFrame(() => {
+    overlay.classList.add('visible');
+  });
 
   const searchInput = overlay.querySelector('#promptvault-search-input');
-  searchInput.focus();
+  // Delay focus slightly to prevent layout thrashing
+  setTimeout(() => searchInput.focus(), 50);
 
-  let allPrompts = [];
+  // Fetch prompts once and cache
   chrome.runtime.sendMessage({ action: 'getPrompts' }, (res) => {
-    allPrompts = res?.prompts || [];
-    renderSearchResults(allPrompts, '');
+    searchOverlayPrompts = res?.prompts || [];
+    renderSearchResults(searchOverlayPrompts, '');
   });
 
-  // Debounced search
+  // Debounced search with longer delay for better performance
   let searchTimer;
-  searchInput.addEventListener('input', () => {
+  const handleSearch = () => {
     clearTimeout(searchTimer);
+    const q = searchInput.value.trim().toLowerCase();
+    
+    // Show immediate feedback for empty search
+    if (!q) {
+      renderSearchResults(searchOverlayPrompts, '');
+      return;
+    }
+    
     searchTimer = setTimeout(() => {
-      const q = searchInput.value.trim().toLowerCase();
-      const filtered = q ? allPrompts.filter(p =>
-        p.title.toLowerCase().includes(q) ||
-        (p.description || '').toLowerCase().includes(q) ||
-        (p.tags || []).some(t => t.toLowerCase().includes(q)) ||
-        p.text.substring(0, 500).toLowerCase().includes(q) // Only search first 500 chars for perf
-      ) : allPrompts;
+      const filtered = searchOverlayPrompts.filter(p => {
+        // Prioritize title and description for performance
+        if (p.title.toLowerCase().includes(q)) return true;
+        if ((p.description || '').toLowerCase().includes(q)) return true;
+        if ((p.tags || []).some(t => t.toLowerCase().includes(q))) return true;
+        // Only search first 300 chars of text for performance
+        if (p.text.substring(0, 300).toLowerCase().includes(q)) return true;
+        return false;
+      });
       renderSearchResults(filtered, q);
-    }, 150);
-  });
+    }, 200); // Increased debounce for smoother typing
+  };
+  
+  searchInput.addEventListener('input', handleSearch);
 
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {
@@ -261,7 +280,7 @@ function toggleSearchOverlay() {
       if (e.key === 'ArrowDown') idx = Math.min(idx + 1, items.length - 1);
       else idx = Math.max(idx - 1, 0);
       items.forEach(i => i.classList.remove('active'));
-      if (items[idx]) { items[idx].classList.add('active'); items[idx].scrollIntoView({ block: 'nearest' }); }
+      if (items[idx]) { items[idx].classList.add('active'); items[idx].scrollIntoView({ block: 'nearest', behavior: 'auto' }); }
     }
     if (e.key === 'Enter') {
       const active = overlay.querySelector('.promptvault-search-item.active');
@@ -279,16 +298,26 @@ function renderSearchResults(prompts, query) {
     return;
   }
 
-  // Limit to 50 results for performance
-  const limited = prompts.slice(0, 50);
-  container.innerHTML = limited.map((p, i) => `
-    <div class="promptvault-search-item ${i === 0 ? 'active' : ''}" data-prompt-id="${p.id}">
+  // Limit to 30 results for better performance (reduced from 50)
+  const limited = prompts.slice(0, 30);
+  
+  // Use DocumentFragment for better performance
+  const fragment = document.createDocumentFragment();
+  limited.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = `promptvault-search-item ${i === 0 ? 'active' : ''}`;
+    div.setAttribute('data-prompt-id', p.id);
+    div.innerHTML = `
       <div class="promptvault-search-item-title">${escapeHtml(p.title)}</div>
-      <div class="promptvault-search-item-preview">${escapeHtml(p.text.substring(0, 80))}${p.text.length > 80 ? '...' : ''}</div>
-    </div>
-  `).join('');
+      <div class="promptvault-search-item-preview">${escapeHtml(p.text.substring(0, 60))}${p.text.length > 60 ? '...' : ''}</div>
+    `;
+    fragment.appendChild(div);
+  });
+  
+  container.innerHTML = '';
+  container.appendChild(fragment);
 
-  // Event delegation
+  // Event delegation for clicks
   container.onclick = (e) => {
     const item = e.target.closest('.promptvault-search-item');
     if (!item) return;
@@ -298,6 +327,7 @@ function renderSearchResults(prompts, query) {
       const overlay = document.getElementById('promptvault-search-overlay');
       if (overlay) { overlay.classList.remove('visible'); setTimeout(() => overlay.remove(), 200); searchOverlayVisible = false; }
       insertPrompt(prompt.text, prompt.variables || []);
+      // Update use count in storage (fire and forget for performance)
       chrome.storage.local.get(['prompts'], (res) => {
         const stored = res.prompts || [];
         const found = stored.find(sp => sp.id === id);
