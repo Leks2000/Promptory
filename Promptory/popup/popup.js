@@ -529,18 +529,20 @@ async function shareToLibrary(promptId) {
       let imageUrl = null;
       if (selectedImageData) {
         try {
-          // Convert base64 to blob for upload
-          const response = await fetch(selectedImageData);
-          const blob = await response.blob();
-          const fileName = `${state.user.id}/${Date.now()}_cover.${blob.type.split('/')[1] || 'png'}`;
+          // Get content type from data URL
+          const contentTypeMatch = selectedImageData.match(/^data:(.+?);base64,/);
+          const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/png';
+          const ext = contentType.split('/')[1] || 'png';
+          const fileName = `${state.user.id}/${Date.now()}_cover.${ext}`;
           
-          // Upload via background script (handles auth)
+          // Upload via background script (handles auth) - pass base64 directly
           const uploadRes = await supabaseMsg({
             action: 'supabaseRequest',
             method: 'POST',
             path: `storage/v1/object/Lib_img/${fileName}`,
-            body: blob,
-            isFile: true
+            body: selectedImageData,
+            isFile: true,
+            contentType: contentType
           });
           
           if (!uploadRes?.error) {
