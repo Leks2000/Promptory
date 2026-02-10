@@ -103,29 +103,35 @@ function debounce(fn, ms) {
 }
 
 // ==================== FREE TIER LIMIT ====================
+function getEffectiveLimit() {
+  return (state.promptLimit > 0 && state.promptLimit <= 1000) ? state.promptLimit : FREE_PROMPT_LIMIT;
+}
+
 function canCreatePrompt() {
   if (state.isPremium) return true;
-  return state.prompts.length < state.promptLimit;
+  return state.prompts.length < getEffectiveLimit();
 }
 
 function getPromptsRemaining() {
   if (state.isPremium) return Infinity;
-  return Math.max(0, state.promptLimit - state.prompts.length);
+  return Math.max(0, getEffectiveLimit() - state.prompts.length);
 }
 
 function renderLimitBanner() {
   const existing = document.getElementById('limit-banner');
   if (existing) existing.remove();
   if (state.isPremium || !state.user) return;
-  const remaining = getPromptsRemaining();
+  // Sanitize: if promptLimit is unreasonably high (e.g. 9999), treat as default 20
+  const effectiveLimit = (state.promptLimit > 0 && state.promptLimit <= 1000) ? state.promptLimit : FREE_PROMPT_LIMIT;
+  const remaining = Math.max(0, effectiveLimit - state.prompts.length);
   if (remaining > 5) return;
   const banner = document.createElement('div');
   banner.id = 'limit-banner';
   banner.className = 'limit-banner';
   const upgradeBtn = `<button class="btn btn-sm btn-primary limit-upgrade-btn" id="limit-upgrade-btn">${t('upgrade') || 'Upgrade'}</button>`;
   banner.innerHTML = remaining === 0
-    ? `<div class="limit-banner-content"><span class="limit-banner-text">${t('freeLimitBanner')}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${state.promptLimit}</span>${upgradeBtn}</div>`
-    : `<div class="limit-banner-content"><span class="limit-banner-text">${t('remainingOnFree', remaining)}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${state.promptLimit}</span>${upgradeBtn}</div>`;
+    ? `<div class="limit-banner-content"><span class="limit-banner-text">${t('freeLimitBanner')}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${effectiveLimit}</span>${upgradeBtn}</div>`
+    : `<div class="limit-banner-content"><span class="limit-banner-text">${t('remainingOnFree', remaining)}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${effectiveLimit}</span>${upgradeBtn}</div>`;
   const content = document.querySelector('.content');
   if (content) content.insertBefore(banner, content.firstChild);
   
@@ -557,30 +563,31 @@ async function shareToLibrary(promptId) {
         }
       }
       
-      // Share prompt to library
-      const shareBody = { 
-        title, 
-        text: p.text, 
-        description: desc, 
-        author: state.user.name || state.user.email.split('@')[0], 
-        author_id: state.user.id, 
-        tags: p.tags || [], 
-        variables: p.variables || [], 
-        category, 
-        is_approved: true,
-        image_url: imageUrl
-      };
-      
-      // Try direct insert
+      // Share prompt to library using RPC function (bypasses RLS issues with SECURITY DEFINER)
       const res = await supabaseMsg({ 
         action: 'supabaseRequest', 
         method: 'POST', 
-        path: 'library_prompts',
-        body: shareBody
+        path: 'rpc/share_prompt_to_library',
+        body: {
+          p_title: title,
+          p_text: p.text,
+          p_description: desc,
+          p_author: state.user.name || state.user.email.split('@')[0],
+          p_tags: p.tags || [],
+          p_variables: p.variables || [],
+          p_category: category,
+          p_image_url: imageUrl
+        }
       });
       
       if (res?.error) {
         throw new Error(typeof res.error === 'string' ? res.error : JSON.stringify(res.error));
+      }
+      
+      // Check RPC response for success
+      const rpcResult = Array.isArray(res?.data) ? res.data[0] : res?.data;
+      if (rpcResult && rpcResult.success === false) {
+        throw new Error(rpcResult.error || 'Failed to share prompt');
       }
       
       showToast(t('promptShared'), 'success');
@@ -601,7 +608,7 @@ let pendingImageFile = null; // For image upload
 
 function openPromptEditor(promptId = null) {
   if (!promptId && !canCreatePrompt()) {
-    showToast(t('freeLimitReached', state.promptLimit), 'error');
+    showToast(t('freeLimitReached', getEffectiveLimit()), 'error');
     return;
   }
   pendingImageFile = null;
@@ -789,7 +796,7 @@ async function savePrompt(editingId) {
       syncPromptToSupabase(p); 
     }
   } else {
-    if (!canCreatePrompt()) { showToast(t('freeLimitReached', state.promptLimit), 'error'); saveBtn.classList.remove('loading'); return; }
+    if (!canCreatePrompt()) { showToast(t('freeLimitReached', getEffectiveLimit()), 'error'); saveBtn.classList.remove('loading'); return; }
     const newP = { id: crypto.randomUUID(), title, text, description: desc, folderId, platform, tags, variables, imageUrl, isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() };
     state.prompts.unshift(newP);
     syncPromptToSupabase(newP);
@@ -963,7 +970,13 @@ function renderFavorites() {
 
 // ==================== EXPLORE ====================
 async function loadLibraryPrompts() {
-  // Allow loading even without session - library prompts are public
+  // Library prompts should be visible to authenticated users only
+  if (!state.session || !state.user) {
+    console.log('📚 Skipping library load - not authenticated');
+    renderExplore();
+    return;
+  }
+  
   console.log('📚 Loading library prompts...');
   try {
     const res = await supabaseMsg({ 
@@ -993,13 +1006,11 @@ async function loadLibraryPrompts() {
       console.error('📚 Library load error:', res.error);
     }
     
-    // Load user likes and reports only if logged in
-    if (state.session && state.user) {
-      const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
-      if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
-      const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
-      if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
-    }
+    // Load user likes and reports
+    const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
+    if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
+    const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
+    if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
   } catch (e) { 
     console.error('Failed to load library:', e); 
   }
@@ -1008,29 +1019,26 @@ async function loadLibraryPrompts() {
 
 let flippedCards = new Set();
 
-// Category colors for visual distinction
+// Category colors for visual distinction (no emoji - clean gradient only)
 const CATEGORY_COLORS = {
-  'business': { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: '💼' },
-  'development': { bg: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', icon: '💻' },
-  'marketing': { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', icon: '📢' },
-  'creative': { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', icon: '🎨' },
-  'learning': { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', icon: '📚' },
-  'ai': { bg: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)', icon: '🤖' },
-  'general': { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: '✨' }
+  'business': { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+  'development': { bg: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' },
+  'marketing': { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
+  'creative': { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
+  'learning': { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
+  'ai': { bg: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)' },
+  'general': { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }
 };
 
 function renderExplore() {
   const list = document.getElementById('explore-list');
   if (!list) return;
   
-  // Show sign-in prompt for guests (but still load library)
-  if (!state.user) {
-    // Show library even for guests, but with sign-in banner
-    if (state.libraryPrompts.length === 0) {
-      list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('signInToExplore')}</div><div class="empty-state-text">${t('discoverPrompts')}</div><button class="btn btn-primary ripple" id="explore-signin-btn">${t('signIn')}</button></div>`;
-      document.getElementById('explore-signin-btn')?.addEventListener('click', () => document.getElementById('settings-btn').click());
-      return;
-    }
+  // Only authenticated users can view the library
+  if (!state.user || !state.session) {
+    list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('signInToExplore')}</div><div class="empty-state-text">${t('discoverPrompts')}</div><button class="btn btn-primary ripple" id="explore-signin-btn">${t('signIn')}</button></div>`;
+    document.getElementById('explore-signin-btn')?.addEventListener('click', () => document.getElementById('settings-btn').click());
+    return;
   }
   
   if (state.libraryPrompts.length === 0) {
@@ -1046,11 +1054,11 @@ function renderExplore() {
     const delay = i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 50}ms"` : 'style="animation:none;opacity:1;"';
     const categoryInfo = CATEGORY_COLORS[p.category] || CATEGORY_COLORS['general'];
     
-    // Thumbnail: use image_url if available, otherwise category gradient
+    // Thumbnail: use image_url if available, otherwise category gradient (no emoji)
     const thumbnailStyle = p.imageUrl 
       ? `background-image: url('${escapeHtml(p.imageUrl)}'); background-size: cover; background-position: center;`
       : `background: ${categoryInfo.bg};`;
-    const thumbnailContent = p.imageUrl ? '' : categoryInfo.icon;
+    const thumbnailContent = '';
     
     return `<div class="explore-card-wrapper" data-explore-id="${p.id}" ${delay}>
       <div class="explore-card ${isFlipped ? 'flipped' : ''}">
@@ -1103,7 +1111,7 @@ function renderExplore() {
       if (!state.user) { showToast(t('signInToSave') || 'Sign in to save prompts', 'error'); return; }
       const id = saveBtn.dataset.exploreSave; 
       if (state.prompts.some(p => p.sourceId === id)) { showToast(t('alreadyInLibrary'), 'error'); return; } 
-      if (!canCreatePrompt()) { showToast(t('freeLimitReached', state.promptLimit), 'error'); return; } 
+      if (!canCreatePrompt()) { showToast(t('freeLimitReached', getEffectiveLimit()), 'error'); return; } 
       const ep = state.libraryPrompts.find(x => x.id === id); 
       if (!ep) return; 
       state.prompts.unshift({ id: crypto.randomUUID(), sourceId: id, title: ep.title, text: ep.text, description: `From ${ep.author}`, tags: ep.tags || [], folderId: null, platform: 'universal', variables: [], isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() }); 
@@ -1221,7 +1229,7 @@ function renderStats() {
     <div class="stats-section"><div class="stats-section-title">${t('mostUsedPrompts')}</div>${topPrompts.length > 0 ? topPrompts.map((p, i) => `<div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 30))}</span><span class="top-prompt-uses">${p.useCount} ${t('uses')}</span></div>`).join('') : `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:8px 0;">${t('noUsageData')}</div>`}</div>
     ${platforms.length > 0 ? `<div class="stats-section"><div class="stats-section-title">${t('usageByPlatform')}</div><div class="platform-stats">${platforms.map(([name, count]) => `<div class="platform-stat-row"><span class="platform-stat-name">${escapeHtml(name)}</span><div class="platform-stat-bar-bg"><div class="platform-stat-bar" style="width:${(count / maxPlatform) * 100}%;"></div></div><span class="platform-stat-count">${count}</span></div>`).join('')}</div></div>` : ''}
     ${topTags.length > 0 ? `<div class="stats-section"><div class="stats-section-title">${t('topTags')}</div><div class="tags" style="flex-wrap:wrap;">${topTags.map(([tag, count]) => `<span class="tag">#${escapeHtml(tag)} (${count})</span>`).join('')}</div></div>` : ''}
-    ${!state.isPremium && state.user ? `<div class="stats-section" style="border-color:var(--accent);"><div class="stats-section-title">${t('freePlan')}</div><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">${t('promptsUsed', state.prompts.length, state.promptLimit)}<div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${Math.min((state.prompts.length / state.promptLimit) * 100, 100)}%;background:${state.prompts.length >= state.promptLimit ? 'var(--error)' : 'var(--accent)'};border-radius:3px;"></div></div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">${t('upgradeInfo')}</div></div></div>` : ''}
+    ${!state.isPremium && state.user ? `<div class="stats-section" style="border-color:var(--accent);"><div class="stats-section-title">${t('freePlan')}</div><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">${t('promptsUsed', state.prompts.length, getEffectiveLimit())}<div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${Math.min((state.prompts.length / getEffectiveLimit()) * 100, 100)}%;background:${state.prompts.length >= getEffectiveLimit() ? 'var(--error)' : 'var(--accent)'};border-radius:3px;"></div></div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">${t('upgradeInfo')}</div></div></div>` : ''}
   </div>`;
 }
 
@@ -1244,7 +1252,7 @@ function openSettings() {
       <div class="modal-header"><h2 class="modal-title">${t('settings')}</h2><button class="btn btn-icon btn-ghost close-modal-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div class="form-group"><label class="form-label">${t('account')}</label>
-          ${user ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--bg-secondary);border-radius:var(--radius-md);border:1px solid var(--border);"><div><div style="font-weight:500;">${escapeHtml(user.email || user.name || t('signedIn'))}</div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:2px;">${t('cloudSyncActive')}${state.isPremium ? ' | ' + t('premium') : ` | ${t('free')} (${state.prompts.length}/${state.promptLimit})`}</div></div><button class="btn btn-secondary btn-sm" id="settings-signout-btn">${t('signOut')}</button></div>` :
+          ${user ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--bg-secondary);border-radius:var(--radius-md);border:1px solid var(--border);"><div><div style="font-weight:500;">${escapeHtml(user.email || user.name || t('signedIn'))}</div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:2px;">${t('cloudSyncActive')}${state.isPremium ? ' | Premium' : ` | ${t('free')} (${state.prompts.length}/${getEffectiveLimit()})`}</div></div><button class="btn btn-secondary btn-sm" id="settings-signout-btn">${t('signOut')}</button></div>` :
             `<button class="btn btn-primary" id="settings-signin-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13.8 12H3"/></svg>${t('signInWithGoogle')}</button><span class="form-hint">${t('signInHint')}</span>`}
         </div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('language')}</label><select id="settings-lang"><option value="en" ${_lang === 'en' ? 'selected' : ''}>${t('langEnglish')}</option><option value="ru" ${_lang === 'ru' ? 'selected' : ''}>${t('langRussian')}</option></select></div><div class="divider"></div>
@@ -1367,6 +1375,20 @@ function loadShortcutsDisplay(commandNames) {
 async function checkPremiumStatus() {
   if (!state.session || !state.user) return;
   try {
+    // Use sync_user_on_login RPC for reliable premium status
+    const syncRes = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/sync_user_on_login', body: {} });
+    if (syncRes?.data) {
+      const syncData = Array.isArray(syncRes.data) ? syncRes.data[0] : syncRes.data;
+      if (syncData && syncData.success !== false) {
+        state.isPremium = syncData.is_premium || false;
+        state.promptLimit = syncData.prompt_limit || FREE_PROMPT_LIMIT;
+        await saveData('isPremium', state.isPremium);
+        await saveData('promptLimit', state.promptLimit);
+        console.log('✅ Premium status checked:', state.isPremium, 'Limit:', state.promptLimit);
+        return;
+      }
+    }
+    // Fallback: direct profile query
     const res = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}&select=is_premium,prompt_limit` });
     if (res?.data?.[0]) {
       state.isPremium = res.data[0].is_premium || false;
@@ -1380,22 +1402,37 @@ async function checkPremiumStatus() {
 // ==================== SEARCH ====================
 function initSearch() {
   const input = document.getElementById('search-input');
+  let searchCache = null; // Cache lowercase versions for faster search
+  
   const debouncedSearch = debounce((q) => {
     if (!q) {
-      if (state.searchOriginalPrompts) { state.prompts = state.searchOriginalPrompts; state.searchOriginalPrompts = null; }
+      if (state.searchOriginalPrompts) { state.prompts = state.searchOriginalPrompts; state.searchOriginalPrompts = null; searchCache = null; }
       renderPrompts();
       return;
     }
-    if (!state.searchOriginalPrompts) state.searchOriginalPrompts = [...state.prompts];
-    state.prompts = state.searchOriginalPrompts.filter(p =>
-      p.title.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q) ||
-      (p.tags || []).some(tg => tg.toLowerCase().includes(q)) || p.text.toLowerCase().includes(q)
+    if (!state.searchOriginalPrompts) {
+      state.searchOriginalPrompts = [...state.prompts];
+      // Pre-compute lowercase search fields once
+      searchCache = state.searchOriginalPrompts.map(p => ({
+        prompt: p,
+        title: p.title.toLowerCase(),
+        desc: (p.description || '').toLowerCase(),
+        tags: (p.tags || []).map(tg => tg.toLowerCase()),
+        text: p.text.toLowerCase()
+      }));
+    }
+    
+    // Use cached lowercase fields for faster filtering
+    const filtered = searchCache.filter(c =>
+      c.title.includes(q) || c.desc.includes(q) ||
+      c.tags.some(tg => tg.includes(q)) || c.text.includes(q)
     );
+    state.prompts = filtered.map(c => c.prompt);
     renderPrompts();
     if (state.prompts.length === 0) {
       document.getElementById('prompts-list').innerHTML = `<div class="empty-state"><div class="empty-state-title">${t('noPromptsFound')}</div></div>`;
     }
-  }, 250);
+  }, 200);
 
   input.addEventListener('input', () => debouncedSearch(input.value.trim().toLowerCase()));
 }
@@ -1505,57 +1542,41 @@ async function syncAllData() {
   console.log('🔄 Syncing data with Supabase...');
   
   try {
-    // Step 1: Ensure profile exists (use GET then POST if needed)
-    console.log('📋 Checking user profile...');
-    let profileExists = false;
-    
-    const profileRes = await supabaseMsg({ 
+    // Step 1: Use sync_user_on_login RPC to ensure profile exists and get premium status
+    console.log('📋 Syncing user profile via RPC...');
+    const syncRes = await supabaseMsg({ 
       action: 'supabaseRequest', 
-      method: 'GET', 
-      path: `profiles?id=eq.${state.user.id}&select=id,is_premium,prompt_limit` 
+      method: 'POST', 
+      path: 'rpc/sync_user_on_login',
+      body: {}
     });
     
-    if (profileRes?.data?.length > 0) {
-      profileExists = true;
-      const profile = profileRes.data[0];
-      state.isPremium = profile.is_premium || false;
-      state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
-      console.log('✅ Profile found:', profile.id);
-    } else {
-      // Profile doesn't exist - create it
-      console.log('📝 Creating user profile...');
-      const createRes = await supabaseMsg({ 
-        action: 'supabaseRequest', 
-        method: 'POST', 
-        path: 'profiles', 
-        body: { 
-          id: state.user.id, 
-          email: state.user.email, 
-          full_name: state.user.name || state.user.email?.split('@')[0],
-          avatar_url: state.user.avatar || '',
-          is_premium: false,
-          prompt_limit: FREE_PROMPT_LIMIT
-        } 
-      });
-      
-      if (createRes?.error) {
-        // Error might be duplicate key - profile created by trigger
-        console.log('⚠️ Profile creation returned error (may already exist from trigger):', createRes.error);
-        // Try fetching again
-        const retryRes = await supabaseMsg({ 
-          action: 'supabaseRequest', 
-          method: 'GET', 
-          path: `profiles?id=eq.${state.user.id}` 
-        });
-        if (retryRes?.data?.length > 0) {
-          profileExists = true;
-          const profile = retryRes.data[0];
-          state.isPremium = profile.is_premium || false;
-          state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
-        }
-      } else {
+    let profileExists = false;
+    
+    if (syncRes?.data) {
+      const syncData = Array.isArray(syncRes.data) ? syncRes.data[0] : syncRes.data;
+      if (syncData && syncData.success !== false) {
         profileExists = true;
-        console.log('✅ Profile created successfully');
+        state.isPremium = syncData.is_premium || false;
+        state.promptLimit = syncData.prompt_limit || FREE_PROMPT_LIMIT;
+        console.log('✅ Profile synced via RPC. Premium:', state.isPremium, 'Limit:', state.promptLimit);
+      } else {
+        console.warn('⚠️ sync_user_on_login returned:', syncData);
+      }
+    } else if (syncRes?.error) {
+      console.warn('⚠️ sync_user_on_login error:', syncRes.error);
+      // Fallback: try direct profile fetch
+      const profileRes = await supabaseMsg({ 
+        action: 'supabaseRequest', 
+        method: 'GET', 
+        path: `profiles?id=eq.${state.user.id}&select=id,is_premium,prompt_limit` 
+      });
+      if (profileRes?.data?.length > 0) {
+        profileExists = true;
+        const profile = profileRes.data[0];
+        state.isPremium = profile.is_premium || false;
+        state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
+        console.log('✅ Profile found via fallback. Premium:', state.isPremium, 'Limit:', state.promptLimit);
       }
     }
     
@@ -1604,6 +1625,7 @@ async function syncAllData() {
         title: p.title, 
         text: p.text, 
         description: p.description, 
+        imageUrl: p.image_url || null,
         folderId: p.folder_id, 
         platform: p.platform, 
         tags: p.tags || [], 
@@ -1635,7 +1657,7 @@ async function syncAllData() {
     renderFavorites();
     renderLimitBanner();
     
-    console.log('✅ Sync complete! Prompts:', state.prompts.length, 'Folders:', state.folders.length);
+    console.log('✅ Sync complete! Prompts:', state.prompts.length, 'Folders:', state.folders.length, 'Premium:', state.isPremium);
   } catch (e) { 
     console.error('❌ Sync error:', e); 
   }
@@ -1720,13 +1742,11 @@ async function init() {
     if (state.settings.theme === 'system') applyTheme('system');
   });
 
-  // Always try to load library prompts (they're public)
-  loadLibraryPrompts();
-  
-  // If logged in, sync user data
-  if (state.session) { 
+  // If logged in, load library and sync user data
+  if (state.session && state.user) { 
     checkPremiumStatus(); 
     syncAllData();
+    loadLibraryPrompts();
   }
 }
 
