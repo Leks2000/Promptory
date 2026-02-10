@@ -102,6 +102,81 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
 
+// ==================== IMAGE URL RESOLVER ====================
+// Resolves Supabase Storage URLs to displayable URLs (handles private buckets)
+const imageCache = new Map(); // Cache resolved image URLs
+
+function isSupabaseStorageUrl(url) {
+  if (!url) return false;
+  return url.includes('supabase.co/storage/v1/') || url.startsWith('supabase-storage://');
+}
+
+function extractStoragePath(url) {
+  if (!url) return null;
+  // supabase-storage://Lib_img/user-id/file.jpg
+  if (url.startsWith('supabase-storage://')) {
+    return url.replace('supabase-storage://', '');
+  }
+  // https://xxx.supabase.co/storage/v1/object/public/Lib_img/...
+  const publicMatch = url.match(/\/storage\/v1\/object\/(?:public|authenticated)\/(.+)$/);
+  if (publicMatch) return publicMatch[1];
+  // https://xxx.supabase.co/storage/v1/object/sign/Lib_img/...?token=...
+  const signMatch = url.match(/\/storage\/v1\/object\/sign\/(.+?)\?/);
+  if (signMatch) return signMatch[1];
+  return null;
+}
+
+async function resolveImageUrl(url) {
+  if (!url) return null;
+  // Data URLs are already displayable
+  if (url.startsWith('data:')) return url;
+  // Non-Supabase URLs can be used directly
+  if (!isSupabaseStorageUrl(url)) return url;
+  
+  // Check cache first
+  if (imageCache.has(url)) {
+    const cached = imageCache.get(url);
+    // Signed URLs expire; check if still valid (1h buffer)
+    if (cached.expires > Date.now()) return cached.url;
+    imageCache.delete(url);
+  }
+  
+  // Need to resolve through background script
+  const storagePath = extractStoragePath(url);
+  if (!storagePath) return url;
+  
+  const parts = storagePath.split('/');
+  const bucket = parts[0];
+  const path = parts.slice(1).join('/');
+  
+  try {
+    // Get a signed URL from background (valid for 1 hour)
+    const res = await supabaseMsg({ action: 'getSignedUrl', bucket, path, expiresIn: 3600 });
+    if (res?.data?.signedUrl) {
+      imageCache.set(url, { url: res.data.signedUrl, expires: Date.now() + 3500000 });
+      return res.data.signedUrl;
+    }
+    // Fallback: get image as data URL
+    const dataRes = await supabaseMsg({ action: 'getImageAsDataUrl', bucket, path });
+    if (dataRes?.data?.dataUrl) {
+      imageCache.set(url, { url: dataRes.data.dataUrl, expires: Date.now() + 3500000 });
+      return dataRes.data.dataUrl;
+    }
+  } catch (e) {
+    console.warn('Failed to resolve image URL:', e);
+  }
+  return url; // Return original as fallback
+}
+
+// Load image into an <img> element, resolving Supabase URLs
+async function loadImageIntoElement(imgEl, url) {
+  if (!url || !imgEl) return;
+  const resolvedUrl = await resolveImageUrl(url);
+  if (resolvedUrl && imgEl) {
+    imgEl.src = resolvedUrl;
+  }
+}
+
 // ==================== FREE TIER LIMIT ====================
 function getEffectiveLimit() {
   return (state.promptLimit > 0 && state.promptLimit <= 1000) ? state.promptLimit : FREE_PROMPT_LIMIT;
@@ -552,7 +627,8 @@ async function shareToLibrary(promptId) {
           });
           
           if (!uploadRes?.error) {
-            imageUrl = `${SUPABASE_URL}/storage/v1/object/public/Lib_img/${fileName}`;
+            // Use the signed URL or storage path returned by background
+            imageUrl = uploadRes?.data?.signedUrl || uploadRes?.data?.publicUrl || `${SUPABASE_URL}/storage/v1/object/public/Lib_img/${fileName}`;
             console.log('✅ Image uploaded:', imageUrl);
           } else {
             console.warn('⚠️ Image upload failed:', uploadRes.error);
@@ -615,8 +691,8 @@ function openPromptEditor(promptId = null) {
   const prompt = promptId ? state.prompts.find(p => p.id === promptId) : null;
   const isEdit = !!prompt;
   const hasImage = prompt?.imageUrl;
-  // Validate image URL - check if it's a valid URL or data URI
-  const imageUrlValid = hasImage && (prompt.imageUrl.startsWith('http') || prompt.imageUrl.startsWith('data:'));
+  // Validate image URL - check if it's a valid URL, data URI, or supabase-storage:// scheme
+  const imageUrlValid = hasImage && (prompt.imageUrl.startsWith('http') || prompt.imageUrl.startsWith('data:') || prompt.imageUrl.startsWith('supabase-storage://'));
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'prompt-editor-modal';
@@ -631,7 +707,8 @@ function openPromptEditor(promptId = null) {
           <label class="form-label">${t('image') || 'Image'}</label>
           <div class="image-upload-container" id="pe-image-container">
             <div class="image-upload-preview" id="pe-image-preview" style="display:${imageUrlValid ? 'block' : 'none'};position:relative;">
-              ${imageUrlValid ? `<img src="${escapeHtml(prompt.imageUrl)}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.parentElement.style.display='none';document.getElementById('pe-image-zone').style.display='flex';">` : ''}
+              ${imageUrlValid ? `<img id="pe-image-el" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.parentElement.style.display='none';document.getElementById('pe-image-zone').style.display='flex';">
+              <div class="image-loading-indicator" id="pe-image-loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text-tertiary);font-size:12px;">Loading...</div>` : ''}
               <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
             </div>
             <div class="image-upload-zone" id="pe-image-zone" style="display:${imageUrlValid ? 'none' : 'flex'};align-items:center;justify-content:center;padding:20px;border:2px dashed var(--border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.2s;">
@@ -657,6 +734,32 @@ function openPromptEditor(promptId = null) {
   document.body.appendChild(modal);
   setTimeout(() => modal.classList.add('visible'), 10);
   document.getElementById('pe-title').focus();
+
+  // Async: resolve and load image from Supabase Storage (private bucket)
+  if (imageUrlValid && prompt?.imageUrl) {
+    const imgEl = document.getElementById('pe-image-el');
+    const loadingIndicator = document.getElementById('pe-image-loading');
+    if (imgEl) {
+      resolveImageUrl(prompt.imageUrl).then(resolvedUrl => {
+        if (resolvedUrl && imgEl) {
+          imgEl.src = resolvedUrl;
+          imgEl.onload = () => { if (loadingIndicator) loadingIndicator.style.display = 'none'; };
+          imgEl.onerror = () => {
+            console.warn('Image load failed for:', prompt.imageUrl);
+            const preview = document.getElementById('pe-image-preview');
+            const zone = document.getElementById('pe-image-zone');
+            if (preview) preview.style.display = 'none';
+            if (zone) zone.style.display = 'flex';
+          };
+        }
+      }).catch(() => {
+        const preview = document.getElementById('pe-image-preview');
+        const zone = document.getElementById('pe-image-zone');
+        if (preview) preview.style.display = 'none';
+        if (zone) zone.style.display = 'flex';
+      });
+    }
+  }
 
   const textArea = document.getElementById('pe-text');
   textArea.addEventListener('input', debounce(updateVarsDisplay, 300));
@@ -841,8 +944,10 @@ async function uploadImageToStorage(file, promptId) {
       return null;
     }
     
-    // Return public URL
-    return res?.data?.publicUrl || null;
+    // Return the signed URL or storage path (works with private buckets)
+    const url = res?.data?.publicUrl || null;
+    console.log('📤 Upload result URL:', url);
+    return url;
   } catch (e) {
     console.error('Storage upload exception:', e);
     return null;
@@ -1089,7 +1194,10 @@ function renderExplore() {
     const categoryInfo = CATEGORY_COLORS[p.category] || CATEGORY_COLORS['general'];
     
     // Thumbnail: use image_url if available, otherwise category gradient (no emoji)
-    const thumbnailStyle = p.imageUrl 
+    // For Supabase storage images, we'll load them asynchronously after render
+    const hasStorageImage = p.imageUrl && isSupabaseStorageUrl(p.imageUrl);
+    const hasDirectImage = p.imageUrl && !isSupabaseStorageUrl(p.imageUrl);
+    const thumbnailStyle = hasDirectImage 
       ? `background-image: url('${escapeHtml(p.imageUrl)}'); background-size: cover; background-position: center;`
       : `background: ${categoryInfo.bg};`;
     const thumbnailContent = '';
@@ -1097,7 +1205,7 @@ function renderExplore() {
     return `<div class="explore-card-wrapper" data-explore-id="${p.id}" ${delay}>
       <div class="explore-card ${isFlipped ? 'flipped' : ''}">
         <div class="explore-card-front">
-          <div class="explore-card-thumbnail" style="${thumbnailStyle}">
+          <div class="explore-card-thumbnail${hasStorageImage ? ' needs-image-load' : ''}" ${hasStorageImage ? `data-image-url="${escapeHtml(p.imageUrl)}"` : ''} style="${thumbnailStyle}">
             ${thumbnailContent}
             <div class="explore-card-category-badge">${escapeHtml(p.category || 'general')}</div>
           </div>
@@ -1189,6 +1297,21 @@ function renderExplore() {
       }
     }
   };
+  
+  // Async: load images from private Supabase Storage for explore cards
+  list.querySelectorAll('.explore-card-thumbnail.needs-image-load').forEach(async (el) => {
+    const imageUrl = el.dataset.imageUrl;
+    if (imageUrl) {
+      try {
+        const resolvedUrl = await resolveImageUrl(imageUrl);
+        if (resolvedUrl) {
+          el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: cover; background-position: center;`;
+        }
+      } catch (e) {
+        console.warn('Failed to load explore card image:', e);
+      }
+    }
+  });
 }
 
 // ==================== REPORT MODAL ====================
@@ -1324,8 +1447,9 @@ function openSettings() {
       showToast(t('signedInSuccess'), 'success');
       closeModal('settings-modal');
       renderExplore();
-      loadLibraryPrompts();
-      syncAllData();
+      // First sync profile/data, THEN load library (order matters for profile creation)
+      await syncAllData();
+      await loadLibraryPrompts();
       checkPremiumStatus();
     } else {
       showToast(t('signInFailed') + ': ' + (result?.error || ''), 'error');
@@ -1867,9 +1991,11 @@ async function init() {
 
   // If logged in, load library and sync user data
   if (state.session && state.user) { 
+    // Run sync first, then load library (profile must exist before library loads)
+    syncAllData().then(() => {
+      loadLibraryPrompts();
+    });
     checkPremiumStatus(); 
-    syncAllData();
-    loadLibraryPrompts();
   }
 }
 
