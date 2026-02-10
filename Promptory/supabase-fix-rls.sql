@@ -1,23 +1,26 @@
--- Promptory RLS FIX Script
--- Run this in Supabase SQL Editor to fix the "permission denied for table profiles" error
--- This script fixes issues with library sharing and data sync
+-- Promptory RLS FIX Script v2
+-- Run this in Supabase SQL Editor to fix ALL permission and data sync issues
+-- Fixes: permission denied, library sharing, premium status, profile sync
 
 -- ===========================================
--- STEP 1: Drop existing problematic policies
+-- STEP 1: Drop ALL existing problematic policies
 -- ===========================================
 
 DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Authenticated can read profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Authenticated can read all profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Service can insert profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Users can share to library" ON public.library_prompts;
+DROP POLICY IF EXISTS "Anyone can view library prompts" ON public.library_prompts;
+DROP POLICY IF EXISTS "Authenticated can view library prompts" ON public.library_prompts;
 
 -- ===========================================
 -- STEP 2: Create correct profiles policies
 -- ===========================================
 
--- Allow ALL authenticated users to read ANY profile (required for foreign key lookups)
+-- Allow ALL authenticated users to read ANY profile (required for FK lookups and author display)
 CREATE POLICY "Authenticated can read all profiles" ON public.profiles
   FOR SELECT TO authenticated USING (true);
 
@@ -32,11 +35,14 @@ CREATE POLICY "Users can insert own profile" ON public.profiles
   WITH CHECK (auth.uid() = id);
 
 -- ===========================================
--- STEP 3: Fix library_prompts INSERT policy
+-- STEP 3: Fix library_prompts policies
 -- ===========================================
 
+-- Library prompts visible ONLY to authenticated users
+CREATE POLICY "Authenticated can view library prompts" ON public.library_prompts
+  FOR SELECT TO authenticated USING (true);
+
 -- Allow any authenticated user to share prompts to library
--- Author_id can be the user's ID or NULL (for test data)
 CREATE POLICY "Users can share to library" ON public.library_prompts
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -45,9 +51,13 @@ CREATE POLICY "Users can share to library" ON public.library_prompts
   );
 
 -- ===========================================
--- STEP 4: Create function to safely share to library
--- This bypasses RLS issues by using SECURITY DEFINER
+-- STEP 4: Create/update share_prompt_to_library function
+-- Now supports image_url parameter
+-- Uses SECURITY DEFINER to bypass RLS issues
 -- ===========================================
+
+DROP FUNCTION IF EXISTS share_prompt_to_library(TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT[], TEXT);
+DROP FUNCTION IF EXISTS share_prompt_to_library(TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT[], TEXT, TEXT);
 
 CREATE OR REPLACE FUNCTION share_prompt_to_library(
   p_title TEXT,
@@ -56,7 +66,8 @@ CREATE OR REPLACE FUNCTION share_prompt_to_library(
   p_author TEXT,
   p_tags TEXT[],
   p_variables TEXT[],
-  p_category TEXT
+  p_category TEXT,
+  p_image_url TEXT DEFAULT NULL
 )
 RETURNS JSON AS $$
 DECLARE
@@ -78,11 +89,11 @@ BEGIN
            (SELECT COALESCE(raw_user_meta_data->>'full_name', raw_user_meta_data->>'name', split_part(email, '@', 1)) FROM auth.users WHERE id = user_id);
   END IF;
   
-  -- Insert into library_prompts
+  -- Insert into library_prompts with image_url
   INSERT INTO public.library_prompts (
-    title, text, description, author, author_id, tags, variables, category, is_approved
+    title, text, description, author, author_id, tags, variables, category, is_approved, image_url
   ) VALUES (
-    p_title, p_text, p_description, p_author, user_id, p_tags, p_variables, p_category, true
+    p_title, p_text, p_description, p_author, user_id, p_tags, p_variables, p_category, true, p_image_url
   )
   RETURNING id INTO new_id;
   
@@ -95,7 +106,8 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ===========================================
--- STEP 5: Create function to sync user data on login
+-- STEP 5: Create/update sync_user_on_login function
+-- Ensures profile exists and returns correct premium status
 -- ===========================================
 
 CREATE OR REPLACE FUNCTION sync_user_on_login()
@@ -110,7 +122,7 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'Not authenticated');
   END IF;
   
-  -- Ensure profile exists
+  -- Ensure profile exists (upsert)
   INSERT INTO public.profiles (id, email, full_name, avatar_url)
   SELECT 
     user_id,
@@ -125,14 +137,14 @@ BEGIN
     avatar_url = COALESCE(EXCLUDED.avatar_url, public.profiles.avatar_url),
     updated_at = NOW();
   
-  -- Get updated profile
+  -- Get updated profile with ACTUAL values from DB
   SELECT * INTO user_profile FROM public.profiles WHERE id = user_id;
   
   RETURN json_build_object(
     'success', true,
     'user_id', user_id,
-    'is_premium', user_profile.is_premium,
-    'prompt_limit', user_profile.prompt_limit,
+    'is_premium', COALESCE(user_profile.is_premium, false),
+    'prompt_limit', COALESCE(user_profile.prompt_limit, 20),
     'email', user_profile.email,
     'full_name', user_profile.full_name
   );
@@ -140,14 +152,24 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ===========================================
--- STEP 6: Grant execute permissions
+-- STEP 6: Fix any accounts with wrong prompt_limit
+-- Reset non-premium accounts to proper limit of 20
 -- ===========================================
 
-GRANT EXECUTE ON FUNCTION share_prompt_to_library TO authenticated;
-GRANT EXECUTE ON FUNCTION sync_user_on_login TO authenticated;
+UPDATE public.profiles 
+SET prompt_limit = 20 
+WHERE is_premium = false AND prompt_limit != 20;
+
+-- ===========================================
+-- STEP 7: Grant execute permissions
+-- ===========================================
+
+GRANT EXECUTE ON FUNCTION share_prompt_to_library(TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT[], TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION sync_user_on_login() TO authenticated;
 
 -- ===========================================
 -- VERIFICATION
 -- ===========================================
 
-SELECT 'RLS policies updated successfully!' as message;
+SELECT 'RLS policies and functions updated successfully!' as message;
+SELECT id, email, is_premium, prompt_limit FROM public.profiles ORDER BY created_at;
