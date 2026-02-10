@@ -615,6 +615,8 @@ function openPromptEditor(promptId = null) {
   const prompt = promptId ? state.prompts.find(p => p.id === promptId) : null;
   const isEdit = !!prompt;
   const hasImage = prompt?.imageUrl;
+  // Validate image URL - check if it's a valid URL or data URI
+  const imageUrlValid = hasImage && (prompt.imageUrl.startsWith('http') || prompt.imageUrl.startsWith('data:'));
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'prompt-editor-modal';
@@ -628,11 +630,11 @@ function openPromptEditor(promptId = null) {
         <div class="form-group">
           <label class="form-label">${t('image') || 'Image'}</label>
           <div class="image-upload-container" id="pe-image-container">
-            <div class="image-upload-preview" id="pe-image-preview" style="display:${hasImage ? 'block' : 'none'};">
-              ${hasImage ? `<img src="${escapeHtml(prompt.imageUrl)}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;">` : ''}
+            <div class="image-upload-preview" id="pe-image-preview" style="display:${imageUrlValid ? 'block' : 'none'};position:relative;">
+              ${imageUrlValid ? `<img src="${escapeHtml(prompt.imageUrl)}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.parentElement.style.display='none';document.getElementById('pe-image-zone').style.display='flex';">` : ''}
               <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
             </div>
-            <div class="image-upload-zone" id="pe-image-zone" style="display:${hasImage ? 'none' : 'flex'};align-items:center;justify-content:center;padding:20px;border:2px dashed var(--border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.2s;">
+            <div class="image-upload-zone" id="pe-image-zone" style="display:${imageUrlValid ? 'none' : 'flex'};align-items:center;justify-content:center;padding:20px;border:2px dashed var(--border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.2s;">
               <div style="text-align:center;color:var(--text-tertiary);">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin:0 auto 8px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                 <div style="font-size:var(--font-size-xs);">${t('clickToUpload') || 'Click to upload image'}</div>
@@ -716,10 +718,11 @@ function handleImageSelect(file) {
     const preview = document.getElementById('pe-image-preview');
     const zone = document.getElementById('pe-image-zone');
     preview.innerHTML = `
-      <img src="${e.target.result}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;">
+      <img src="${e.target.result}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.style.display='none';">
       <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     `;
     preview.style.display = 'block';
+    preview.style.position = 'relative';
     zone.style.display = 'none';
     // Re-attach remove handler
     document.getElementById('pe-image-remove')?.addEventListener('click', (ev) => {
@@ -979,12 +982,13 @@ async function loadLibraryPrompts() {
   
   console.log('📚 Loading library prompts...');
   try {
+    // First try: load all library prompts (approved or null)
     const res = await supabaseMsg({ 
       action: 'supabaseRequest', 
       method: 'GET', 
-      path: 'library_prompts?is_approved=eq.true&order=likes.desc&limit=50' 
+      path: 'library_prompts?or=(is_approved.eq.true,is_approved.is.null)&order=likes.desc&limit=50' 
     });
-    console.log('📚 Library response:', res);
+    console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
     
     if (res?.data && Array.isArray(res.data)) {
       state.libraryPrompts = res.data.map(p => ({ 
@@ -1004,13 +1008,43 @@ async function loadLibraryPrompts() {
       console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts');
     } else if (res?.error) {
       console.error('📚 Library load error:', res.error);
+      // Fallback: try without the OR filter (simpler query)
+      console.log('📚 Trying fallback query without filter...');
+      const fallbackRes = await supabaseMsg({ 
+        action: 'supabaseRequest', 
+        method: 'GET', 
+        path: 'library_prompts?order=likes.desc&limit=50' 
+      });
+      console.log('📚 Fallback response:', JSON.stringify(fallbackRes).substring(0, 500));
+      if (fallbackRes?.data && Array.isArray(fallbackRes.data)) {
+        state.libraryPrompts = fallbackRes.data.map(p => ({ 
+          id: p.id, 
+          title: p.title, 
+          text: p.text, 
+          description: p.description, 
+          author: p.author, 
+          authorId: p.author_id, 
+          tags: p.tags || [], 
+          likes: p.likes || 0, 
+          downloads: p.downloads || 0, 
+          category: p.category || 'general', 
+          isFeatured: p.is_featured,
+          imageUrl: p.image_url || null
+        }));
+        console.log('📚 Fallback loaded', state.libraryPrompts.length, 'library prompts');
+      }
     }
     
     // Load user likes and reports
-    const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
-    if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
-    const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
-    if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
+    try {
+      const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
+      if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
+    } catch (e) { console.warn('📚 Failed to load likes:', e); }
+    
+    try {
+      const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
+      if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
+    } catch (e) { console.warn('📚 Failed to load reports:', e); }
   } catch (e) { 
     console.error('Failed to load library:', e); 
   }
@@ -1284,6 +1318,9 @@ function openSettings() {
     if (result?.success) {
       state.user = result.user;
       state.session = result.session;
+      // Ensure user/session are saved to local storage for persistence
+      await saveData('user', state.user);
+      await saveData('session', state.session);
       showToast(t('signedInSuccess'), 'success');
       closeModal('settings-modal');
       renderExplore();
@@ -1492,28 +1529,40 @@ async function syncPromptToSupabase(prompt) {
   }
   try { 
     console.log('☁️ Syncing prompt to cloud:', prompt.title);
+    const body = { 
+      id: prompt.id, 
+      user_id: state.user.id, 
+      folder_id: prompt.folderId || null, 
+      title: prompt.title, 
+      text: prompt.text, 
+      description: prompt.description, 
+      image_url: prompt.imageUrl || null,
+      platform: prompt.platform || 'universal', 
+      tags: prompt.tags || [], 
+      variables: prompt.variables || [], 
+      is_favorite: prompt.isFavorite || false, 
+      use_count: prompt.useCount || 0, 
+      updated_at: new Date().toISOString() 
+    };
     const res = await supabaseMsg({ 
       action: 'supabaseRequest', 
       method: 'POST', 
       path: 'prompts', 
-      body: { 
-        id: prompt.id, 
-        user_id: state.user.id, 
-        folder_id: prompt.folderId || null, 
-        title: prompt.title, 
-        text: prompt.text, 
-        description: prompt.description, 
-        image_url: prompt.imageUrl || null,
-        platform: prompt.platform || 'universal', 
-        tags: prompt.tags || [], 
-        variables: prompt.variables || [], 
-        is_favorite: prompt.isFavorite || false, 
-        use_count: prompt.useCount || 0, 
-        updated_at: new Date().toISOString() 
-      } 
+      body 
     }); 
     if (res?.error) {
-      console.warn('⚠️ Sync error:', res.error);
+      console.warn('⚠️ Sync error for prompt:', prompt.title, res.error);
+      // If error contains "foreign key", the folder might not exist in cloud
+      if (typeof res.error === 'string' && res.error.includes('folder_id')) {
+        console.log('🔄 Retrying without folder_id...');
+        body.folder_id = null;
+        const retry = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body });
+        if (retry?.error) {
+          console.warn('⚠️ Retry also failed:', retry.error);
+        } else {
+          console.log('✅ Synced prompt (without folder):', prompt.title);
+        }
+      }
     } else {
       console.log('✅ Synced prompt:', prompt.title);
     }
@@ -1544,53 +1593,89 @@ async function syncAllData() {
   try {
     // Step 1: Use sync_user_on_login RPC to ensure profile exists and get premium status
     console.log('📋 Syncing user profile via RPC...');
-    const syncRes = await supabaseMsg({ 
-      action: 'supabaseRequest', 
-      method: 'POST', 
-      path: 'rpc/sync_user_on_login',
-      body: {}
-    });
-    
     let profileExists = false;
     
-    if (syncRes?.data) {
-      const syncData = Array.isArray(syncRes.data) ? syncRes.data[0] : syncRes.data;
-      if (syncData && syncData.success !== false) {
-        profileExists = true;
-        state.isPremium = syncData.is_premium || false;
-        state.promptLimit = syncData.prompt_limit || FREE_PROMPT_LIMIT;
-        console.log('✅ Profile synced via RPC. Premium:', state.isPremium, 'Limit:', state.promptLimit);
-      } else {
-        console.warn('⚠️ sync_user_on_login returned:', syncData);
-      }
-    } else if (syncRes?.error) {
-      console.warn('⚠️ sync_user_on_login error:', syncRes.error);
-      // Fallback: try direct profile fetch
-      const profileRes = await supabaseMsg({ 
+    try {
+      const syncRes = await supabaseMsg({ 
         action: 'supabaseRequest', 
-        method: 'GET', 
-        path: `profiles?id=eq.${state.user.id}&select=id,is_premium,prompt_limit` 
+        method: 'POST', 
+        path: 'rpc/sync_user_on_login',
+        body: {}
       });
-      if (profileRes?.data?.length > 0) {
+      console.log('📋 sync_user_on_login response:', JSON.stringify(syncRes));
+      
+      if (syncRes?.data) {
+        const syncData = Array.isArray(syncRes.data) ? syncRes.data[0] : syncRes.data;
+        if (syncData && syncData.success !== false) {
+          profileExists = true;
+          state.isPremium = syncData.is_premium || false;
+          state.promptLimit = syncData.prompt_limit || FREE_PROMPT_LIMIT;
+          console.log('✅ Profile synced via RPC. Premium:', state.isPremium, 'Limit:', state.promptLimit);
+        } else {
+          console.warn('⚠️ sync_user_on_login returned:', syncData);
+        }
+      } else if (syncRes?.error) {
+        console.warn('⚠️ sync_user_on_login error:', syncRes.error);
+      }
+    } catch (rpcErr) {
+      console.warn('⚠️ sync_user_on_login exception:', rpcErr);
+    }
+    
+    // Fallback: try direct profile fetch/create if RPC failed
+    if (!profileExists) {
+      console.log('📋 Trying fallback profile fetch...');
+      try {
+        const profileRes = await supabaseMsg({ 
+          action: 'supabaseRequest', 
+          method: 'GET', 
+          path: `profiles?id=eq.${state.user.id}&select=id,is_premium,prompt_limit` 
+        });
+        console.log('📋 Profile fallback response:', JSON.stringify(profileRes));
+        
+        if (profileRes?.data?.length > 0) {
+          profileExists = true;
+          const profile = profileRes.data[0];
+          state.isPremium = profile.is_premium || false;
+          state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
+          console.log('✅ Profile found via fallback. Premium:', state.isPremium, 'Limit:', state.promptLimit);
+        } else {
+          // Try to create profile directly
+          console.log('📋 Creating profile directly...');
+          const createRes = await supabaseMsg({
+            action: 'supabaseRequest',
+            method: 'POST',
+            path: 'profiles',
+            body: {
+              id: state.user.id,
+              email: state.user.email,
+              full_name: state.user.name || state.user.email?.split('@')[0] || 'User',
+              avatar_url: state.user.avatar || ''
+            }
+          });
+          console.log('📋 Profile create response:', JSON.stringify(createRes));
+          if (!createRes?.error) {
+            profileExists = true;
+            console.log('✅ Profile created directly');
+          } else {
+            console.warn('⚠️ Profile create failed:', createRes.error);
+            // Even if insert fails (e.g. duplicate), the profile might exist
+            profileExists = true;
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn('⚠️ Profile fallback error:', fallbackErr);
+        // Assume profile exists and try to continue with sync anyway
         profileExists = true;
-        const profile = profileRes.data[0];
-        state.isPremium = profile.is_premium || false;
-        state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
-        console.log('✅ Profile found via fallback. Premium:', state.isPremium, 'Limit:', state.promptLimit);
       }
     }
     
     await saveData('isPremium', state.isPremium);
     await saveData('promptLimit', state.promptLimit);
-    
-    if (!profileExists) {
-      console.warn('⚠️ Could not create or find profile, skipping sync');
-      return;
-    }
 
-    // Step 2: Sync folders from cloud (with merge strategy)
+    // Step 2: Sync folders (bidirectional merge)
     console.log('📁 Syncing folders...');
     const fRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'folders?order=created_at.asc' });
+    console.log('📁 Folders response:', fRes?.data?.length, 'items, error:', fRes?.error || 'none');
     
     if (fRes?.data) {
       const cloudFolders = fRes.data.map(f => ({ 
@@ -1600,24 +1685,40 @@ async function syncAllData() {
         updatedAt: new Date(f.updated_at).getTime() 
       }));
       
-      // Merge: cloud wins if cloud has data, otherwise upload local
-      if (cloudFolders.length > 0) {
-        state.folders = cloudFolders;
-        console.log('✅ Loaded', cloudFolders.length, 'folders from cloud');
-      } else if (state.folders.length > 0) {
-        console.log('📤 Uploading', state.folders.length, 'local folders to cloud...');
-        for (const f of state.folders) {
-          await syncFolderToSupabase(f);
+      // Bidirectional merge: combine cloud + local, newest wins on conflicts
+      const cloudFolderMap = new Map(cloudFolders.map(f => [f.id, f]));
+      const localFolders = [...state.folders];
+      const mergedFolders = new Map();
+      
+      // Add all cloud folders
+      cloudFolders.forEach(f => mergedFolders.set(f.id, f));
+      
+      // Add local folders that don't exist in cloud, or are newer
+      for (const lf of localFolders) {
+        const cf = cloudFolderMap.get(lf.id);
+        if (!cf) {
+          // Local only - upload to cloud
+          mergedFolders.set(lf.id, lf);
+          await syncFolderToSupabase(lf);
+          console.log('📤 Uploaded local folder:', lf.name);
+        } else if (lf.updatedAt > cf.updatedAt) {
+          // Local is newer - update cloud
+          mergedFolders.set(lf.id, lf);
+          await syncFolderToSupabase(lf);
         }
       }
+      
+      state.folders = Array.from(mergedFolders.values());
       await saveData('folders', state.folders);
+      console.log('✅ Merged folders:', state.folders.length);
     } else if (fRes?.error) {
       console.warn('⚠️ Failed to fetch folders:', fRes.error);
     }
     
-    // Step 3: Sync prompts from cloud (with merge strategy)
+    // Step 3: Sync prompts (bidirectional merge)
     console.log('📝 Syncing prompts...');
     const pRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompts?order=created_at.desc' });
+    console.log('📝 Prompts response:', pRes?.data?.length, 'items, error:', pRes?.error || 'none');
     
     if (pRes?.data) {
       const cloudPrompts = pRes.data.map(p => ({ 
@@ -1636,19 +1737,41 @@ async function syncAllData() {
         updatedAt: new Date(p.updated_at).getTime() 
       }));
       
-      // Merge: cloud wins if cloud has data, otherwise upload local
-      if (cloudPrompts.length > 0) {
-        state.prompts = cloudPrompts;
-        console.log('✅ Loaded', cloudPrompts.length, 'prompts from cloud');
-      } else if (state.prompts.length > 0) {
+      // Bidirectional merge: combine cloud + local, newest wins on conflicts
+      const cloudPromptMap = new Map(cloudPrompts.map(p => [p.id, p]));
+      const localPrompts = [...state.prompts];
+      const mergedPrompts = new Map();
+      
+      // Add all cloud prompts
+      cloudPrompts.forEach(p => mergedPrompts.set(p.id, p));
+      
+      // Add local prompts that don't exist in cloud, or are newer
+      for (const lp of localPrompts) {
+        const cp = cloudPromptMap.get(lp.id);
+        if (!cp) {
+          // Local only - upload to cloud
+          mergedPrompts.set(lp.id, lp);
+          await syncPromptToSupabase(lp);
+          console.log('📤 Uploaded local prompt:', lp.title);
+        } else if (lp.updatedAt > cp.updatedAt) {
+          // Local is newer - update cloud
+          mergedPrompts.set(lp.id, lp);
+          await syncPromptToSupabase(lp);
+        }
+      }
+      
+      state.prompts = Array.from(mergedPrompts.values()).sort((a, b) => b.createdAt - a.createdAt);
+      await saveData('prompts', state.prompts);
+      console.log('✅ Merged prompts:', state.prompts.length);
+    } else if (pRes?.error) {
+      console.warn('⚠️ Failed to fetch prompts:', pRes.error);
+      // If fetch failed but we have local prompts, try uploading them
+      if (state.prompts.length > 0 && profileExists) {
         console.log('📤 Uploading', state.prompts.length, 'local prompts to cloud...');
         for (const p of state.prompts) {
           await syncPromptToSupabase(p);
         }
       }
-      await saveData('prompts', state.prompts);
-    } else if (pRes?.error) {
-      console.warn('⚠️ Failed to fetch prompts:', pRes.error);
     }
     
     // Step 4: Update UI
