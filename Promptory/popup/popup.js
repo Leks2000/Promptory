@@ -122,11 +122,17 @@ function renderLimitBanner() {
   const banner = document.createElement('div');
   banner.id = 'limit-banner';
   banner.className = 'limit-banner';
+  const upgradeBtn = `<button class="btn btn-sm btn-primary limit-upgrade-btn" id="limit-upgrade-btn">${t('upgrade') || 'Upgrade'}</button>`;
   banner.innerHTML = remaining === 0
-    ? `<span class="limit-banner-text">${t('freeLimitBanner')}</span><span class="limit-banner-count">${state.prompts.length}/${state.promptLimit}</span>`
-    : `<span class="limit-banner-text">${t('remainingOnFree', remaining)}</span><span class="limit-banner-count">${state.prompts.length}/${state.promptLimit}</span>`;
+    ? `<div class="limit-banner-content"><span class="limit-banner-text">${t('freeLimitBanner')}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${state.promptLimit}</span>${upgradeBtn}</div>`
+    : `<div class="limit-banner-content"><span class="limit-banner-text">${t('remainingOnFree', remaining)}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${state.promptLimit}</span>${upgradeBtn}</div>`;
   const content = document.querySelector('.content');
   if (content) content.insertBefore(banner, content.firstChild);
+  
+  // Add click handler for upgrade button
+  document.getElementById('limit-upgrade-btn')?.addEventListener('click', () => {
+    showUpgradeModal();
+  });
 }
 
 // ==================== DATA LOADING ====================
@@ -562,8 +568,40 @@ function renderFolders() {
   list.innerHTML = folders.map((f, i) => {
     const count = state.prompts.filter(p => p.folderId === f.id).length;
     const delay = i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : 'style="animation:none;opacity:1;"';
-    return `<div class="folder-card" data-folder-id="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn" data-edit-folder="${f.id}" title="${t('edit')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="prompt-action-btn" data-delete-folder="${f.id}" title="${t('delete')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div>`;
+    return `<div class="folder-card" data-folder-id="${f.id}" data-folder-click="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn" data-edit-folder="${f.id}" title="${t('edit')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="prompt-action-btn" data-delete-folder="${f.id}" title="${t('delete')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div>`;
   }).join('');
+
+  // Click on folder card to navigate to prompts in that folder
+  document.querySelectorAll('[data-folder-click]').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.prompt-action-btn')) return; // Don't trigger on action buttons
+      const folderId = card.dataset.folderClick;
+      // Switch to prompts tab
+      document.querySelector('[data-tab="prompts"]').click();
+      // Expand only this folder section after tab switch
+      setTimeout(() => {
+        const sections = document.querySelectorAll('.folder-section');
+        let targetSection = null;
+        sections.forEach(s => {
+          if (s.dataset.folderId === folderId) {
+            s.classList.add('expanded');
+            localStorage.setItem(`pv-folder-${folderId}`, 'true');
+            targetSection = s;
+            // Add highlight effect
+            s.classList.add('folder-highlight');
+            setTimeout(() => s.classList.remove('folder-highlight'), 2000);
+          } else {
+            s.classList.remove('expanded');
+            localStorage.setItem(`pv-folder-${s.dataset.folderId}`, 'false');
+          }
+        });
+        // Scroll to the folder if found
+        if (targetSection) {
+          targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 150);
+    });
+  });
 
   document.querySelectorAll('[data-edit-folder]').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); openFolderEditor(btn.dataset.editFolder); });
@@ -950,6 +988,47 @@ function initSearch() {
   input.addEventListener('input', () => debouncedSearch(input.value.trim().toLowerCase()));
 }
 
+// ==================== UPGRADE MODAL ====================
+function showUpgradeModal() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'upgrade-modal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header"><h2 class="modal-title">${t('upgradeToPremium')}</h2><button class="btn btn-icon btn-ghost close-modal-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <div class="upgrade-hero">
+          <div class="upgrade-icon">✨</div>
+          <div class="upgrade-title">${t('unlockPremium')}</div>
+        </div>
+        <div class="upgrade-features">
+          <div class="upgrade-feature"><span class="upgrade-feature-icon">♾️</span><span>${t('premiumFeature1')}</span></div>
+          <div class="upgrade-feature"><span class="upgrade-feature-icon">☁️</span><span>${t('premiumFeature2')}</span></div>
+          <div class="upgrade-feature"><span class="upgrade-feature-icon">⭐</span><span>${t('premiumFeature3')}</span></div>
+          <div class="upgrade-feature"><span class="upgrade-feature-icon">🚀</span><span>${t('premiumFeature4')}</span></div>
+        </div>
+        <div class="upgrade-note" style="padding:12px;background:var(--bg-tertiary);border-radius:var(--radius-md);margin-top:16px;">
+          <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6;">${t('premiumNote')}</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost close-modal-btn">${t('cancel')}</button>
+        <button class="btn btn-primary ripple" id="upgrade-contact-btn">${t('contactForPremium')}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.add('visible'), 10);
+  
+  document.getElementById('upgrade-contact-btn').addEventListener('click', () => {
+    // Open contact/email link for premium upgrade
+    window.open('mailto:support@promptory.app?subject=Premium%20Upgrade%20Request', '_blank');
+    closeModal('upgrade-modal');
+  });
+  
+  modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('upgrade-modal')));
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('upgrade-modal'); });
+}
+
 // ==================== MODAL UTILS ====================
 function closeModal(id) {
   const modal = document.getElementById(id);
@@ -979,13 +1058,75 @@ async function syncFolderDeleteToSupabase(id) {
 
 async function syncAllData() {
   if (!state.session || !state.user) return;
+  console.log('🔄 Syncing data with Supabase...');
   try {
+    // First, ensure user profile exists
+    const profileRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}` });
+    if (!profileRes?.data?.length) {
+      // Create profile if it doesn't exist
+      console.log('📝 Creating user profile...');
+      const createRes = await supabaseMsg({ 
+        action: 'supabaseRequest', 
+        method: 'POST', 
+        path: 'profiles', 
+        body: { 
+          id: state.user.id, 
+          email: state.user.email, 
+          full_name: state.user.name,
+          avatar_url: state.user.avatar || '',
+          is_premium: false,
+          prompt_limit: FREE_PROMPT_LIMIT
+        } 
+      });
+      if (createRes?.error) {
+        console.warn('⚠️ Profile creation via API failed, profile may be created by trigger:', createRes.error);
+      } else {
+        console.log('✅ Profile created successfully');
+      }
+    } else {
+      console.log('✅ Profile already exists');
+      // Update premium status from profile
+      const profile = profileRes.data[0];
+      if (profile.is_premium !== undefined) {
+        state.isPremium = profile.is_premium;
+        state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
+        await saveData('isPremium', state.isPremium);
+        await saveData('promptLimit', state.promptLimit);
+      }
+    }
+
+    // Sync folders from cloud
     const fRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'folders?order=created_at.asc' });
-    if (fRes?.data?.length) { state.folders = fRes.data.map(f => ({ id: f.id, name: f.name, createdAt: new Date(f.created_at).getTime(), updatedAt: new Date(f.updated_at).getTime() })); await saveData('folders', state.folders); }
+    if (fRes?.data?.length) { 
+      state.folders = fRes.data.map(f => ({ id: f.id, name: f.name, createdAt: new Date(f.created_at).getTime(), updatedAt: new Date(f.updated_at).getTime() })); 
+      await saveData('folders', state.folders); 
+      console.log('✅ Synced', state.folders.length, 'folders');
+    }
+    
+    // Sync prompts from cloud
     const pRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompts?order=created_at.desc' });
-    if (pRes?.data?.length) { state.prompts = pRes.data.map(p => ({ id: p.id, title: p.title, text: p.text, description: p.description, folderId: p.folder_id, platform: p.platform, tags: p.tags || [], variables: p.variables || [], isFavorite: p.is_favorite, useCount: p.use_count || 0, createdAt: new Date(p.created_at).getTime(), updatedAt: new Date(p.updated_at).getTime() })); await saveData('prompts', state.prompts); }
-    renderPrompts(); renderFolders(); renderFavorites();
-  } catch (e) { /* silent */ }
+    if (pRes?.data?.length) { 
+      state.prompts = pRes.data.map(p => ({ id: p.id, title: p.title, text: p.text, description: p.description, folderId: p.folder_id, platform: p.platform, tags: p.tags || [], variables: p.variables || [], isFavorite: p.is_favorite, useCount: p.use_count || 0, createdAt: new Date(p.created_at).getTime(), updatedAt: new Date(p.updated_at).getTime() })); 
+      await saveData('prompts', state.prompts); 
+      console.log('✅ Synced', state.prompts.length, 'prompts');
+    } else if (!pRes?.error && state.prompts.length > 0) {
+      // No prompts in cloud but have local - upload local prompts
+      console.log('📤 Uploading local prompts to cloud...');
+      for (const p of state.prompts) {
+        await syncPromptToSupabase(p);
+      }
+      for (const f of state.folders) {
+        await syncFolderToSupabase(f);
+      }
+    }
+    
+    renderPrompts(); 
+    renderFolders(); 
+    renderFavorites();
+    renderLimitBanner();
+  } catch (e) { 
+    console.error('❌ Sync error:', e); 
+  }
 }
 
 // ==================== UPDATE STATIC UI TEXTS ====================
@@ -1067,7 +1208,11 @@ async function init() {
     if (state.settings.theme === 'system') applyTheme('system');
   });
 
-  if (state.session) { loadLibraryPrompts(); checkPremiumStatus(); }
+  if (state.session) { 
+    loadLibraryPrompts(); 
+    checkPremiumStatus(); 
+    syncAllData();
+  }
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

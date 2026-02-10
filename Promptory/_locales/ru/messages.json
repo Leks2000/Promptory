@@ -14,7 +14,7 @@
   "tabPrompts": { "message": "Промпты" },
   "tabFolders": { "message": "Папки" },
   "tabFavorites": { "message": "Избранное" },
-  "tabExplore": { "message": "Обзор" },
+  "tabExplore": { "message": "Библиотека" },
   "tabStats": { "message": "Статистика" },
 
   "newFolder": { "message": "Новая папка" },
@@ -218,5 +218,15 @@
   "enterToInsert": { "message": "Enter — вставить" },
   "escToClose": { "message": "Esc — закрыть" },
   "promptSaved": { "message": "Промпт сохранён!" },
-  "uses": { "message": "исп." }
+  "uses": { "message": "исп." },
+
+  "upgrade": { "message": "Улучшить" },
+  "upgradeToPremium": { "message": "Перейти на Premium" },
+  "unlockPremium": { "message": "Откройте безграничные возможности" },
+  "premiumFeature1": { "message": "Неограниченное количество промптов" },
+  "premiumFeature2": { "message": "Полная облачная синхронизация" },
+  "premiumFeature3": { "message": "Приоритетный доступ к новым функциям" },
+  "premiumFeature4": { "message": "Ранний доступ к AI-интеграциям" },
+  "premiumNote": { "message": "Premium сейчас в раннем доступе. Свяжитесь с нами для активации. Цены будут объявлены позже." },
+  "contactForPremium": { "message": "Связаться" }
 }

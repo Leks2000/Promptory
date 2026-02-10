@@ -7,8 +7,10 @@
 -- ===========================================
 
 DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Authenticated can read profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Service can insert profiles" ON public.profiles;
 
 DROP POLICY IF EXISTS "Users can view own folders" ON public.folders;
 DROP POLICY IF EXISTS "Users can insert own folders" ON public.folders;
@@ -185,15 +187,24 @@ ALTER TABLE public.hotkey_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usage_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prompt_reports ENABLE ROW LEVEL SECURITY;
 
--- Profiles policies
+-- Profiles policies (IMPORTANT: Allow SELECT for all authenticated to enable foreign key lookups)
 CREATE POLICY "Users can view own profile" ON public.profiles
   FOR SELECT USING (auth.uid() = id);
+
+-- Allow authenticated users to read any profile (needed for author lookups in library_prompts)
+CREATE POLICY "Authenticated can read profiles" ON public.profiles
+  FOR SELECT TO authenticated USING (true);
 
 CREATE POLICY "Users can update own profile" ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
 
+-- Allow users to create their own profile (auth.uid() matches the id being inserted)
 CREATE POLICY "Users can insert own profile" ON public.profiles
   FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Also allow service role to create profiles during signup trigger
+CREATE POLICY "Service can insert profiles" ON public.profiles
+  FOR INSERT WITH CHECK (true);
 
 -- Folders policies
 CREATE POLICY "Users can view own folders" ON public.folders
