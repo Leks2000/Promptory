@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Signing in...</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #1a1a2e;
+      color: white;
+      font-family: -apple-system, system-ui, sans-serif;
+    }
+    .container {
+      text-align: center;
+    }
+    .spinner {
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top: 3px solid #529CCA;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <p>Signing in...</p>
+  </div>
+
+  <script>
+    (async function() {
+      try {
+        // Get tokens from URL hash
+        const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
+
+        if (!accessToken) {
+          throw new Error('No access token');
+        }
+
+        console.log('✅ Got access token, fetching user...');
+
+        // Fetch user info
+        const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0';
+
+        const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'apikey': SUPABASE_ANON_KEY
+          }
+        });
+
+        if (!userRes.ok) throw new Error('Failed to get user');
+
+        const userData = await userRes.json();
+        console.log('✅ Got user:', userData.email);
+
+        const user = {
+          id: userData.id,
+          email: userData.email,
+          name: userData.user_metadata?.full_name || userData.user_metadata?.name || userData.email?.split('@')[0],
+          avatar: userData.user_metadata?.avatar_url || userData.user_metadata?.picture || ''
+        };
+
+        const session = {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_at: Date.now() + (expiresIn * 1000)
+        };
+
+        // Save to storage
+        await chrome.storage.local.set({ session, user });
+        console.log('✅ Saved session');
+
+        // Close this window and notify popup
+        window.close();
+        
+      } catch (error) {
+        console.error('❌ Auth callback error:', error);
+        alert('Sign in failed: ' + error.message);
+      }
+    })();
+  </script>
+</body>
+</html>
