@@ -335,6 +335,7 @@ async function copyPrompt(id) {
     showToast(t('copiedToClipboard'), 'success');
     renderPrompts();
     trackUsage(p, 'copy');
+    syncPromptToSupabase(p); // Continuous sync
   } catch { showToast(t('failedToCopy'), 'error'); }
 }
 
@@ -352,6 +353,7 @@ async function insertPromptToPage(id) {
     renderPrompts();
     const platform = new URL(tab.url || '').hostname.replace('www.', '') || 'unknown';
     trackUsage(p, 'insert', platform);
+    syncPromptToSupabase(p); // Continuous sync
   } catch {
     await navigator.clipboard.writeText(p.text);
     p.useCount = (p.useCount || 0) + 1;
@@ -359,6 +361,7 @@ async function insertPromptToPage(id) {
     await saveData('prompts', state.prompts);
     showToast(t('copiedClipboardNotSupported'), 'success');
     trackUsage(p, 'clipboard');
+    syncPromptToSupabase(p); // Continuous sync
   }
 }
 
@@ -592,13 +595,17 @@ async function shareToLibrary(promptId) {
 }
 
 // ==================== PROMPT EDITOR ====================
+let pendingImageFile = null; // For image upload
+
 function openPromptEditor(promptId = null) {
   if (!promptId && !canCreatePrompt()) {
     showToast(t('freeLimitReached', state.promptLimit), 'error');
     return;
   }
+  pendingImageFile = null;
   const prompt = promptId ? state.prompts.find(p => p.id === promptId) : null;
   const isEdit = !!prompt;
+  const hasImage = prompt?.imageUrl;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'prompt-editor-modal';
@@ -609,6 +616,24 @@ function openPromptEditor(promptId = null) {
         <div class="form-group"><label class="form-label required">${t('title')}</label><input type="text" id="pe-title" placeholder="${t('titlePlaceholder')}" value="${prompt ? escapeHtml(prompt.title) : ''}"><span class="form-error" id="pe-title-err" style="display:none;">${t('titleRequired')}</span></div>
         <div class="form-group"><label class="form-label required">${t('promptText')}</label><textarea id="pe-text" placeholder="${t('promptTextPlaceholder')}" rows="8">${prompt ? escapeHtml(prompt.text) : ''}</textarea><span class="form-error" id="pe-text-err" style="display:none;">${t('textRequired')}</span><span class="form-hint" id="pe-vars-hint" style="display:none;">${t('variables')}: <span id="pe-vars-list"></span></span></div>
         <div class="form-group"><label class="form-label">${t('description')}</label><textarea id="pe-desc" placeholder="${t('descriptionOptional')}" rows="2">${prompt ? escapeHtml(prompt.description || '') : ''}</textarea></div>
+        <div class="form-group">
+          <label class="form-label">${t('image') || 'Image'}</label>
+          <div class="image-upload-container" id="pe-image-container">
+            <div class="image-upload-preview" id="pe-image-preview" style="display:${hasImage ? 'block' : 'none'};">
+              ${hasImage ? `<img src="${escapeHtml(prompt.imageUrl)}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;">` : ''}
+              <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            </div>
+            <div class="image-upload-zone" id="pe-image-zone" style="display:${hasImage ? 'none' : 'flex'};align-items:center;justify-content:center;padding:20px;border:2px dashed var(--border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.2s;">
+              <div style="text-align:center;color:var(--text-tertiary);">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin:0 auto 8px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <div style="font-size:var(--font-size-xs);">${t('clickToUpload') || 'Click to upload image'}</div>
+                <div style="font-size:10px;margin-top:4px;">PNG, JPG (max 2MB)</div>
+              </div>
+            </div>
+            <input type="file" id="pe-image-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none;">
+          </div>
+          <input type="hidden" id="pe-image-url" value="${prompt?.imageUrl || ''}">
+        </div>
         <div class="form-group"><label class="form-label">${t('folder')}</label><select id="pe-folder"><option value="">${t('uncategorized')}</option>${state.folders.map(f => `<option value="${f.id}" ${prompt?.folderId === f.id ? 'selected' : ''}>${escapeHtml(f.name)}</option>`).join('')}</select></div>
         <div class="form-group"><label class="form-label">${t('tags')}</label><div id="pe-tags-container"><div class="tags" id="pe-tags-list">${(prompt?.tags || []).map(tg => `<span class="tag tag-removable" data-tag="${escapeHtml(tg)}">#${escapeHtml(tg)} <span class="tag-remove" data-remove-tag="${escapeHtml(tg)}">&times;</span></span>`).join('')}</div><input type="text" id="pe-tag-input" placeholder="${t('addTagPlaceholder')}" style="margin-top:8px;"></div></div>
         <div class="form-group"><label class="form-label">${t('platform')}</label><select id="pe-platform"><option value="universal" ${!prompt || prompt.platform === 'universal' ? 'selected' : ''}>${t('universal')}</option><option value="chatgpt" ${prompt?.platform === 'chatgpt' ? 'selected' : ''}>ChatGPT</option><option value="claude" ${prompt?.platform === 'claude' ? 'selected' : ''}>Claude</option><option value="gemini" ${prompt?.platform === 'gemini' ? 'selected' : ''}>Gemini</option><option value="perplexity" ${prompt?.platform === 'perplexity' ? 'selected' : ''}>Perplexity</option></select></div>
@@ -626,6 +651,36 @@ function openPromptEditor(promptId = null) {
   textArea.addEventListener('input', debounce(updateVarsDisplay, 300));
   updateVarsDisplay();
 
+  // Image upload handling
+  const imageZone = document.getElementById('pe-image-zone');
+  const imageInput = document.getElementById('pe-image-input');
+  const imagePreview = document.getElementById('pe-image-preview');
+  const imageRemove = document.getElementById('pe-image-remove');
+  
+  imageZone?.addEventListener('click', () => imageInput.click());
+  imageZone?.addEventListener('dragover', (e) => { e.preventDefault(); imageZone.style.borderColor = 'var(--accent)'; });
+  imageZone?.addEventListener('dragleave', () => { imageZone.style.borderColor = 'var(--border)'; });
+  imageZone?.addEventListener('drop', (e) => { 
+    e.preventDefault(); 
+    imageZone.style.borderColor = 'var(--border)';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) handleImageSelect(file);
+  });
+  
+  imageInput?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) handleImageSelect(file);
+  });
+  
+  imageRemove?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pendingImageFile = null;
+    document.getElementById('pe-image-url').value = '';
+    imagePreview.style.display = 'none';
+    imagePreview.innerHTML = `<button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
+    imageZone.style.display = 'flex';
+  });
+
   document.getElementById('pe-tag-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); addTag(e.target.value.trim()); e.target.value = ''; }
   });
@@ -639,6 +694,34 @@ function openPromptEditor(promptId = null) {
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('prompt-editor-modal'); });
   const escHandler = (e) => { if (e.key === 'Escape') { closeModal('prompt-editor-modal'); document.removeEventListener('keydown', escHandler); } };
   document.addEventListener('keydown', escHandler);
+}
+
+function handleImageSelect(file) {
+  if (file.size > 2 * 1024 * 1024) { // 2MB limit
+    showToast(t('imageTooLarge') || 'Image too large (max 2MB)', 'error');
+    return;
+  }
+  pendingImageFile = file;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const preview = document.getElementById('pe-image-preview');
+    const zone = document.getElementById('pe-image-zone');
+    preview.innerHTML = `
+      <img src="${e.target.result}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;">
+      <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    `;
+    preview.style.display = 'block';
+    zone.style.display = 'none';
+    // Re-attach remove handler
+    document.getElementById('pe-image-remove')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      pendingImageFile = null;
+      document.getElementById('pe-image-url').value = '';
+      preview.style.display = 'none';
+      zone.style.display = 'flex';
+    });
+  };
+  reader.readAsDataURL(file);
 }
 
 function updateVarsDisplay() {
@@ -671,25 +754,87 @@ async function savePrompt(editingId) {
   const folderId = document.getElementById('pe-folder')?.value || null;
   const platform = document.getElementById('pe-platform')?.value || 'universal';
   const tags = Array.from(document.querySelectorAll('#pe-tags-list [data-tag]')).map(el => el.dataset.tag);
+  let imageUrl = document.getElementById('pe-image-url')?.value || null;
+  
   let hasError = false;
   if (!title) { document.getElementById('pe-title-err').style.display = 'block'; hasError = true; } else { document.getElementById('pe-title-err').style.display = 'none'; }
   if (!text) { document.getElementById('pe-text-err').style.display = 'block'; hasError = true; } else { document.getElementById('pe-text-err').style.display = 'none'; }
   if (hasError) return;
+  
+  const saveBtn = document.getElementById('pe-save-btn');
+  saveBtn.classList.add('loading');
+  
+  // Upload image if there's a pending file
+  if (pendingImageFile && state.session && state.user) {
+    try {
+      console.log('📤 Uploading image to Supabase Storage...');
+      const uploadedUrl = await uploadImageToStorage(pendingImageFile, editingId || crypto.randomUUID());
+      if (uploadedUrl) {
+        imageUrl = uploadedUrl;
+        console.log('✅ Image uploaded:', uploadedUrl);
+      }
+    } catch (e) {
+      console.error('❌ Image upload failed:', e);
+      showToast(t('imageUploadFailed') || 'Image upload failed', 'error');
+    }
+  }
+  
   const variables = [...new Set((text.match(/\{([^}]+)\}/g) || []).map(m => m.slice(1, -1)))];
   if (editingId) {
     const p = state.prompts.find(x => x.id === editingId);
-    if (p) { Object.assign(p, { title, text, description: desc, folderId, platform, tags, variables, updatedAt: Date.now() }); syncPromptToSupabase(p); }
+    if (p) { 
+      Object.assign(p, { title, text, description: desc, folderId, platform, tags, variables, imageUrl, updatedAt: Date.now() }); 
+      syncPromptToSupabase(p); 
+    }
   } else {
-    if (!canCreatePrompt()) { showToast(t('freeLimitReached', state.promptLimit), 'error'); return; }
-    const newP = { id: crypto.randomUUID(), title, text, description: desc, folderId, platform, tags, variables, isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() };
+    if (!canCreatePrompt()) { showToast(t('freeLimitReached', state.promptLimit), 'error'); saveBtn.classList.remove('loading'); return; }
+    const newP = { id: crypto.randomUUID(), title, text, description: desc, folderId, platform, tags, variables, imageUrl, isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() };
     state.prompts.unshift(newP);
     syncPromptToSupabase(newP);
   }
   await saveData('prompts', state.prompts);
+  saveBtn.classList.remove('loading');
+  pendingImageFile = null;
   showToast(editingId ? t('promptUpdated') : t('promptCreated'), 'success');
   closeModal('prompt-editor-modal');
   renderPrompts();
   renderFavorites();
+}
+
+// ==================== IMAGE UPLOAD ====================
+async function uploadImageToStorage(file, promptId) {
+  if (!state.session || !state.user) return null;
+  
+  const fileExt = file.name.split('.').pop().toLowerCase();
+  const fileName = `${state.user.id}/${promptId}.${fileExt}`;
+  
+  // Convert file to base64 for sending through background script
+  const base64 = await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]); // Get base64 part only
+    reader.readAsDataURL(file);
+  });
+  
+  try {
+    const res = await supabaseMsg({
+      action: 'uploadToStorage',
+      bucket: 'Lib_img',
+      path: fileName,
+      file: base64,
+      contentType: file.type
+    });
+    
+    if (res?.error) {
+      console.error('Storage upload error:', res.error);
+      return null;
+    }
+    
+    // Return public URL
+    return res?.data?.publicUrl || null;
+  } catch (e) {
+    console.error('Storage upload exception:', e);
+    return null;
+  }
 }
 
 // ==================== FOLDERS ====================
@@ -1302,8 +1447,40 @@ function closeModal(id) {
 
 // ==================== SUPABASE SYNC ====================
 async function syncPromptToSupabase(prompt) {
-  if (!state.session || !state.user) return;
-  try { await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body: { id: prompt.id, user_id: state.user.id, folder_id: prompt.folderId || null, title: prompt.title, text: prompt.text, description: prompt.description, platform: prompt.platform || 'universal', tags: prompt.tags || [], variables: prompt.variables || [], is_favorite: prompt.isFavorite || false, use_count: prompt.useCount || 0, updated_at: new Date().toISOString() } }); } catch (e) { /* silent */ }
+  if (!state.session || !state.user) {
+    console.log('⏭️ Skipping sync - no session');
+    return;
+  }
+  try { 
+    console.log('☁️ Syncing prompt to cloud:', prompt.title);
+    const res = await supabaseMsg({ 
+      action: 'supabaseRequest', 
+      method: 'POST', 
+      path: 'prompts', 
+      body: { 
+        id: prompt.id, 
+        user_id: state.user.id, 
+        folder_id: prompt.folderId || null, 
+        title: prompt.title, 
+        text: prompt.text, 
+        description: prompt.description, 
+        image_url: prompt.imageUrl || null,
+        platform: prompt.platform || 'universal', 
+        tags: prompt.tags || [], 
+        variables: prompt.variables || [], 
+        is_favorite: prompt.isFavorite || false, 
+        use_count: prompt.useCount || 0, 
+        updated_at: new Date().toISOString() 
+      } 
+    }); 
+    if (res?.error) {
+      console.warn('⚠️ Sync error:', res.error);
+    } else {
+      console.log('✅ Synced prompt:', prompt.title);
+    }
+  } catch (e) { 
+    console.error('❌ Sync failed:', e); 
+  }
 }
 
 async function syncPromptDeleteToSupabase(id) {

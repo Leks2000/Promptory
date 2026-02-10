@@ -198,6 +198,7 @@ function toggleSearchOverlay() {
     if (searchOverlayRAF) { cancelAnimationFrame(searchOverlayRAF); searchOverlayRAF = null; }
     setTimeout(() => existing.remove(), 150);
     searchOverlayVisible = false;
+    searchResultsCache.clear(); // Clear cache when closing
     return;
   }
 

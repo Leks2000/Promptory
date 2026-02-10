@@ -221,7 +221,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (message.action === 'uploadToStorage') {
+    handleStorageUpload(message).then(sendResponse);
+    return true;
+  }
 });
+
+// ---------- Supabase Storage Upload ----------
+async function handleStorageUpload(message) {
+  const token = await getValidToken();
+  if (!token) return { error: 'Not authenticated' };
+
+  const { bucket, path, file, contentType } = message;
+  
+  try {
+    // Convert base64 to binary
+    const binaryString = atob(file);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Upload to Supabase Storage
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': contentType,
+        'x-upsert': 'true' // Overwrite if exists
+      },
+      body: bytes
+    });
+
+    if (!uploadRes.ok) {
+      const errorText = await uploadRes.text();
+      console.error('Storage upload failed:', errorText);
+      return { error: errorText };
+    }
+
+    // Return public URL
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+    return { data: { publicUrl } };
+  } catch (err) {
+    console.error('Storage upload error:', err);
+    return { error: err.message };
+  }
+}
 
 // ---------- Supabase Auth via Chrome Identity API ----------
 async function handleGoogleSignIn() {
