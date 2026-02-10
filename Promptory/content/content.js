@@ -189,71 +189,91 @@ async function showVariableDialog(text, variables) {
 
 // ---------- Search Overlay (Ctrl+Shift+P) - performance-optimized ----------
 let searchOverlayPrompts = []; // Cache prompts to avoid repeated fetches
+let searchOverlayRAF = null; // RAF handle for cleanup
 
 function toggleSearchOverlay() {
   const existing = document.getElementById('promptvault-search-overlay');
   if (existing) {
     existing.classList.remove('visible');
-    setTimeout(() => existing.remove(), 200);
+    if (searchOverlayRAF) { cancelAnimationFrame(searchOverlayRAF); searchOverlayRAF = null; }
+    setTimeout(() => existing.remove(), 150);
     searchOverlayVisible = false;
     return;
   }
 
   searchOverlayVisible = true;
+  
+  // Create overlay with minimal DOM operations
   const overlay = document.createElement('div');
   overlay.id = 'promptvault-search-overlay';
   overlay.className = 'promptvault-overlay';
-  overlay.innerHTML = `
-    <div class="promptvault-search-dialog">
-      <div class="promptvault-search-header">
-        <input type="text" id="promptvault-search-input" placeholder="${ct('searchPlaceholder')}" autofocus>
-      </div>
-      <div class="promptvault-search-results" id="promptvault-search-results">
-        <div class="promptvault-search-loading">${ct('loading')}</div>
-      </div>
-      <div class="promptvault-search-footer"><span>${ct('enterToInsert')}</span><span>${ct('escToClose')}</span></div>
-    </div>`;
+  
+  // Use template literal without extra whitespace
+  overlay.innerHTML = `<div class="promptvault-search-dialog"><div class="promptvault-search-header"><input type="text" id="promptvault-search-input" placeholder="${ct('searchPlaceholder')}"></div><div class="promptvault-search-results" id="promptvault-search-results"><div class="promptvault-search-loading">${ct('loading')}</div></div><div class="promptvault-search-footer"><span>${ct('enterToInsert')}</span><span>${ct('escToClose')}</span></div></div>`;
+  
+  // Batch DOM operations
   document.body.appendChild(overlay);
   
-  // Use requestAnimationFrame for smoother animation
-  requestAnimationFrame(() => {
-    overlay.classList.add('visible');
+  // Use double RAF for guaranteed smooth animation
+  searchOverlayRAF = requestAnimationFrame(() => {
+    searchOverlayRAF = requestAnimationFrame(() => {
+      overlay.classList.add('visible');
+    });
   });
 
   const searchInput = overlay.querySelector('#promptvault-search-input');
-  // Delay focus slightly to prevent layout thrashing
-  setTimeout(() => searchInput.focus(), 50);
+  // Immediate focus without delay
+  searchInput.focus();
 
-  // Fetch prompts once and cache
+  // Fetch prompts once and cache - use lightweight rendering
   chrome.runtime.sendMessage({ action: 'getPrompts' }, (res) => {
     searchOverlayPrompts = res?.prompts || [];
-    renderSearchResults(searchOverlayPrompts, '');
+    // Only render if overlay still exists
+    if (document.getElementById('promptvault-search-overlay')) {
+      renderSearchResultsOptimized(searchOverlayPrompts, '');
+    }
   });
 
-  // Debounced search with longer delay for better performance
+  // Optimized search with requestIdleCallback fallback
   let searchTimer;
+  let lastQuery = '';
+  
+  const performSearch = (q) => {
+    if (q === lastQuery) return;
+    lastQuery = q;
+    
+    const filtered = q ? searchOverlayPrompts.filter(p => {
+      const ql = q.toLowerCase();
+      // Fast path: title check first (most common match)
+      if (p.title.toLowerCase().includes(ql)) return true;
+      // Tags are fast to check
+      if ((p.tags || []).some(t => t.toLowerCase().includes(ql))) return true;
+      // Description check
+      if ((p.description || '').toLowerCase().includes(ql)) return true;
+      // Text check - limited to 200 chars for speed
+      if (p.text.substring(0, 200).toLowerCase().includes(ql)) return true;
+      return false;
+    }) : searchOverlayPrompts;
+    
+    renderSearchResultsOptimized(filtered, q);
+  };
+  
   const handleSearch = () => {
     clearTimeout(searchTimer);
-    const q = searchInput.value.trim().toLowerCase();
+    const q = searchInput.value.trim();
     
-    // Show immediate feedback for empty search
+    // Immediate render for empty query
     if (!q) {
-      renderSearchResults(searchOverlayPrompts, '');
+      performSearch('');
       return;
     }
     
-    searchTimer = setTimeout(() => {
-      const filtered = searchOverlayPrompts.filter(p => {
-        // Prioritize title and description for performance
-        if (p.title.toLowerCase().includes(q)) return true;
-        if ((p.description || '').toLowerCase().includes(q)) return true;
-        if ((p.tags || []).some(t => t.toLowerCase().includes(q))) return true;
-        // Only search first 300 chars of text for performance
-        if (p.text.substring(0, 300).toLowerCase().includes(q)) return true;
-        return false;
-      });
-      renderSearchResults(filtered, q);
-    }, 200); // Increased debounce for smoother typing
+    // Use requestIdleCallback if available, otherwise setTimeout
+    if (window.requestIdleCallback) {
+      searchTimer = requestIdleCallback(() => performSearch(q), { timeout: 150 });
+    } else {
+      searchTimer = setTimeout(() => performSearch(q), 100);
+    }
   };
   
   searchInput.addEventListener('input', handleSearch);
@@ -289,7 +309,8 @@ function toggleSearchOverlay() {
   });
 }
 
-function renderSearchResults(prompts, query) {
+// Optimized search results rendering with virtual DOM approach
+function renderSearchResultsOptimized(prompts, query) {
   const container = document.getElementById('promptvault-search-results');
   if (!container) return;
 
@@ -298,51 +319,60 @@ function renderSearchResults(prompts, query) {
     return;
   }
 
-  // Limit to 30 results for better performance (reduced from 50)
-  const limited = prompts.slice(0, 30);
+  // Limit to 20 results for smooth scrolling
+  const limited = prompts.slice(0, 20);
   
-  // Use DocumentFragment for better performance
-  const fragment = document.createDocumentFragment();
-  limited.forEach((p, i) => {
-    const div = document.createElement('div');
-    div.className = `promptvault-search-item ${i === 0 ? 'active' : ''}`;
-    div.setAttribute('data-prompt-id', p.id);
-    div.innerHTML = `
-      <div class="promptvault-search-item-title">${escapeHtml(p.title)}</div>
-      <div class="promptvault-search-item-preview">${escapeHtml(p.text.substring(0, 60))}${p.text.length > 60 ? '...' : ''}</div>
-    `;
-    fragment.appendChild(div);
-  });
+  // Build HTML string directly (faster than DocumentFragment for small lists)
+  const html = limited.map((p, i) => 
+    `<div class="promptvault-search-item${i === 0 ? ' active' : ''}" data-prompt-id="${p.id}"><div class="promptvault-search-item-title">${escapeHtml(p.title)}</div><div class="promptvault-search-item-preview">${escapeHtml(p.text.substring(0, 50))}...</div></div>`
+  ).join('');
   
-  container.innerHTML = '';
-  container.appendChild(fragment);
+  container.innerHTML = html;
+  
+  // Single event delegation setup
+  if (!container._hasListeners) {
+    container._hasListeners = true;
+    
+    container.onclick = (e) => {
+      const item = e.target.closest('.promptvault-search-item');
+      if (!item) return;
+      const id = item.getAttribute('data-prompt-id');
+      const prompt = searchOverlayPrompts.find(p => p.id === id);
+      if (prompt) {
+        const overlay = document.getElementById('promptvault-search-overlay');
+        if (overlay) {
+          overlay.classList.remove('visible');
+          setTimeout(() => overlay.remove(), 150);
+          searchOverlayVisible = false;
+        }
+        insertPrompt(prompt.text, prompt.variables || []);
+        // Fire and forget usage update
+        chrome.storage.local.get(['prompts'], (res) => {
+          const stored = res.prompts || [];
+          const found = stored.find(sp => sp.id === id);
+          if (found) {
+            found.useCount = (found.useCount || 0) + 1;
+            found.updatedAt = Date.now();
+            chrome.storage.local.set({ prompts: stored });
+          }
+        });
+      }
+    };
 
-  // Event delegation for clicks
-  container.onclick = (e) => {
-    const item = e.target.closest('.promptvault-search-item');
-    if (!item) return;
-    const id = item.getAttribute('data-prompt-id');
-    const prompt = prompts.find(p => p.id === id);
-    if (prompt) {
-      const overlay = document.getElementById('promptvault-search-overlay');
-      if (overlay) { overlay.classList.remove('visible'); setTimeout(() => overlay.remove(), 200); searchOverlayVisible = false; }
-      insertPrompt(prompt.text, prompt.variables || []);
-      // Update use count in storage (fire and forget for performance)
-      chrome.storage.local.get(['prompts'], (res) => {
-        const stored = res.prompts || [];
-        const found = stored.find(sp => sp.id === id);
-        if (found) { found.useCount = (found.useCount || 0) + 1; found.updatedAt = Date.now(); chrome.storage.local.set({ prompts: stored }); }
-      });
-    }
-  };
+    container.onmouseover = (e) => {
+      const item = e.target.closest('.promptvault-search-item');
+      if (item && !item.classList.contains('active')) {
+        const active = container.querySelector('.promptvault-search-item.active');
+        if (active) active.classList.remove('active');
+        item.classList.add('active');
+      }
+    };
+  }
+}
 
-  container.onmouseover = (e) => {
-    const item = e.target.closest('.promptvault-search-item');
-    if (item) {
-      container.querySelectorAll('.promptvault-search-item').forEach(i => i.classList.remove('active'));
-      item.classList.add('active');
-    }
-  };
+// Legacy function for backwards compatibility
+function renderSearchResults(prompts, query) {
+  renderSearchResultsOptimized(prompts, query);
 }
 
 // ---------- Notifications ----------

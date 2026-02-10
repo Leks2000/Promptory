@@ -73,11 +73,14 @@
   100% { background-position: -200% 0; }
 }
 
-/* Flip card for Explore - completely redesigned */
+/* Flip card for Explore - optimized */
 .explore-card-wrapper {
   perspective: 1000px;
-  height: 200px;
-  margin-bottom: 12px;
+  height: 180px;
+  margin-bottom: 0;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: cardAppear 300ms ease forwards;
 }
 
 .explore-card {
@@ -106,6 +109,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   overflow: hidden;
+  transition: box-shadow 200ms ease, border-color 200ms ease;
 }
 
 .explore-card-front {
@@ -121,14 +125,10 @@
 }
 
 /* Hover effect for explore cards */
-.explore-card-wrapper:hover .explore-card:not(.flipped) {
-  transform: translateY(-4px) scale(1.02);
+.explore-card-wrapper:hover .explore-card-front,
+.explore-card-wrapper:hover .explore-card-back {
   box-shadow: var(--shadow-lg);
-}
-
-.explore-card-wrapper:hover .explore-card.flipped {
-  transform: rotateY(180deg) translateY(-4px) scale(1.02);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--border-hover);
 }
 
 /* Ripple effect */
