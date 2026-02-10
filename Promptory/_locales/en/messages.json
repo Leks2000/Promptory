@@ -14,7 +14,7 @@
   "tabPrompts": { "message": "Prompts" },
   "tabFolders": { "message": "Folders" },
   "tabFavorites": { "message": "Favorites" },
-  "tabExplore": { "message": "Explore" },
+  "tabExplore": { "message": "Library" },
   "tabStats": { "message": "Stats" },
 
   "newFolder": { "message": "New Folder" },
@@ -218,5 +218,15 @@
   "enterToInsert": { "message": "Enter to insert" },
   "escToClose": { "message": "Esc to close" },
   "promptSaved": { "message": "Prompt saved successfully!" },
-  "uses": { "message": "uses" }
+  "uses": { "message": "uses" },
+
+  "upgrade": { "message": "Upgrade" },
+  "upgradeToPremium": { "message": "Upgrade to Premium" },
+  "unlockPremium": { "message": "Unlock unlimited potential" },
+  "premiumFeature1": { "message": "Unlimited prompts" },
+  "premiumFeature2": { "message": "Full cloud sync across devices" },
+  "premiumFeature3": { "message": "Priority access to new features" },
+  "premiumFeature4": { "message": "Early access to AI integrations" },
+  "premiumNote": { "message": "Premium is currently in early access. Contact us to get started. Pricing will be announced soon." },
+  "contactForPremium": { "message": "Contact Us" }
 }
