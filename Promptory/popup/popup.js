@@ -437,22 +437,84 @@ async function shareToLibrary(promptId) {
   if (!p) return;
   if (!state.user || !state.session) { showToast(t('signInToShare'), 'error'); return; }
 
+  let selectedImageData = null;
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'share-modal';
   modal.innerHTML = `
-    <div class="modal">
+    <div class="modal" style="max-width:480px;">
       <div class="modal-header"><h2 class="modal-title">${t('shareToPublicLibrary')}</h2><button class="btn btn-icon btn-ghost close-modal-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div class="form-group"><label class="form-label">${t('title')}</label><input type="text" id="share-title" value="${escapeHtml(p.title)}"></div>
         <div class="form-group"><label class="form-label">${t('description')}</label><textarea id="share-desc" rows="2" placeholder="${t('descriptionPlaceholder')}">${escapeHtml(p.description || '')}</textarea></div>
         <div class="form-group"><label class="form-label">${t('category')}</label><select id="share-category"><option value="general">${t('catGeneral')}</option><option value="business">${t('catBusiness')}</option><option value="development">${t('catDevelopment')}</option><option value="marketing">${t('catMarketing')}</option><option value="creative">${t('catCreative')}</option><option value="learning">${t('catLearning')}</option><option value="ai">${t('catAI')}</option></select></div>
+        <div class="form-group">
+          <label class="form-label">${t('coverImage') || 'Cover Image'} <span style="color:var(--text-tertiary);font-weight:normal;">(${t('optional') || 'optional'})</span></label>
+          <div class="image-upload-area" id="share-image-upload">
+            <div class="image-upload-placeholder" id="share-image-placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <span>${t('clickToUpload') || 'Click to upload image'}</span>
+              <span style="font-size:10px;color:var(--text-tertiary);">PNG, JPG (max 500KB)</span>
+            </div>
+            <img id="share-image-preview" class="image-preview" style="display:none;" />
+            <button class="btn btn-icon btn-sm image-remove-btn" id="share-image-remove" style="display:none;" title="${t('remove') || 'Remove'}">×</button>
+          </div>
+          <input type="file" id="share-image-input" accept="image/png,image/jpeg,image/jpg" style="display:none;">
+        </div>
         <div style="padding:10px;background:var(--bg-tertiary);border-radius:var(--radius-md);margin-top:8px;"><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.5;">${t('shareDisclaimer')}</div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-ghost close-modal-btn">${t('cancel')}</button><button class="btn btn-primary ripple" id="share-confirm-btn">${t('share')}</button></div>
     </div>`;
   document.body.appendChild(modal);
   setTimeout(() => modal.classList.add('visible'), 10);
+
+  // Image upload handling
+  const imageUpload = document.getElementById('share-image-upload');
+  const imageInput = document.getElementById('share-image-input');
+  const imagePlaceholder = document.getElementById('share-image-placeholder');
+  const imagePreview = document.getElementById('share-image-preview');
+  const imageRemove = document.getElementById('share-image-remove');
+
+  imageUpload.addEventListener('click', (e) => {
+    if (e.target.closest('#share-image-remove')) return;
+    imageInput.click();
+  });
+
+  imageInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validate file size (500KB max)
+    if (file.size > 500 * 1024) {
+      showToast(t('imageTooLarge') || 'Image too large (max 500KB)', 'error');
+      return;
+    }
+    
+    // Read and preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      selectedImageData = e.target.result;
+      imagePreview.src = selectedImageData;
+      imagePreview.style.display = 'block';
+      imagePlaceholder.style.display = 'none';
+      imageRemove.style.display = 'flex';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  imageRemove.addEventListener('click', (e) => {
+    e.stopPropagation();
+    selectedImageData = null;
+    imagePreview.style.display = 'none';
+    imagePlaceholder.style.display = 'flex';
+    imageRemove.style.display = 'none';
+    imageInput.value = '';
+  });
 
   document.getElementById('share-confirm-btn').addEventListener('click', async () => {
     const title = document.getElementById('share-title').value.trim();
@@ -461,45 +523,64 @@ async function shareToLibrary(promptId) {
     if (!title) { showToast(t('titleRequired'), 'error'); return; }
     const btn = document.getElementById('share-confirm-btn');
     btn.classList.add('loading');
+    
     try {
-      // Use the secure RPC function to share to library (bypasses RLS issues)
+      // Upload image to Supabase Storage if selected
+      let imageUrl = null;
+      if (selectedImageData) {
+        try {
+          // Convert base64 to blob for upload
+          const response = await fetch(selectedImageData);
+          const blob = await response.blob();
+          const fileName = `${state.user.id}/${Date.now()}_cover.${blob.type.split('/')[1] || 'png'}`;
+          
+          // Upload via background script (handles auth)
+          const uploadRes = await supabaseMsg({
+            action: 'supabaseRequest',
+            method: 'POST',
+            path: `storage/v1/object/Lib_img/${fileName}`,
+            body: blob,
+            isFile: true
+          });
+          
+          if (!uploadRes?.error) {
+            imageUrl = `${SUPABASE_URL}/storage/v1/object/public/Lib_img/${fileName}`;
+            console.log('✅ Image uploaded:', imageUrl);
+          } else {
+            console.warn('⚠️ Image upload failed:', uploadRes.error);
+          }
+        } catch (imgErr) {
+          console.warn('⚠️ Image upload error:', imgErr);
+          // Continue without image
+        }
+      }
+      
+      // Share prompt to library
+      const shareBody = { 
+        title, 
+        text: p.text, 
+        description: desc, 
+        author: state.user.name || state.user.email.split('@')[0], 
+        author_id: state.user.id, 
+        tags: p.tags || [], 
+        variables: p.variables || [], 
+        category, 
+        is_approved: true,
+        image_url: imageUrl
+      };
+      
+      // Try direct insert
       const res = await supabaseMsg({ 
         action: 'supabaseRequest', 
         method: 'POST', 
-        path: 'rpc/share_prompt_to_library',
-        body: { 
-          p_title: title, 
-          p_text: p.text, 
-          p_description: desc, 
-          p_author: state.user.name || state.user.email.split('@')[0], 
-          p_tags: p.tags || [], 
-          p_variables: p.variables || [], 
-          p_category: category
-        }
+        path: 'library_prompts',
+        body: shareBody
       });
+      
       if (res?.error) {
-        // Fallback to direct insert if RPC not available
-        console.warn('RPC failed, trying direct insert:', res.error);
-        const fallbackRes = await supabaseMsg({ 
-          action: 'supabaseRequest', 
-          method: 'POST', 
-          path: 'library_prompts',
-          body: { 
-            title, 
-            text: p.text, 
-            description: desc, 
-            author: state.user.name || state.user.email.split('@')[0], 
-            author_id: state.user.id, 
-            tags: p.tags || [], 
-            variables: p.variables || [], 
-            category, 
-            is_approved: true 
-          }
-        });
-        if (fallbackRes?.error) throw new Error(typeof fallbackRes.error === 'string' ? fallbackRes.error : JSON.stringify(fallbackRes.error));
-      } else if (res?.data && !res.data.success && res.data.error) {
-        throw new Error(res.data.error);
+        throw new Error(typeof res.error === 'string' ? res.error : JSON.stringify(res.error));
       }
+      
       showToast(t('promptShared'), 'success');
       closeModal('share-modal');
       loadLibraryPrompts();
@@ -880,52 +961,134 @@ function renderFavorites() {
 
 // ==================== EXPLORE ====================
 async function loadLibraryPrompts() {
-  if (!state.session) {
-    console.log('⚠️ No session, skipping library load');
-    return;
-  }
+  // Allow loading even without session - library prompts are public
   console.log('📚 Loading library prompts...');
   try {
-    // First try without RLS filter to debug
-    const res = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_prompts?order=likes.desc&limit=50' });
+    const res = await supabaseMsg({ 
+      action: 'supabaseRequest', 
+      method: 'GET', 
+      path: 'library_prompts?is_approved=eq.true&order=likes.desc&limit=50' 
+    });
     console.log('📚 Library response:', res);
+    
     if (res?.data && Array.isArray(res.data)) {
-      state.libraryPrompts = res.data.map(p => ({ id: p.id, title: p.title, text: p.text, description: p.description, author: p.author, authorId: p.author_id, tags: p.tags || [], likes: p.likes || 0, downloads: p.downloads || 0, category: p.category || 'general', isFeatured: p.is_featured || false }));
-      console.log('✅ Loaded', state.libraryPrompts.length, 'library prompts');
+      state.libraryPrompts = res.data.map(p => ({ 
+        id: p.id, 
+        title: p.title, 
+        text: p.text, 
+        description: p.description, 
+        author: p.author, 
+        authorId: p.author_id, 
+        tags: p.tags || [], 
+        likes: p.likes || 0, 
+        downloads: p.downloads || 0, 
+        category: p.category || 'general', 
+        isFeatured: p.is_featured,
+        imageUrl: p.image_url || null
+      }));
+      console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts');
     } else if (res?.error) {
-      console.error('❌ Library load error:', res.error);
-    } else {
-      console.log('⚠️ No library data received:', res);
+      console.error('📚 Library load error:', res.error);
     }
-    const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
-    if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
-    const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
-    if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
+    
+    // Load user likes and reports only if logged in
+    if (state.session && state.user) {
+      const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
+      if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
+      const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
+      if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
+    }
   } catch (e) { 
-    console.error('❌ Failed to load library:', e); 
+    console.error('Failed to load library:', e); 
   }
   renderExplore();
 }
 
 let flippedCards = new Set();
 
+// Category colors for visual distinction
+const CATEGORY_COLORS = {
+  'business': { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: '💼' },
+  'development': { bg: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)', icon: '💻' },
+  'marketing': { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', icon: '📢' },
+  'creative': { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', icon: '🎨' },
+  'learning': { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', icon: '📚' },
+  'ai': { bg: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)', icon: '🤖' },
+  'general': { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: '✨' }
+};
+
 function renderExplore() {
   const list = document.getElementById('explore-list');
+  if (!list) return;
+  
+  // Show sign-in prompt for guests (but still load library)
   if (!state.user) {
-    list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('signInToExplore')}</div><div class="empty-state-text">${t('discoverPrompts')}</div><button class="btn btn-primary ripple" id="explore-signin-btn">${t('signIn')}</button></div>`;
-    document.getElementById('explore-signin-btn')?.addEventListener('click', () => document.getElementById('settings-btn').click());
-    return;
+    // Show library even for guests, but with sign-in banner
+    if (state.libraryPrompts.length === 0) {
+      list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('signInToExplore')}</div><div class="empty-state-text">${t('discoverPrompts')}</div><button class="btn btn-primary ripple" id="explore-signin-btn">${t('signIn')}</button></div>`;
+      document.getElementById('explore-signin-btn')?.addEventListener('click', () => document.getElementById('settings-btn').click());
+      return;
+    }
   }
+  
   if (state.libraryPrompts.length === 0) {
     list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('noPublicPrompts')}</div><div class="empty-state-text">${t('beFirstToShare')}</div></div>`;
     return;
   }
+  
+  // Render library cards with flip effect
   list.innerHTML = state.libraryPrompts.map((p, i) => {
     const isFlipped = flippedCards.has(p.id);
     const isLiked = state.userLikes.has(p.id);
     const isReported = state.userReports.has(p.id);
     const delay = i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 50}ms"` : 'style="animation:none;opacity:1;"';
-    return `<div class="explore-card-wrapper" data-explore-id="${p.id}" ${delay}><div class="explore-card ${isFlipped ? 'flipped' : ''}"><div class="explore-card-front"><div class="explore-card-thumbnail">${p.category || 'general'}</div><div class="explore-card-title">${escapeHtml(truncate(p.title, 50))}</div><div class="explore-card-meta"><span class="explore-card-author">${escapeHtml(p.author)}</span><div class="explore-card-stats"><span>${p.likes} ${t('likes')}</span></div></div></div><div class="explore-card-back"><div class="explore-card-back-header"><div class="explore-card-back-title">${escapeHtml(p.title)}</div></div><div class="explore-card-text">${escapeHtml(truncate(p.text, 120))}</div><div class="explore-card-actions"><button class="btn btn-secondary btn-sm ripple" data-explore-copy="${p.id}">${t('copy')}</button><button class="btn btn-primary btn-sm ripple" data-explore-save="${p.id}">${t('save')}</button></div><div class="explore-card-actions-row"><button class="explore-action-btn ${isLiked ? 'liked' : ''}" data-explore-like="${p.id}" title="${t('like')}"><svg width="14" height="14" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></button><span style="font-size:11px;color:var(--text-tertiary);">${p.likes}</span><button class="explore-action-btn ${isReported ? 'reported' : ''}" data-explore-report="${p.id}" title="${isReported ? t('reported') : t('report')}" ${isReported ? 'disabled' : ''}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></button></div></div></div></div>`;
+    const categoryInfo = CATEGORY_COLORS[p.category] || CATEGORY_COLORS['general'];
+    
+    // Thumbnail: use image_url if available, otherwise category gradient
+    const thumbnailStyle = p.imageUrl 
+      ? `background-image: url('${escapeHtml(p.imageUrl)}'); background-size: cover; background-position: center;`
+      : `background: ${categoryInfo.bg};`;
+    const thumbnailContent = p.imageUrl ? '' : categoryInfo.icon;
+    
+    return `<div class="explore-card-wrapper" data-explore-id="${p.id}" ${delay}>
+      <div class="explore-card ${isFlipped ? 'flipped' : ''}">
+        <div class="explore-card-front">
+          <div class="explore-card-thumbnail" style="${thumbnailStyle}">
+            ${thumbnailContent}
+            <div class="explore-card-category-badge">${escapeHtml(p.category || 'general')}</div>
+          </div>
+          <div class="explore-card-content">
+            <div class="explore-card-title">${escapeHtml(truncate(p.title, 45))}</div>
+            <div class="explore-card-meta">
+              <span class="explore-card-author">${escapeHtml(p.author)}</span>
+              <div class="explore-card-stats">
+                <span class="explore-stat">❤️ ${p.likes}</span>
+              </div>
+            </div>
+          </div>
+          <div class="explore-flip-hint">Click to view code</div>
+        </div>
+        <div class="explore-card-back">
+          <div class="explore-card-back-header">
+            <div class="explore-card-back-title">${escapeHtml(truncate(p.title, 40))}</div>
+          </div>
+          <div class="explore-card-code">${escapeHtml(truncate(p.text, 200))}</div>
+          <div class="explore-card-actions">
+            <button class="btn btn-secondary btn-sm ripple" data-explore-copy="${p.id}">${t('copy')}</button>
+            <button class="btn btn-primary btn-sm ripple" data-explore-save="${p.id}">${t('save')}</button>
+          </div>
+          <div class="explore-card-actions-row">
+            <button class="explore-action-btn ${isLiked ? 'liked' : ''}" data-explore-like="${p.id}" title="${t('like')}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </button>
+            <span style="font-size:11px;color:var(--text-tertiary);">${p.likes}</span>
+            ${state.user ? `<button class="explore-action-btn ${isReported ? 'reported' : ''}" data-explore-report="${p.id}" title="${isReported ? t('reported') : t('report')}" ${isReported ? 'disabled' : ''}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            </button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
   }).join('');
 
   // Event delegation for explore list
@@ -933,18 +1096,53 @@ function renderExplore() {
     const copyBtn = e.target.closest('[data-explore-copy]');
     if (copyBtn) { e.stopPropagation(); const p = state.libraryPrompts.find(x => x.id === copyBtn.dataset.exploreCopy); if (p) { await navigator.clipboard.writeText(p.text); showToast(t('copiedToClipboard'), 'success'); } return; }
     const saveBtn = e.target.closest('[data-explore-save]');
-    if (saveBtn) { e.stopPropagation(); const id = saveBtn.dataset.exploreSave; if (state.prompts.some(p => p.sourceId === id)) { showToast(t('alreadyInLibrary'), 'error'); return; } if (!canCreatePrompt()) { showToast(t('freeLimitReached', state.promptLimit), 'error'); return; } const ep = state.libraryPrompts.find(x => x.id === id); if (!ep) return; state.prompts.unshift({ id: crypto.randomUUID(), sourceId: id, title: ep.title, text: ep.text, description: `From ${ep.author}`, tags: ep.tags || [], folderId: null, platform: 'universal', variables: [], isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() }); await saveData('prompts', state.prompts); showToast(t('savedToLibrary'), 'success'); supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/increment_download_count', body: { prompt_uuid: id } }); return; }
+    if (saveBtn) { 
+      e.stopPropagation(); 
+      if (!state.user) { showToast(t('signInToSave') || 'Sign in to save prompts', 'error'); return; }
+      const id = saveBtn.dataset.exploreSave; 
+      if (state.prompts.some(p => p.sourceId === id)) { showToast(t('alreadyInLibrary'), 'error'); return; } 
+      if (!canCreatePrompt()) { showToast(t('freeLimitReached', state.promptLimit), 'error'); return; } 
+      const ep = state.libraryPrompts.find(x => x.id === id); 
+      if (!ep) return; 
+      state.prompts.unshift({ id: crypto.randomUUID(), sourceId: id, title: ep.title, text: ep.text, description: `From ${ep.author}`, tags: ep.tags || [], folderId: null, platform: 'universal', variables: [], isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() }); 
+      await saveData('prompts', state.prompts); 
+      showToast(t('savedToLibrary'), 'success'); 
+      supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/increment_download_count', body: { prompt_uuid: id } }); 
+      renderPrompts();
+      return; 
+    }
     const likeBtn = e.target.closest('[data-explore-like]');
-    if (likeBtn) { e.stopPropagation(); const id = likeBtn.dataset.exploreLike; try { const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/toggle_library_like', body: { prompt_uuid: id } }); if (res?.data) { const result = Array.isArray(res.data) ? res.data[0] : res.data; if (result.liked) state.userLikes.add(id); else state.userLikes.delete(id); const lp = state.libraryPrompts.find(x => x.id === id); if (lp) lp.likes = result.likes; renderExplore(); } } catch { showToast(t('failedToLike'), 'error'); } return; }
+    if (likeBtn) { 
+      e.stopPropagation(); 
+      if (!state.user) { showToast(t('signInToLike') || 'Sign in to like prompts', 'error'); return; }
+      const id = likeBtn.dataset.exploreLike; 
+      try { 
+        const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/toggle_library_like', body: { prompt_uuid: id } }); 
+        if (res?.data) { 
+          const result = Array.isArray(res.data) ? res.data[0] : res.data; 
+          if (result.liked) state.userLikes.add(id); 
+          else state.userLikes.delete(id); 
+          const lp = state.libraryPrompts.find(x => x.id === id); 
+          if (lp) lp.likes = result.likes; 
+          renderExplore(); 
+        } 
+      } catch { showToast(t('failedToLike'), 'error'); } 
+      return; 
+    }
     const reportBtn = e.target.closest('[data-explore-report]');
     if (reportBtn) { e.stopPropagation(); if (!state.userReports.has(reportBtn.dataset.exploreReport)) openReportModal(reportBtn.dataset.exploreReport); return; }
-    // Card flip
+    // Card flip on click
     const wrapper = e.target.closest('.explore-card-wrapper');
     if (wrapper && !e.target.closest('button')) {
       const card = wrapper.querySelector('.explore-card');
       const id = wrapper.dataset.exploreId;
-      if (card.classList.contains('flipped')) { card.classList.remove('flipped'); flippedCards.delete(id); }
-      else { card.classList.add('flipped'); flippedCards.add(id); }
+      if (card.classList.contains('flipped')) { 
+        card.classList.remove('flipped'); 
+        flippedCards.delete(id); 
+      } else { 
+        card.classList.add('flipped'); 
+        flippedCards.add(id); 
+      }
     }
   };
 }
@@ -1303,98 +1501,139 @@ async function syncFolderDeleteToSupabase(id) {
 async function syncAllData() {
   if (!state.session || !state.user) return;
   console.log('🔄 Syncing data with Supabase...');
+  
   try {
-    // First, try to use the sync RPC function (ensures profile exists)
-    const syncRes = await supabaseMsg({ 
+    // Step 1: Ensure profile exists (use GET then POST if needed)
+    console.log('📋 Checking user profile...');
+    let profileExists = false;
+    
+    const profileRes = await supabaseMsg({ 
       action: 'supabaseRequest', 
-      method: 'POST', 
-      path: 'rpc/sync_user_on_login',
-      body: {}
+      method: 'GET', 
+      path: `profiles?id=eq.${state.user.id}&select=id,is_premium,prompt_limit` 
     });
     
-    if (syncRes?.data && !syncRes.data.error) {
-      console.log('✅ User sync via RPC successful');
-      const syncData = Array.isArray(syncRes.data) ? syncRes.data[0] : syncRes.data;
-      if (syncData) {
-        state.isPremium = syncData.is_premium || false;
-        state.promptLimit = syncData.prompt_limit || FREE_PROMPT_LIMIT;
-        await saveData('isPremium', state.isPremium);
-        await saveData('promptLimit', state.promptLimit);
-      }
+    if (profileRes?.data?.length > 0) {
+      profileExists = true;
+      const profile = profileRes.data[0];
+      state.isPremium = profile.is_premium || false;
+      state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
+      console.log('✅ Profile found:', profile.id);
     } else {
-      // Fallback: manually ensure profile exists
-      console.log('⚠️ RPC sync failed, trying manual profile check...');
-      const profileRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}` });
-      if (!profileRes?.data?.length) {
-        // Create profile if it doesn't exist
-        console.log('📝 Creating user profile...');
-        const createRes = await supabaseMsg({ 
+      // Profile doesn't exist - create it
+      console.log('📝 Creating user profile...');
+      const createRes = await supabaseMsg({ 
+        action: 'supabaseRequest', 
+        method: 'POST', 
+        path: 'profiles', 
+        body: { 
+          id: state.user.id, 
+          email: state.user.email, 
+          full_name: state.user.name || state.user.email?.split('@')[0],
+          avatar_url: state.user.avatar || '',
+          is_premium: false,
+          prompt_limit: FREE_PROMPT_LIMIT
+        } 
+      });
+      
+      if (createRes?.error) {
+        // Error might be duplicate key - profile created by trigger
+        console.log('⚠️ Profile creation returned error (may already exist from trigger):', createRes.error);
+        // Try fetching again
+        const retryRes = await supabaseMsg({ 
           action: 'supabaseRequest', 
-          method: 'POST', 
-          path: 'profiles', 
-          body: { 
-            id: state.user.id, 
-            email: state.user.email, 
-            full_name: state.user.name,
-            avatar_url: state.user.avatar || '',
-            is_premium: false,
-            prompt_limit: FREE_PROMPT_LIMIT
-          } 
+          method: 'GET', 
+          path: `profiles?id=eq.${state.user.id}` 
         });
-        if (createRes?.error) {
-          console.warn('⚠️ Profile creation via API failed, profile may be created by trigger:', createRes.error);
-        } else {
-          console.log('✅ Profile created successfully');
+        if (retryRes?.data?.length > 0) {
+          profileExists = true;
+          const profile = retryRes.data[0];
+          state.isPremium = profile.is_premium || false;
+          state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
         }
       } else {
-        console.log('✅ Profile already exists');
-        // Update premium status from profile
-        const profile = profileRes.data[0];
-        if (profile.is_premium !== undefined) {
-          state.isPremium = profile.is_premium;
-          state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
-          await saveData('isPremium', state.isPremium);
-          await saveData('promptLimit', state.promptLimit);
-        }
+        profileExists = true;
+        console.log('✅ Profile created successfully');
       }
     }
+    
+    await saveData('isPremium', state.isPremium);
+    await saveData('promptLimit', state.promptLimit);
+    
+    if (!profileExists) {
+      console.warn('⚠️ Could not create or find profile, skipping sync');
+      return;
+    }
 
-    // Sync folders from cloud
+    // Step 2: Sync folders from cloud (with merge strategy)
+    console.log('📁 Syncing folders...');
     const fRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'folders?order=created_at.asc' });
-    if (fRes?.data?.length) { 
-      state.folders = fRes.data.map(f => ({ id: f.id, name: f.name, createdAt: new Date(f.created_at).getTime(), updatedAt: new Date(f.updated_at).getTime() })); 
-      await saveData('folders', state.folders); 
-      console.log('✅ Synced', state.folders.length, 'folders from cloud');
+    
+    if (fRes?.data) {
+      const cloudFolders = fRes.data.map(f => ({ 
+        id: f.id, 
+        name: f.name, 
+        createdAt: new Date(f.created_at).getTime(), 
+        updatedAt: new Date(f.updated_at).getTime() 
+      }));
+      
+      // Merge: cloud wins if cloud has data, otherwise upload local
+      if (cloudFolders.length > 0) {
+        state.folders = cloudFolders;
+        console.log('✅ Loaded', cloudFolders.length, 'folders from cloud');
+      } else if (state.folders.length > 0) {
+        console.log('📤 Uploading', state.folders.length, 'local folders to cloud...');
+        for (const f of state.folders) {
+          await syncFolderToSupabase(f);
+        }
+      }
+      await saveData('folders', state.folders);
     } else if (fRes?.error) {
       console.warn('⚠️ Failed to fetch folders:', fRes.error);
     }
     
-    // Sync prompts from cloud
+    // Step 3: Sync prompts from cloud (with merge strategy)
+    console.log('📝 Syncing prompts...');
     const pRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompts?order=created_at.desc' });
-    if (pRes?.data?.length) { 
-      state.prompts = pRes.data.map(p => ({ id: p.id, title: p.title, text: p.text, description: p.description, imageUrl: p.image_url || null, folderId: p.folder_id, platform: p.platform, tags: p.tags || [], variables: p.variables || [], isFavorite: p.is_favorite, useCount: p.use_count || 0, createdAt: new Date(p.created_at).getTime(), updatedAt: new Date(p.updated_at).getTime() })); 
-      await saveData('prompts', state.prompts); 
-      console.log('✅ Synced', state.prompts.length, 'prompts from cloud');
+    
+    if (pRes?.data) {
+      const cloudPrompts = pRes.data.map(p => ({ 
+        id: p.id, 
+        title: p.title, 
+        text: p.text, 
+        description: p.description, 
+        folderId: p.folder_id, 
+        platform: p.platform, 
+        tags: p.tags || [], 
+        variables: p.variables || [], 
+        isFavorite: p.is_favorite || false, 
+        useCount: p.use_count || 0, 
+        createdAt: new Date(p.created_at).getTime(), 
+        updatedAt: new Date(p.updated_at).getTime() 
+      }));
+      
+      // Merge: cloud wins if cloud has data, otherwise upload local
+      if (cloudPrompts.length > 0) {
+        state.prompts = cloudPrompts;
+        console.log('✅ Loaded', cloudPrompts.length, 'prompts from cloud');
+      } else if (state.prompts.length > 0) {
+        console.log('📤 Uploading', state.prompts.length, 'local prompts to cloud...');
+        for (const p of state.prompts) {
+          await syncPromptToSupabase(p);
+        }
+      }
+      await saveData('prompts', state.prompts);
     } else if (pRes?.error) {
       console.warn('⚠️ Failed to fetch prompts:', pRes.error);
-    } else if (!pRes?.error && state.prompts.length > 0) {
-      // No prompts in cloud but have local - upload local prompts
-      console.log('📤 Uploading local data to cloud...');
-      // First upload folders (prompts may reference them)
-      for (const f of state.folders) {
-        await syncFolderToSupabase(f);
-      }
-      // Then upload prompts
-      for (const p of state.prompts) {
-        await syncPromptToSupabase(p);
-      }
-      console.log('✅ Uploaded', state.prompts.length, 'prompts and', state.folders.length, 'folders to cloud');
     }
     
+    // Step 4: Update UI
     renderPrompts(); 
     renderFolders(); 
     renderFavorites();
     renderLimitBanner();
+    
+    console.log('✅ Sync complete! Prompts:', state.prompts.length, 'Folders:', state.folders.length);
   } catch (e) { 
     console.error('❌ Sync error:', e); 
   }
@@ -1479,8 +1718,11 @@ async function init() {
     if (state.settings.theme === 'system') applyTheme('system');
   });
 
+  // Always try to load library prompts (they're public)
+  loadLibraryPrompts();
+  
+  // If logged in, sync user data
   if (state.session) { 
-    loadLibraryPrompts(); 
     checkPremiumStatus(); 
     syncAllData();
   }
