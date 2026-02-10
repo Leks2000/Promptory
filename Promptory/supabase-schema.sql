@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS public.prompts (
   title TEXT NOT NULL,
   text TEXT NOT NULL,
   description TEXT,
+  image_url TEXT,
   platform TEXT DEFAULT 'universal',
   tags TEXT[] DEFAULT '{}',
   variables TEXT[] DEFAULT '{}',
@@ -96,6 +97,7 @@ CREATE TABLE IF NOT EXISTS public.library_prompts (
   title TEXT NOT NULL,
   text TEXT NOT NULL,
   description TEXT,
+  image_url TEXT,
   author TEXT NOT NULL,
   author_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   tags TEXT[] DEFAULT '{}',
@@ -111,6 +113,8 @@ CREATE TABLE IF NOT EXISTS public.library_prompts (
 
 -- Add author_id column if table already exists without it
 DO $$ BEGIN
+  ALTER TABLE public.prompts ADD COLUMN IF NOT EXISTS image_url TEXT;
+  ALTER TABLE public.library_prompts ADD COLUMN IF NOT EXISTS image_url TEXT;
   ALTER TABLE public.library_prompts ADD COLUMN IF NOT EXISTS author_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
   ALTER TABLE public.library_prompts ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT true;
 EXCEPTION WHEN OTHERS THEN NULL;

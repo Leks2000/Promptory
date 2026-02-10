@@ -404,3 +404,33 @@ body {
 .explore-action-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .explore-action-btn.liked { color: var(--error); }
 .explore-action-btn.reported { color: var(--warning); }
+
+/* Image Upload */
+.image-upload-container {
+  position: relative;
+}
+.image-upload-zone {
+  min-height: 80px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.image-upload-zone:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+.image-upload-preview {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+.image-upload-preview img {
+  display: block;
+  border: 1px solid var(--border);
+}
+.image-remove-btn {
+  opacity: 0.8;
+}
+.image-remove-btn:hover {
+  opacity: 1;
+  background: var(--error) !important;
+  color: white;
+}

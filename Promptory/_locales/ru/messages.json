@@ -228,5 +228,11 @@
   "premiumFeature3": { "message": "Приоритетный доступ к новым функциям" },
   "premiumFeature4": { "message": "Ранний доступ к AI-интеграциям" },
   "premiumNote": { "message": "Premium сейчас в раннем доступе. Свяжитесь с нами для активации. Цены будут объявлены позже." },
-  "contactForPremium": { "message": "Связаться" }
+  "contactForPremium": { "message": "Связаться" },
+
+  "image": { "message": "Изображение" },
+  "clickToUpload": { "message": "Нажмите для загрузки изображения" },
+  "remove": { "message": "Удалить" },
+  "imageTooLarge": { "message": "Изображение слишком большое (макс. 2МБ)" },
+  "imageUploadFailed": { "message": "Ошибка загрузки изображения" }
 }

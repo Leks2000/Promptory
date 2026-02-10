@@ -228,5 +228,11 @@
   "premiumFeature3": { "message": "Priority access to new features" },
   "premiumFeature4": { "message": "Early access to AI integrations" },
   "premiumNote": { "message": "Premium is currently in early access. Contact us to get started. Pricing will be announced soon." },
-  "contactForPremium": { "message": "Contact Us" }
+  "contactForPremium": { "message": "Contact Us" },
+
+  "image": { "message": "Image" },
+  "clickToUpload": { "message": "Click to upload image" },
+  "remove": { "message": "Remove" },
+  "imageTooLarge": { "message": "Image too large (max 2MB)" },
+  "imageUploadFailed": { "message": "Image upload failed" }
 }
