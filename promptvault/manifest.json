@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "PromptVault",
-  "version": "1.0.0",
-  "description": "AI Prompt Manager — Save, organize, and instantly insert prompts",
+  "name": "__MSG_extName__",
+  "version": "1.1.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
@@ -95,5 +96,11 @@
     "16": "assets/icon-16.png",
     "48": "assets/icon-48.png",
     "128": "assets/icon-128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["_locales/*/messages.json"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

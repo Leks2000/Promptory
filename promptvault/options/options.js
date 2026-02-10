@@ -2,7 +2,7 @@
 
 // ==================== LOAD SETTINGS ====================
 function loadSettings() {
-  chrome.storage.local.get(['settings', 'prompts', 'folders'], (result) => {
+  chrome.storage.local.get(['settings', 'prompts', 'folders', 'language'], (result) => {
     const settings = result.settings || { theme: 'system' };
     const prompts = result.prompts || [];
     const folders = result.folders || [];
@@ -10,20 +10,20 @@ function loadSettings() {
     document.getElementById('theme-select').value = settings.theme;
     applyTheme(settings.theme);
 
+    // Language
+    const lang = result.language || 'en';
+    document.getElementById('lang-select').value = lang;
+
     // Stats
     document.getElementById('stat-prompts').textContent = prompts.length;
     document.getElementById('stat-folders').textContent = folders.length;
     document.getElementById('stat-uses').textContent = prompts.reduce((s, p) => s + (p.useCount || 0), 0);
     document.getElementById('stat-favorites').textContent = prompts.filter(p => p.isFavorite).length;
 
-    // Load shortcuts display
     loadShortcuts();
-
-    // Load hotkey assignments
     loadHotkeyAssignments(settings, prompts);
   });
 
-  // Load version
   const manifest = chrome.runtime.getManifest();
   document.getElementById('version').textContent = manifest.version;
 }
@@ -47,8 +47,7 @@ function loadShortcuts() {
     'open-search': { name: 'Search Overlay', desc: 'Open prompt search on any page' },
     'hotkey-1': { name: 'Quick Insert 1', desc: 'Insert prompt from Slot 1' },
     'hotkey-2': { name: 'Quick Insert 2', desc: 'Insert prompt from Slot 2' },
-    'hotkey-3': { name: 'Quick Insert 3', desc: 'Insert prompt from Slot 3' },
-    'hotkey-4': { name: 'Quick Insert 4', desc: 'Insert prompt from Slot 4' }
+    'hotkey-3': { name: 'Quick Insert 3', desc: 'Insert prompt from Slot 3' }
   };
 
   if (chrome.commands && chrome.commands.getAll) {
@@ -75,7 +74,7 @@ function loadShortcuts() {
   }
 }
 
-// ==================== HOTKEY ASSIGNMENTS ====================
+// ==================== HOTKEY ASSIGNMENTS (3 slots) ====================
 function loadHotkeyAssignments(settings, prompts) {
   const container = document.getElementById('hotkey-assignment');
   if (!container) return;
@@ -83,7 +82,7 @@ function loadHotkeyAssignments(settings, prompts) {
   const hotkeys = settings.hotkeys || {};
   let html = '';
 
-  for (let n = 1; n <= 4; n++) {
+  for (let n = 1; n <= 3; n++) {
     const slotId = `slot${n}`;
     const slot = hotkeys[slotId] || {};
     const assigned = slot.promptId ? prompts.find(p => p.id === slot.promptId) : null;
@@ -107,12 +106,13 @@ function loadHotkeyAssignments(settings, prompts) {
 // ==================== SAVE SETTINGS ====================
 function saveSettings() {
   const theme = document.getElementById('theme-select').value;
+  const lang = document.getElementById('lang-select').value;
 
   chrome.storage.local.get(['settings'], (result) => {
     const settings = result.settings || {};
     settings.theme = theme;
 
-    chrome.storage.local.set({ settings }, () => {
+    chrome.storage.local.set({ settings, language: lang }, () => {
       applyTheme(theme);
       showSuccessMessage();
     });
@@ -132,7 +132,6 @@ function saveHotkeyAssignments() {
 
     chrome.storage.local.set({ settings }, () => {
       showSuccessMessage();
-      // Refresh the assignment display
       chrome.storage.local.get(['settings', 'prompts'], (res) => {
         loadHotkeyAssignments(res.settings || {}, res.prompts || []);
       });
@@ -156,16 +155,13 @@ function exportData() {
       settings: result.settings || {},
       exportDate: new Date().toISOString()
     };
-
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement('a');
     a.href = url;
     a.download = `promptvault-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
-
     URL.revokeObjectURL(url);
     showSuccessMessage();
   });
@@ -175,23 +171,14 @@ function importData() {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'application/json';
-
   input.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-
-      if (!data.prompts || !data.folders) {
-        throw new Error('Invalid backup file');
-      }
-
-      if (!confirm('This will replace all current data. Continue?')) {
-        return;
-      }
-
+      if (!data.prompts || !data.folders) throw new Error('Invalid backup file');
+      if (!confirm('This will replace all current data. Continue?')) return;
       chrome.storage.local.set({
         prompts: data.prompts,
         folders: data.folders,
@@ -200,11 +187,8 @@ function importData() {
         showSuccessMessage();
         setTimeout(() => loadSettings(), 500);
       });
-    } catch (err) {
-      alert('Import failed: Invalid file format');
-    }
+    } catch (err) { alert('Import failed: Invalid file format'); }
   });
-
   input.click();
 }
 
@@ -218,6 +202,7 @@ function escapeHtml(text) {
 
 // ==================== EVENT LISTENERS ====================
 document.getElementById('theme-select').addEventListener('change', saveSettings);
+document.getElementById('lang-select').addEventListener('change', saveSettings);
 document.getElementById('export-btn').addEventListener('click', exportData);
 document.getElementById('import-btn').addEventListener('click', importData);
 document.getElementById('save-hotkeys-btn').addEventListener('click', saveHotkeyAssignments);
@@ -226,14 +211,10 @@ document.getElementById('open-shortcuts-btn').addEventListener('click', () => {
   chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
 });
 
-// Theme change listener
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   chrome.storage.local.get(['settings'], (result) => {
-    if (result.settings && result.settings.theme === 'system') {
-      applyTheme('system');
-    }
+    if (result.settings && result.settings.theme === 'system') applyTheme('system');
   });
 });
 
-// Initialize
 loadSettings();
