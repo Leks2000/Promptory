@@ -97,6 +97,9 @@
     "48": "assets/icon-48.png",
     "128": "assets/icon-128.png"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' https://vofgfvlgchqheksvlibl.supabase.co data:;"
+  },
   "web_accessible_resources": [
     {
       "resources": ["_locales/*/messages.json", "auth-callback.html"],
