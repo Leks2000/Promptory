@@ -1,12 +1,12 @@
 {
-  "extName": { "message": "PromptVault" },
+  "extName": { "message": "Promptory" },
   "extDescription": { "message": "AI Prompt Manager — Save, organize, and instantly insert prompts" },
 
-  "welcomeTitle": { "message": "Welcome to PromptVault" },
+  "welcomeTitle": { "message": "Welcome to Promptory" },
   "welcomeText": { "message": "Your personal AI prompt manager. Save, organize, and instantly insert prompts into ChatGPT, Claude, Gemini, and more." },
   "getStarted": { "message": "Get Started" },
 
-  "appTitle": { "message": "PromptVault" },
+  "appTitle": { "message": "Promptory" },
   "newBtn": { "message": "New" },
   "settings": { "message": "Settings" },
   "searchPlaceholder": { "message": "Search prompts..." },
@@ -71,7 +71,7 @@
   "catCreative": { "message": "Creative" },
   "catLearning": { "message": "Learning" },
   "catAI": { "message": "AI & Prompts" },
-  "shareDisclaimer": { "message": "By sharing, your prompt will be visible to all PromptVault users. Your name will appear as the author. You can remove it later." },
+  "shareDisclaimer": { "message": "By sharing, your prompt will be visible to all Promptory users. Your name will appear as the author. You can remove it later." },
   "cancel": { "message": "Cancel" },
   "share": { "message": "Share" },
   "titleRequired": { "message": "Title is required" },
@@ -194,7 +194,7 @@
   "langEnglish": { "message": "English" },
   "langRussian": { "message": "Russian" },
 
-  "onboardingTitle": { "message": "Welcome to PromptVault" },
+  "onboardingTitle": { "message": "Welcome to Promptory" },
   "onboardingSubtitle": { "message": "Your AI Prompt Manager" },
   "onboardingFeature1Title": { "message": "Save & Organize" },
   "onboardingFeature1Text": { "message": "Store all your AI prompts in one place with folders and tags" },

@@ -1,12 +1,14 @@
-// PromptVault Background Service Worker
+// Promptory Background Service Worker
 
 const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0';
+// Extension ID for redirect URL
+const EXTENSION_ID = 'clachikkapfdfldgkmdhkmpmgagonnml';
 
 // ---------- Installation ----------
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('PromptVault installed');
+    console.log('Promptory installed');
     chrome.storage.local.set({
       prompts: [],
       folders: [],
@@ -69,7 +71,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'assets/icon-128.png',
-      title: 'PromptVault',
+      title: 'Promptory',
       message: 'Prompt saved successfully!'
     });
   }
@@ -224,76 +226,104 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ---------- Supabase Auth via Chrome Identity API ----------
 async function handleGoogleSignIn() {
   try {
+    // Use chrome.identity.getRedirectURL() for proper callback
     const callbackUrl = chrome.identity.getRedirectURL();
     console.log('🔹 Callback URL:', callbackUrl);
 
+    // Build auth URL with Supabase - redirect to extension callback
     const authUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUrl)}`;
     console.log('🔹 Auth URL:', authUrl);
 
-    // Open auth in new tab (NOT launchWebAuthFlow - Brave blocks it!)
-    const tab = await chrome.tabs.create({ 
-      url: authUrl, 
-      active: true 
-    });
+    // Try launchWebAuthFlow first (works in most browsers)
+    try {
+      const responseUrl = await chrome.identity.launchWebAuthFlow({
+        url: authUrl,
+        interactive: true
+      });
 
-    console.log('🔹 Opened auth tab:', tab.id);
+      console.log('🔹 Response URL:', responseUrl);
 
-    // Wait for auth-callback.html to save session
-    return new Promise((resolve) => {
-      let checkCount = 0;
-      const maxChecks = 120; // 60 seconds (120 * 500ms)
+      if (!responseUrl) {
+        throw new Error('No response URL received');
+      }
+
+      // Parse tokens from URL hash
+      const url = new URL(responseUrl);
+      const hashParams = new URLSearchParams(url.hash.replace('#', ''));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
+
+      if (!accessToken) {
+        // Check for error in URL
+        const errorDesc = hashParams.get('error_description') || url.searchParams.get('error_description');
+        throw new Error(errorDesc || 'No access token in response');
+      }
+
+      console.log('✅ Got access token');
+
+      // Fetch user info from Supabase
+      const user = await fetchUserInfo(accessToken);
+      console.log('✅ Got user:', user.email);
+
+      // Save session
+      const session = {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_at: Date.now() + (expiresIn * 1000)
+      };
+
+      await chrome.storage.local.set({ session, user });
+      console.log('✅ Session saved');
+
+      return { success: true, user, session };
+
+    } catch (launchError) {
+      console.warn('⚠️ launchWebAuthFlow failed, trying tab method:', launchError.message);
       
-      const checkInterval = setInterval(async () => {
-        checkCount++;
+      // Fallback: Open in new tab (for Brave and other browsers that block launchWebAuthFlow)
+      const tab = await chrome.tabs.create({ 
+        url: authUrl, 
+        active: true 
+      });
+
+      console.log('🔹 Opened auth tab:', tab.id);
+
+      // Wait for auth-callback.html to save session
+      return new Promise((resolve) => {
+        let checkCount = 0;
+        const maxChecks = 120; // 60 seconds (120 * 500ms)
         
-        const { session, user } = await chrome.storage.local.get(['session', 'user']);
-        
-        if (session && user) {
-          clearInterval(checkInterval);
-          console.log('✅ Session detected:', user.email);
+        const checkInterval = setInterval(async () => {
+          checkCount++;
           
-          // Close auth tab if still open
-          try {
-            await chrome.tabs.remove(tab.id);
-          } catch (e) {
-            console.log('🔹 Auth tab already closed');
+          const { session, user } = await chrome.storage.local.get(['session', 'user']);
+          
+          if (session && user) {
+            clearInterval(checkInterval);
+            console.log('✅ Session detected:', user.email);
+            
+            // Close auth tab if still open
+            try {
+              await chrome.tabs.remove(tab.id);
+            } catch (e) {
+              console.log('🔹 Auth tab already closed');
+            }
+            
+            resolve({ success: true, user, session });
+          } else if (checkCount >= maxChecks) {
+            clearInterval(checkInterval);
+            console.error('❌ Timeout waiting for auth');
+            resolve({ success: false, error: 'Timeout waiting for authentication' });
           }
-          
-          resolve({ success: true, user, session });
-        } else if (checkCount >= maxChecks) {
-          clearInterval(checkInterval);
-          console.error('❌ Timeout waiting for auth');
-          resolve({ success: false, error: 'Timeout waiting for authentication' });
-        }
-      }, 500);
-    });
+        }, 500);
+      });
+    }
 
   } catch (err) {
     console.error('❌ Sign-in error:', err);
     return { success: false, error: err.message };
   }
-}
-
-async function fetchUserInfo(accessToken) {
-  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'apikey': SUPABASE_ANON_KEY
-    }
-  });
-
-  if (!userRes.ok) {
-    const text = await userRes.text();
-    throw new Error('Failed to get user info: ' + text);
-  }
-  const userData = await userRes.json();
-
-  return {
-    id: userData.id,
-    email: userData.email,
-    name: userData.user_metadata?.full_name || userData.user_metadata?.name || userData.email?.split('@')[0],
-    avatar: userData.user_metadata?.avatar_url || userData.user_metadata?.picture || ''
-  };
 }
 
 async function fetchUserInfo(accessToken) {
@@ -423,4 +453,4 @@ async function handleSupabaseRequest(message) {
   }
 }
 
-console.log('PromptVault background service worker initialized');
+console.log('Promptory background service worker initialized');

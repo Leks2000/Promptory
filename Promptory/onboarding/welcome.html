@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to PromptVault</title>
+  <title>Welcome to Promptory</title>
   <link rel="stylesheet" href="../styles/variables.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -120,7 +120,7 @@
       </svg>
     </div>
 
-    <h1 id="ob-title">Welcome to PromptVault</h1>
+    <h1 id="ob-title">Welcome to Promptory</h1>
     <p class="subtitle" id="ob-subtitle">Your AI Prompt Manager</p>
 
     <div class="features">
@@ -184,7 +184,7 @@
     // Language switching
     const texts = {
       en: {
-        title: 'Welcome to PromptVault', subtitle: 'Your AI Prompt Manager',
+        title: 'Welcome to Promptory', subtitle: 'Your AI Prompt Manager',
         f1t: 'Save & Organize', f1d: 'Store all your AI prompts in one place with folders and tags',
         f2t: 'Instant Insert', f2d: 'Insert prompts into ChatGPT, Claude, Gemini with one click or hotkey',
         f3t: 'Cloud Sync', f3d: 'Sign in with Google to sync prompts across devices',
@@ -192,7 +192,7 @@
         open: 'Open Extension', skip: 'Skip to extension'
       },
       ru: {
-        title: 'Добро пожаловать в PromptVault', subtitle: 'Ваш AI Менеджер промптов',
+        title: 'Добро пожаловать в Promptory', subtitle: 'Ваш AI Менеджер промптов',
         f1t: 'Сохраняйте и организуйте', f1d: 'Храните все AI промпты в одном месте с папками и тегами',
         f2t: 'Мгновенная вставка', f2d: 'Вставляйте промпты в ChatGPT, Claude, Gemini одним кликом или горячей клавишей',
         f3t: 'Облачная синхронизация', f3d: 'Войдите через Google для синхронизации промптов между устройствами',
@@ -236,14 +236,17 @@
       else if (navigator.language.startsWith('ru')) setLang('ru');
     });
 
-    // Button handlers
+    // Button handlers - redirect properly works now
     document.getElementById('open-ext-btn').addEventListener('click', () => {
-      chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true });
-      window.close();
+      chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true }, () => {
+        // This will close the tab and user can click extension icon to open popup
+        window.close();
+      });
     });
     document.getElementById('skip-btn').addEventListener('click', () => {
-      chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true });
-      window.close();
+      chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true }, () => {
+        window.close();
+      });
     });
   </script>
 </body>
