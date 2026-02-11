@@ -1,5 +1,7 @@
 // PromptVault Options page functionality
 
+const HOTKEY_PROMPT_SELECT_LIMIT = 200;
+
 // ==================== LOAD SETTINGS ====================
 function loadSettings() {
   chrome.storage.local.get(['settings', 'prompts', 'folders', 'language'], (result) => {
@@ -80,12 +82,20 @@ function loadHotkeyAssignments(settings, prompts) {
   if (!container) return;
 
   const hotkeys = settings.hotkeys || {};
+  const sortedPrompts = [...prompts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const basePrompts = sortedPrompts.slice(0, HOTKEY_PROMPT_SELECT_LIMIT);
+
   let html = '';
 
   for (let n = 1; n <= 3; n++) {
     const slotId = `slot${n}`;
     const slot = hotkeys[slotId] || {};
     const assigned = slot.promptId ? prompts.find(p => p.id === slot.promptId) : null;
+
+    const selectPrompts = [...basePrompts];
+    if (slot.promptId && !selectPrompts.some(p => p.id === slot.promptId) && assigned) {
+      selectPrompts.unshift(assigned);
+    }
 
     html += `
       <div class="hotkey-row">
@@ -95,9 +105,13 @@ function loadHotkeyAssignments(settings, prompts) {
         </div>
         <select data-slot="${slotId}">
           <option value="">-- No prompt --</option>
-          ${prompts.map(p => `<option value="${p.id}" ${slot.promptId === p.id ? 'selected' : ''}>${escapeHtml(p.title.substring(0, 40))}${p.title.length > 40 ? '...' : ''}</option>`).join('')}
+          ${selectPrompts.map(p => `<option value="${p.id}" ${slot.promptId === p.id ? 'selected' : ''}>${escapeHtml(p.title.substring(0, 40))}${p.title.length > 40 ? '...' : ''}</option>`).join('')}
         </select>
       </div>`;
+  }
+
+  if (prompts.length > HOTKEY_PROMPT_SELECT_LIMIT) {
+    html += `<div style="margin-top:8px;color:var(--text-tertiary);font-size:var(--font-size-xs);">Showing recent ${HOTKEY_PROMPT_SELECT_LIMIT} prompts for faster settings performance.</div>`;
   }
 
   container.innerHTML = html;
