@@ -1137,7 +1137,7 @@ async function loadLibraryPrompts() {
         imageUrl: p.image_url || null
       }));
       console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts');
-    } else if (res?.error) {
+    } else if (res?.error || (res?.data && Array.isArray(res.data) && res.data.length === 0)) {
       console.error('📚 Library load error:', res.error);
       // Fallback: use likes sorting if created_at query is blocked by schema mismatch
       console.log('📚 Trying fallback query with likes sorting...');
