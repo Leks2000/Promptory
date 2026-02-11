@@ -43,6 +43,7 @@ const state = {
   session: null,
   isFirstLaunch: false,
   libraryPrompts: [],
+  libraryError: null,
   searchOriginalPrompts: null,
   userLikes: new Set(),
   userReports: new Set(),
@@ -89,6 +90,17 @@ function formatDate(ts) {
 
 function supabaseMsg(params) {
   return new Promise(resolve => chrome.runtime.sendMessage(params, resolve));
+}
+
+function parseSupabaseError(error) {
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  try { return JSON.stringify(error); } catch { return String(error); }
+}
+
+function isAuthError(error) {
+  const msg = parseSupabaseError(error).toLowerCase();
+  return msg.includes('not authenticated') || msg.includes('jwt') || msg.includes('token') || msg.includes('401');
 }
 
 // Truncate text for performance (avoid rendering huge strings)
@@ -1106,79 +1118,85 @@ async function loadLibraryPrompts() {
   // Library prompts should be visible to authenticated users only
   if (!state.session || !state.user) {
     console.log('📚 Skipping library load - not authenticated');
+    state.libraryError = null;
     renderExplore();
     return;
   }
-  
+
   console.log('📚 Loading library prompts...');
-  try {
-    // Fetch cards directly from DB for authenticated users
-    // (RLS in Supabase controls visibility per user/role)
-    const res = await supabaseMsg({ 
-      action: 'supabaseRequest', 
-      method: 'GET', 
-      path: 'library_prompts?order=created_at.desc&limit=100'
-    });
-    console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
-    
-    if (res?.data && Array.isArray(res.data)) {
-      state.libraryPrompts = res.data.map(p => ({ 
-        id: p.id, 
-        title: p.title, 
-        text: p.text, 
-        description: p.description, 
-        author: p.author, 
-        authorId: p.author_id, 
-        tags: p.tags || [], 
-        likes: p.likes || 0, 
-        downloads: p.downloads || 0, 
-        category: p.category || 'general', 
-        isFeatured: p.is_featured,
-        imageUrl: p.image_url || null
-      }));
-      console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts');
-    } else if (res?.error || (res?.data && Array.isArray(res.data) && res.data.length === 0)) {
-      console.error('📚 Library load error:', res.error);
-      // Fallback: use likes sorting if created_at query is blocked by schema mismatch
-      console.log('📚 Trying fallback query with likes sorting...');
-      const fallbackRes = await supabaseMsg({ 
-        action: 'supabaseRequest', 
-        method: 'GET', 
-        path: 'library_prompts?order=likes.desc&limit=100' 
-      });
-      console.log('📚 Fallback response:', JSON.stringify(fallbackRes).substring(0, 500));
-      if (fallbackRes?.data && Array.isArray(fallbackRes.data)) {
-        state.libraryPrompts = fallbackRes.data.map(p => ({ 
-          id: p.id, 
-          title: p.title, 
-          text: p.text, 
-          description: p.description, 
-          author: p.author, 
-          authorId: p.author_id, 
-          tags: p.tags || [], 
-          likes: p.likes || 0, 
-          downloads: p.downloads || 0, 
-          category: p.category || 'general', 
+  state.libraryError = null;
+
+  const queries = [
+    'library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url,created_at&order=created_at.desc.nullslast&limit=100',
+    'library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url&limit=100',
+    'library_prompts?order=likes.desc&limit=100'
+  ];
+
+  let lastError = null;
+  let loaded = false;
+
+  for (const path of queries) {
+    try {
+      const res = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path });
+      console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
+
+      if (res?.data && Array.isArray(res.data)) {
+        state.libraryPrompts = res.data.map(p => ({
+          id: p.id,
+          title: p.title,
+          text: p.text,
+          description: p.description,
+          author: p.author,
+          authorId: p.author_id,
+          tags: p.tags || [],
+          likes: p.likes || 0,
+          downloads: p.downloads || 0,
+          category: p.category || 'general',
           isFeatured: p.is_featured,
           imageUrl: p.image_url || null
         }));
-        console.log('📚 Fallback loaded', state.libraryPrompts.length, 'library prompts');
+        console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts via', path);
+        loaded = true;
+        break;
       }
+
+      if (res?.error) {
+        lastError = res.error;
+        console.warn('📚 Library query failed:', path, parseSupabaseError(res.error));
+      }
+    } catch (e) {
+      lastError = e;
+      console.warn('📚 Library query threw:', path, e);
     }
-    
-    // Load user likes and reports
-    try {
-      const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
-      if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
-    } catch (e) { console.warn('📚 Failed to load likes:', e); }
-    
-    try {
-      const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
-      if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
-    } catch (e) { console.warn('📚 Failed to load reports:', e); }
-  } catch (e) { 
-    console.error('Failed to load library:', e); 
   }
+
+  if (!loaded && lastError) {
+    const errorText = parseSupabaseError(lastError);
+    state.libraryError = errorText;
+
+    if (isAuthError(lastError)) {
+      console.warn('📚 Session seems invalid while loading library. Clearing local session.');
+      state.session = null;
+      state.user = null;
+      await saveData('session', null);
+      await saveData('user', null);
+      showToast(t('signInToExplore'), 'error');
+    } else {
+      console.warn('📚 Library unavailable. Possible RLS or schema issue:', errorText);
+    }
+  }
+
+  // Load user likes and reports
+  try {
+    const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
+    if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
+  } catch (e) { console.warn('📚 Failed to load likes:', e); }
+
+  try {
+    const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
+    if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
+  } catch (e) { console.warn('📚 Failed to load reports:', e); }
+
   renderExplore();
 }
 
@@ -1207,7 +1225,10 @@ function renderExplore() {
   }
   
   if (state.libraryPrompts.length === 0) {
-    list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('noPublicPrompts')}</div><div class="empty-state-text">${t('beFirstToShare')}</div></div>`;
+    const debugHint = state.libraryError
+      ? `<div class="empty-state-text" style="margin-top:8px;font-size:12px;opacity:.75;">Library load error: ${escapeHtml(truncate(state.libraryError, 160))}</div>`
+      : '';
+    list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('noPublicPrompts')}</div><div class="empty-state-text">${t('beFirstToShare')}</div>${debugHint}</div>`;
     return;
   }
   
