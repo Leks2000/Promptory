@@ -9,6 +9,7 @@ const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0';
 const FREE_PROMPT_LIMIT = 20;
 const MAX_ANIM_ITEMS = 8; // Cap staggered animations for performance
+const SETTINGS_PROMPT_SELECT_LIMIT = 200; // Prevent settings modal lag with huge libraries
 
 // ==================== I18N ====================
 const LOCALES = {};
@@ -94,6 +95,30 @@ function supabaseMsg(params) {
 function truncate(text, max = 120) {
   if (!text || text.length <= max) return text || '';
   return text.substring(0, max) + '...';
+}
+
+let _settingsPromptPoolCache = { key: '', items: [] };
+
+function getSettingsPromptPool() {
+  const cacheKey = `${state.prompts.length}:${state.prompts[0]?.updatedAt || 0}`;
+  if (_settingsPromptPoolCache.key === cacheKey) return _settingsPromptPoolCache.items;
+
+  const sorted = [...state.prompts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const items = sorted.slice(0, SETTINGS_PROMPT_SELECT_LIMIT);
+  _settingsPromptPoolCache = { key: cacheKey, items };
+  return items;
+}
+
+function getSettingsPromptOptions(selectedPromptId) {
+  const selectedId = selectedPromptId || null;
+  const limited = [...getSettingsPromptPool()];
+
+  if (selectedId && !limited.some(p => p.id === selectedId)) {
+    const selectedPrompt = state.prompts.find(p => p.id === selectedId);
+    if (selectedPrompt) limited.unshift(selectedPrompt);
+  }
+
+  return limited.map(p => `<option value="${p.id}" ${selectedId === p.id ? 'selected' : ''}>${escapeHtml(truncate(p.title, 25))}</option>`).join('');
 }
 
 // Debounce utility
@@ -1087,11 +1112,12 @@ async function loadLibraryPrompts() {
   
   console.log('📚 Loading library prompts...');
   try {
-    // First try: load all library prompts (approved or null)
+    // Fetch cards directly from DB for authenticated users
+    // (RLS in Supabase controls visibility per user/role)
     const res = await supabaseMsg({ 
       action: 'supabaseRequest', 
       method: 'GET', 
-      path: 'library_prompts?or=(is_approved.eq.true,is_approved.is.null)&order=likes.desc&limit=50' 
+      path: 'library_prompts?order=created_at.desc&limit=100'
     });
     console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
     
@@ -1113,12 +1139,12 @@ async function loadLibraryPrompts() {
       console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts');
     } else if (res?.error) {
       console.error('📚 Library load error:', res.error);
-      // Fallback: try without the OR filter (simpler query)
-      console.log('📚 Trying fallback query without filter...');
+      // Fallback: use likes sorting if created_at query is blocked by schema mismatch
+      console.log('📚 Trying fallback query with likes sorting...');
       const fallbackRes = await supabaseMsg({ 
         action: 'supabaseRequest', 
         method: 'GET', 
-        path: 'library_prompts?order=likes.desc&limit=50' 
+        path: 'library_prompts?order=likes.desc&limit=100' 
       });
       console.log('📚 Fallback response:', JSON.stringify(fallbackRes).substring(0, 500));
       if (fallbackRes?.data && Array.isArray(fallbackRes.data)) {
@@ -1414,12 +1440,12 @@ function openSettings() {
         </div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('language')}</label><select id="settings-lang"><option value="en" ${_lang === 'en' ? 'selected' : ''}>${t('langEnglish')}</option><option value="ru" ${_lang === 'ru' ? 'selected' : ''}>${t('langRussian')}</option></select></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('keyboardShortcuts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('shortcutsHint')} <a href="#" id="open-shortcuts-link" style="color:var(--accent);">${t('chromeShortcuts')}</a></span><div class="hotkey-rebind-section" id="shortcuts-display"></div></div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('quickInsertPrompts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('quickInsertHint')}</span><div class="hotkey-section">
+        <div class="form-group"><label class="form-label">${t('quickInsertPrompts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('quickInsertHint')}</span><span class="form-hint" style="margin-bottom:8px;display:block;">${state.prompts.length > SETTINGS_PROMPT_SELECT_LIMIT ? `Showing recent ${SETTINGS_PROMPT_SELECT_LIMIT} prompts for faster settings` : ''}</span><div class="hotkey-section">
           ${[1, 2, 3].map(n => {
             const slotId = `slot${n}`;
             const slot = hotkeys[slotId] || {};
             const assigned = slot.promptId ? state.prompts.find(p => p.id === slot.promptId) : null;
-            return `<div class="hotkey-item"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)}</div><div class="hotkey-description">${assigned ? escapeHtml(truncate(assigned.title, 25)) : t('noPromptAssigned')}</div></div><div class="hotkey-key"><select class="hotkey-prompt-select" data-hotkey-slot="${slotId}"><option value="">${t('selectPrompt')}</option>${state.prompts.map(p => `<option value="${p.id}" ${slot.promptId === p.id ? 'selected' : ''}>${escapeHtml(truncate(p.title, 25))}</option>`).join('')}</select><div class="hotkey-badge">Alt+${n}</div></div></div>`;
+            return `<div class="hotkey-item"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)}</div><div class="hotkey-description">${assigned ? escapeHtml(truncate(assigned.title, 25)) : t('noPromptAssigned')}</div></div><div class="hotkey-key"><select class="hotkey-prompt-select" data-hotkey-slot="${slotId}"><option value="">${t('selectPrompt')}</option>${getSettingsPromptOptions(slot.promptId)}</select><div class="hotkey-badge">Alt+${n}</div></div></div>`;
           }).join('')}
         </div></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('theme')}</label><select id="settings-theme"><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>${t('themeDark')}</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>${t('themeLight')}</option><option value="system" ${s.theme === 'system' ? 'selected' : ''}>${t('themeSystem')}</option></select></div><div class="divider"></div>
