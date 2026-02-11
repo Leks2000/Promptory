@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Promptory Core Unit Tests</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; background: #1a1a1a; color: #e0e0e0; }
+    h1 { font-size: 20px; margin-bottom: 16px; color: #fff; }
+    .suite { margin-bottom: 24px; }
+    .suite-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+    .test { padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    .test.pass { background: #0d2a1f; color: #4ade80; }
+    .test.fail { background: #2a0d0d; color: #f87171; }
+    .test-icon { font-size: 16px; }
+    .summary { margin-top: 24px; padding: 16px; background: #222; border-radius: 8px; font-size: 14px; }
+    .summary.all-pass { border: 1px solid #4ade80; }
+    .summary.has-fail { border: 1px solid #f87171; }
+  </style>
+</head>
+<body>
+  <h1>Promptory Core Unit Tests</h1>
+  <div id="results"></div>
+  <div id="summary"></div>
+  <script>
+    // ===== Test Framework =====
+    const results = [];
+    function assert(condition, message) {
+      results.push({ pass: !!condition, message });
+    }
+    function assertEqual(actual, expected, message) {
+      const pass = JSON.stringify(actual) === JSON.stringify(expected);
+      results.push({ pass, message: `${message} | expected: ${JSON.stringify(expected)}, got: ${JSON.stringify(actual)}` });
+    }
+    function assertNotEqual(actual, expected, message) {
+      const pass = JSON.stringify(actual) !== JSON.stringify(expected);
+      results.push({ pass, message });
+    }
+    function suite(name, fn) {
+      const startIdx = results.length;
+      fn();
+      const div = document.createElement('div');
+      div.className = 'suite';
+      div.innerHTML = `<div class="suite-title">${name}</div>`;
+      for (let i = startIdx; i < results.length; i++) {
+        const r = results[i];
+        div.innerHTML += `<div class="test ${r.pass ? 'pass' : 'fail'}"><span class="test-icon">${r.pass ? '✅' : '❌'}</span>${r.message}</div>`;
+      }
+      document.getElementById('results').appendChild(div);
+    }
+
+    // ===== Mock Chrome API =====
+    const mockStorage = {};
+    const chrome = {
+      storage: {
+        local: {
+          get: (keys, cb) => { const result = {}; keys.forEach(k => { if (mockStorage[k] !== undefined) result[k] = mockStorage[k]; }); cb(result); },
+          set: (obj, cb) => { Object.assign(mockStorage, obj); if (cb) cb(); }
+        },
+        onChanged: { addListener: () => {} }
+      },
+      runtime: { getURL: (path) => path, sendMessage: (msg, cb) => { if (cb) cb({}); } },
+      i18n: { getUILanguage: () => 'en' },
+      commands: { getAll: (cb) => cb([]) },
+      tabs: { create: () => {}, query: async () => [] },
+      identity: { getRedirectURL: () => 'https://test' }
+    };
+
+    // ===== Extract testable functions =====
+    // escapeHtml
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // truncate
+    function truncate(text, max = 120) {
+      if (!text || text.length <= max) return text || '';
+      return text.substring(0, max) + '...';
+    }
+
+    // debounce
+    function debounce(fn, ms) {
+      let timer;
+      return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+    }
+
+    // getEffectiveLimit
+    const FREE_PROMPT_LIMIT = 20;
+    function getEffectiveLimit(isPremium, promptLimit) {
+      return (promptLimit > 0 && promptLimit <= 1000) ? promptLimit : FREE_PROMPT_LIMIT;
+    }
+
+    // canCreatePrompt
+    function canCreatePrompt(isPremium, promptsLength, promptLimit) {
+      if (isPremium) return true;
+      return promptsLength < getEffectiveLimit(isPremium, promptLimit);
+    }
+
+    // formatDate
+    function formatDate(ts) {
+      if (!ts) return '';
+      const diff = Date.now() - ts;
+      const mins = Math.floor(diff / 60000);
+      const hrs = Math.floor(mins / 60);
+      const days = Math.floor(hrs / 24);
+      if (days > 7) return new Date(ts).toLocaleDateString();
+      if (days > 0) return `${days}d`;
+      if (hrs > 0) return `${hrs}h`;
+      if (mins > 0) return `${mins}m`;
+      return 'now';
+    }
+
+    // isSupabaseStorageUrl
+    function isSupabaseStorageUrl(url) {
+      if (!url) return false;
+      return url.includes('supabase.co/storage/v1/') || url.startsWith('supabase-storage://');
+    }
+
+    // extractStoragePath
+    function extractStoragePath(url) {
+      if (!url) return null;
+      if (url.startsWith('supabase-storage://')) return url.replace('supabase-storage://', '');
+      const publicMatch = url.match(/\/storage\/v1\/object\/(?:public|authenticated)\/(.+)$/);
+      if (publicMatch) return publicMatch[1];
+      const signMatch = url.match(/\/storage\/v1\/object\/sign\/(.+?)\?/);
+      if (signMatch) return signMatch[1];
+      return null;
+    }
+
+    // copyPromptText (browser-safe)
+    async function copyPromptText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        return false; // In test env, clipboard may not be available
+      }
+    }
+
+    // ===== Tests =====
+    suite('escapeHtml', () => {
+      assert(escapeHtml('') === '', 'empty string returns empty');
+      assert(escapeHtml(null) === '', 'null returns empty');
+      assert(escapeHtml(undefined) === '', 'undefined returns empty');
+      assert(escapeHtml('hello') === 'hello', 'plain text unchanged');
+      assert(escapeHtml('<script>alert("xss")</script>') === '&lt;script&gt;alert("xss")&lt;/script&gt;', 'escapes script tags');
+      assert(escapeHtml('a & b') === 'a &amp; b', 'escapes ampersand');
+      assert(escapeHtml('"quotes"') === '"quotes"', 'handles quotes');
+      assert(escapeHtml("it's") === "it's", 'handles apostrophe');
+    });
+
+    suite('truncate', () => {
+      assertEqual(truncate('', 10), '', 'empty string');
+      assertEqual(truncate(null, 10), '', 'null');
+      assertEqual(truncate('short', 10), 'short', 'shorter than max');
+      assertEqual(truncate('hello world', 5), 'hello...', 'truncates with ellipsis');
+      assertEqual(truncate('exact', 5), 'exact', 'exact length not truncated');
+      assertEqual(truncate('abcdef', 5), 'abcde...', 'one over gets truncated');
+    });
+
+    suite('getEffectiveLimit', () => {
+      assertEqual(getEffectiveLimit(false, 20), 20, 'normal limit 20');
+      assertEqual(getEffectiveLimit(false, 50), 50, 'premium limit 50');
+      assertEqual(getEffectiveLimit(false, 9999), FREE_PROMPT_LIMIT, 'sanitizes 9999 to default');
+      assertEqual(getEffectiveLimit(false, 0), FREE_PROMPT_LIMIT, 'sanitizes 0 to default');
+      assertEqual(getEffectiveLimit(false, -1), FREE_PROMPT_LIMIT, 'sanitizes negative to default');
+      assertEqual(getEffectiveLimit(false, 1000), 1000, 'max valid limit');
+      assertEqual(getEffectiveLimit(false, 1001), FREE_PROMPT_LIMIT, 'sanitizes 1001 to default');
+    });
+
+    suite('canCreatePrompt', () => {
+      assert(canCreatePrompt(true, 100, 20) === true, 'premium can always create');
+      assert(canCreatePrompt(false, 19, 20) === true, 'under limit can create');
+      assert(canCreatePrompt(false, 20, 20) === false, 'at limit cannot create');
+      assert(canCreatePrompt(false, 21, 20) === false, 'over limit cannot create');
+      assert(canCreatePrompt(false, 0, 20) === true, 'zero prompts can create');
+      assert(canCreatePrompt(false, 5, 9999) === true, 'sanitized 9999 -> 20, 5 < 20');
+    });
+
+    suite('formatDate', () => {
+      assertEqual(formatDate(null), '', 'null returns empty');
+      assertEqual(formatDate(undefined), '', 'undefined returns empty');
+      assertEqual(formatDate(Date.now()), 'now', 'just now');
+      assertEqual(formatDate(Date.now() - 120000), '2m', '2 minutes ago');
+      assertEqual(formatDate(Date.now() - 3600000), '1h', '1 hour ago');
+      assertEqual(formatDate(Date.now() - 86400000), '1d', '1 day ago');
+      assert(formatDate(Date.now() - 86400000 * 10).includes('/'), 'more than 7 days returns date');
+    });
+
+    suite('isSupabaseStorageUrl', () => {
+      assert(isSupabaseStorageUrl(null) === false, 'null is not storage URL');
+      assert(isSupabaseStorageUrl('') === false, 'empty is not storage URL');
+      assert(isSupabaseStorageUrl('https://example.com') === false, 'regular URL is not storage');
+      assert(isSupabaseStorageUrl('supabase-storage://Lib_img/file.jpg') === true, 'supabase-storage:// is storage');
+      assert(isSupabaseStorageUrl('https://xxx.supabase.co/storage/v1/object/public/Lib_img/file.jpg') === true, 'public URL is storage');
+    });
+
+    suite('extractStoragePath', () => {
+      assertEqual(extractStoragePath(null), null, 'null returns null');
+      assertEqual(extractStoragePath('supabase-storage://Lib_img/user/file.jpg'), 'Lib_img/user/file.jpg', 'extracts from supabase-storage://');
+      assertEqual(extractStoragePath('https://xxx.supabase.co/storage/v1/object/public/Lib_img/file.jpg'), 'Lib_img/file.jpg', 'extracts from public URL');
+      assertEqual(extractStoragePath('https://xxx.supabase.co/storage/v1/object/sign/Lib_img/file.jpg?token=abc'), 'Lib_img/file.jpg', 'extracts from signed URL');
+      assertEqual(extractStoragePath('https://random.com/image.png'), null, 'returns null for non-storage URL');
+    });
+
+    suite('debounce', () => {
+      let callCount = 0;
+      const fn = debounce(() => callCount++, 50);
+      fn(); fn(); fn();
+      assertEqual(callCount, 0, 'not called immediately');
+      // Would need setTimeout to test actual debounce behavior in async
+    });
+
+    suite('Prompt data structure', () => {
+      const prompt = {
+        id: crypto.randomUUID(),
+        title: 'Test Prompt',
+        text: 'Hello {name}, welcome to {place}!',
+        description: 'A test prompt',
+        folderId: null,
+        platform: 'universal',
+        tags: ['test', 'hello'],
+        variables: ['name', 'place'],
+        isFavorite: false,
+        useCount: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      assert(prompt.id.length === 36, 'UUID format for id');
+      assert(prompt.title.length > 0, 'title is not empty');
+      assert(prompt.text.includes('{name}'), 'text contains variable');
+      assertEqual(prompt.variables.length, 2, 'has 2 variables');
+      assertEqual(prompt.platform, 'universal', 'default platform');
+      assert(prompt.createdAt <= Date.now(), 'createdAt is in past');
+    });
+
+    suite('Search tokenization', () => {
+      const prompts = [
+        { title: 'Write Email', text: 'Compose professional email', tags: ['email', 'business'] },
+        { title: 'Code Review', text: 'Review this code for bugs', tags: ['code', 'review'] },
+        { title: 'Blog Post', text: 'Write a blog post about AI', tags: ['writing', 'ai'] }
+      ];
+      const cache = prompts.map(p => ({
+        prompt: p,
+        title: p.title.toLowerCase(),
+        desc: '',
+        tags: p.tags.map(t => t.toLowerCase()),
+        text: p.text.toLowerCase()
+      }));
+      
+      // Single word search
+      let q = 'email';
+      let tokens = q.split(/\s+/).filter(Boolean);
+      let filtered = cache.filter(c => tokens.every(token =>
+        c.title.includes(token) || c.desc.includes(token) ||
+        c.tags.some(tg => tg.includes(token)) || c.text.includes(token)
+      ));
+      assertEqual(filtered.length, 1, 'single word finds 1 result');
+      assertEqual(filtered[0].prompt.title, 'Write Email', 'finds email prompt');
+      
+      // Multi word search
+      q = 'write blog';
+      tokens = q.split(/\s+/).filter(Boolean);
+      filtered = cache.filter(c => tokens.every(token =>
+        c.title.includes(token) || c.desc.includes(token) ||
+        c.tags.some(tg => tg.includes(token)) || c.text.includes(token)
+      ));
+      assertEqual(filtered.length, 1, 'multi word search narrows results');
+      
+      // Tag search
+      q = 'ai';
+      tokens = q.split(/\s+/).filter(Boolean);
+      filtered = cache.filter(c => tokens.every(token =>
+        c.title.includes(token) || c.desc.includes(token) ||
+        c.tags.some(tg => tg.includes(token)) || c.text.includes(token)
+      ));
+      assertEqual(filtered.length, 1, 'tag search finds result');
+      
+      // No results
+      q = 'xyz123';
+      tokens = q.split(/\s+/).filter(Boolean);
+      filtered = cache.filter(c => tokens.every(token =>
+        c.title.includes(token) || c.desc.includes(token) ||
+        c.tags.some(tg => tg.includes(token)) || c.text.includes(token)
+      ));
+      assertEqual(filtered.length, 0, 'no results for gibberish');
+    });
+
+    suite('Category colors', () => {
+      const CATEGORY_COLORS = {
+        'business': { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+        'development': { bg: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' },
+        'marketing': { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
+        'creative': { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
+        'learning': { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
+        'ai': { bg: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)' },
+        'general': { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }
+      };
+      assert(Object.keys(CATEGORY_COLORS).length === 7, 'has 7 categories');
+      Object.values(CATEGORY_COLORS).forEach(v => {
+        assert(!v.icon, 'no emoji icon in category colors');
+        assert(v.bg.includes('linear-gradient'), 'has gradient background');
+      });
+    });
+
+    // ===== Summary =====
+    const passed = results.filter(r => r.pass).length;
+    const failed = results.filter(r => !r.pass).length;
+    const total = results.length;
+    const summaryEl = document.getElementById('summary');
+    summaryEl.className = `summary ${failed === 0 ? 'all-pass' : 'has-fail'}`;
+    summaryEl.innerHTML = `<strong>${passed}/${total} tests passed</strong>${failed > 0 ? ` | <span style="color:#f87171">${failed} failed</span>` : ' | <span style="color:#4ade80">All tests passed!</span>'}`;
+  </script>
+</body>
+</html>
