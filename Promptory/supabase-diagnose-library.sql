@@ -21,6 +21,12 @@ WHERE tablename IN ('library_prompts', 'profiles', 'library_likes', 'prompt_repo
 ORDER BY tablename, cmd, policyname;
 
 -- 3) Recommended minimum policy for library read
+
+-- 3.1) Required table privileges (RLS alone is not enough)
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT ON TABLE public.library_prompts TO authenticated;
+GRANT SELECT ON TABLE public.library_likes TO authenticated;
+GRANT SELECT ON TABLE public.prompt_reports TO authenticated;
 -- (idempotent: safe to run many times)
 DROP POLICY IF EXISTS "Authenticated can view library prompts" ON public.library_prompts;
 CREATE POLICY "Authenticated can view library prompts" ON public.library_prompts
