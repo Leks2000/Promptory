@@ -312,9 +312,17 @@ async function trackUsage(prompt, action = 'insert', platform = null) {
   } catch (e) { /* silent */ }
 }
 
-// ==================== PROMPTS (optimized) ====================
+// ==================== PROMPTS (optimized with batched rendering) ====================
+let _renderPromptsRAF = null;
 function renderPrompts() {
+  // Batch renders via requestAnimationFrame to avoid layout thrashing
+  if (_renderPromptsRAF) cancelAnimationFrame(_renderPromptsRAF);
+  _renderPromptsRAF = requestAnimationFrame(_renderPromptsImmediate);
+}
+function _renderPromptsImmediate() {
+  _renderPromptsRAF = null;
   const list = document.getElementById('prompts-list');
+  if (!list) return;
   const prompts = state.prompts;
   const folders = state.folders;
 
@@ -372,16 +380,17 @@ function renderPromptCard(prompt, idx) {
   const tagsHtml = prompt.tags?.length
     ? `<div class="tags">${prompt.tags.slice(0, 3).map(tg => `<span class="tag">#${escapeHtml(tg)}</span>`).join('')}${prompt.tags.length > 3 ? `<span class="tag">+${prompt.tags.length - 3}</span>` : ''}</div>`
     : '';
+  // Card click = copy. Actions: fav, edit, insert, menu
   return `
-    <div class="prompt-card" data-prompt-id="${prompt.id}" ${delay}>
+    <div class="prompt-card" data-prompt-id="${prompt.id}" ${delay} title="${t('clickToCopy') || 'Click to copy'}">
       <div class="prompt-card-header">
         <div class="prompt-title">${escapeHtml(truncate(prompt.title, 60))}</div>
         <div class="prompt-actions">
           <button class="prompt-action-btn ${prompt.isFavorite ? 'active' : ''}" data-action="toggle-fav" data-id="${prompt.id}" title="${prompt.isFavorite ? t('removeFromFavorites') : t('addToFavorites')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="${prompt.isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
           </button>
-          <button class="prompt-action-btn" data-action="copy" data-id="${prompt.id}" title="${t('copyToClipboard')}">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <button class="prompt-action-btn" data-action="edit" data-id="${prompt.id}" title="${t('edit')}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
           <button class="prompt-action-btn" data-action="insert" data-id="${prompt.id}" title="${t('insertToPage')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
@@ -419,14 +428,15 @@ function attachPromptCardListeners() {
       const id = actionBtn.dataset.id;
       if (action === 'toggle-fav') await toggleFavorite(id);
       else if (action === 'copy') await copyPrompt(id);
+      else if (action === 'edit') openPromptEditor(id);
       else if (action === 'insert') await insertPromptToPage(id);
       else if (action === 'menu') showContextMenu(actionBtn, id);
       return;
     }
-    // Card click -> edit
+    // Card click -> copy prompt text (single unified action)
     const card = e.target.closest('.prompt-card');
     if (card && !e.target.closest('.prompt-action-btn')) {
-      openPromptEditor(card.dataset.promptId);
+      copyPrompt(card.dataset.promptId);
     }
   };
 }
@@ -438,24 +448,46 @@ async function toggleFavorite(id) {
   p.updatedAt = Date.now();
   await saveData('prompts', state.prompts);
   showToast(p.isFavorite ? t('addedToFavorites') : t('removedFromFavorites'), 'success');
+  // Batch UI updates
   renderPrompts();
   renderFavorites();
   syncPromptToSupabase(p);
 }
 
+// ==================== COPY PROMPT (single unified copy function) ====================
+// This is THE copy function used everywhere - card click, button click, context menu, explore
+async function copyPromptText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fallback for older browsers
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand('copy'); document.body.removeChild(textarea); return true; }
+    catch { document.body.removeChild(textarea); return false; }
+  }
+}
+
 async function copyPrompt(id) {
   const p = state.prompts.find(x => x.id === id);
   if (!p) return;
-  try {
-    await navigator.clipboard.writeText(p.text);
+  const ok = await copyPromptText(p.text);
+  if (ok) {
     p.useCount = (p.useCount || 0) + 1;
     p.updatedAt = Date.now();
     await saveData('prompts', state.prompts);
     showToast(t('copiedToClipboard'), 'success');
     renderPrompts();
     trackUsage(p, 'copy');
-    syncPromptToSupabase(p); // Continuous sync
-  } catch { showToast(t('failedToCopy'), 'error'); }
+    syncPromptToSupabase(p);
+  } else {
+    showToast(t('failedToCopy'), 'error');
+  }
 }
 
 async function insertPromptToPage(id) {
@@ -992,9 +1024,16 @@ async function uploadImageToStorage(file, promptId) {
   }
 }
 
-// ==================== FOLDERS ====================
+// ==================== FOLDERS (optimized with RAF batching) ====================
+let _renderFoldersRAF = null;
 function renderFolders() {
+  if (_renderFoldersRAF) cancelAnimationFrame(_renderFoldersRAF);
+  _renderFoldersRAF = requestAnimationFrame(_renderFoldersImmediate);
+}
+function _renderFoldersImmediate() {
+  _renderFoldersRAF = null;
   const list = document.getElementById('folders-list');
+  if (!list) return;
   const folders = state.folders;
   if (folders.length === 0) {
     list.innerHTML = `<div class="empty-state"><div class="empty-state-title">${t('noFoldersTitle')}</div><div class="empty-state-text">${t('noFoldersText')}</div></div>`;
@@ -1091,9 +1130,16 @@ function openFolderEditor(folderId = null) {
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('folder-editor-modal'); });
 }
 
-// ==================== FAVORITES ====================
+// ==================== FAVORITES (optimized with RAF batching) ====================
+let _renderFavoritesRAF = null;
 function renderFavorites() {
+  if (_renderFavoritesRAF) cancelAnimationFrame(_renderFavoritesRAF);
+  _renderFavoritesRAF = requestAnimationFrame(_renderFavoritesImmediate);
+}
+function _renderFavoritesImmediate() {
+  _renderFavoritesRAF = null;
   const list = document.getElementById('favorites-list');
+  if (!list) return;
   const favorites = state.prompts.filter(p => p.isFavorite);
   if (favorites.length === 0) {
     list.innerHTML = `<div class="empty-state"><div class="empty-state-title">${t('noFavoritesTitle')}</div><div class="empty-state-text">${t('noFavoritesText')}</div><button class="btn btn-secondary ripple" id="fav-browse-btn">${t('browsePrompts')}</button></div>`;
@@ -1110,7 +1156,7 @@ function renderFavorites() {
   document.querySelectorAll('[data-fav-insert]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); insertPromptToPage(btn.dataset.favInsert); }));
   document.querySelectorAll('[data-fav-remove]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); toggleFavorite(btn.dataset.favRemove); }));
   document.querySelectorAll('#favorites-list .prompt-card').forEach(card => {
-    card.addEventListener('click', (e) => { if (!e.target.closest('.prompt-action-btn')) openPromptEditor(card.dataset.promptId); });
+    card.addEventListener('click', (e) => { if (!e.target.closest('.prompt-action-btn')) copyPrompt(card.dataset.promptId); });
   });
 }
 
@@ -1287,7 +1333,7 @@ function renderExplore() {
   // Event delegation for explore list
   list.onclick = async (e) => {
     const copyBtn = e.target.closest('[data-explore-copy]');
-    if (copyBtn) { e.stopPropagation(); const p = state.libraryPrompts.find(x => x.id === copyBtn.dataset.exploreCopy); if (p) { await navigator.clipboard.writeText(p.text); showToast(t('copiedToClipboard'), 'success'); } return; }
+    if (copyBtn) { e.stopPropagation(); const p = state.libraryPrompts.find(x => x.id === copyBtn.dataset.exploreCopy); if (p) { const ok = await copyPromptText(p.text); showToast(ok ? t('copiedToClipboard') : t('failedToCopy'), ok ? 'success' : 'error'); } return; }
     const saveBtn = e.target.closest('[data-explore-save]');
     if (saveBtn) { 
       e.stopPropagation(); 
@@ -1339,20 +1385,42 @@ function renderExplore() {
     }
   };
   
-  // Async: load images from private Supabase Storage for explore cards
-  list.querySelectorAll('.explore-card-thumbnail.needs-image-load').forEach(async (el) => {
-    const imageUrl = el.dataset.imageUrl;
-    if (imageUrl) {
-      try {
-        const resolvedUrl = await resolveImageUrl(imageUrl);
-        if (resolvedUrl) {
-          el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center; background-color:#111;`;
+  // Lazy load images from private Supabase Storage using IntersectionObserver
+  const imageElements = list.querySelectorAll('.explore-card-thumbnail.needs-image-load');
+  if (imageElements.length > 0 && 'IntersectionObserver' in window) {
+    const imgObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const el = entry.target;
+          imgObserver.unobserve(el);
+          const imageUrl = el.dataset.imageUrl;
+          if (imageUrl) {
+            resolveImageUrl(imageUrl).then(resolvedUrl => {
+              if (resolvedUrl) {
+                el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center; background-color:#111;`;
+              }
+            }).catch(() => {});
+          }
         }
-      } catch (e) {
-        console.warn('Failed to load explore card image:', e);
+      });
+    }, { rootMargin: '100px' }); // Pre-load when 100px away from viewport
+    imageElements.forEach(el => imgObserver.observe(el));
+  } else {
+    // Fallback for no IntersectionObserver
+    imageElements.forEach(async (el) => {
+      const imageUrl = el.dataset.imageUrl;
+      if (imageUrl) {
+        try {
+          const resolvedUrl = await resolveImageUrl(imageUrl);
+          if (resolvedUrl) {
+            el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center; background-color:#111;`;
+          }
+        } catch (e) {
+          console.warn('Failed to load explore card image:', e);
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 
@@ -1455,7 +1523,7 @@ function renderStats() {
   </div>`;
 }
 
-// ==================== SETTINGS ====================
+// ==================== SETTINGS (optimized: lazy sections, reduced reflows) ====================
 function openSettings() {
   const s = state.settings;
   const user = state.user;
@@ -1466,6 +1534,7 @@ function openSettings() {
     'hotkey-2': { label: t('quickInsertSlot', '2'), default: 'Alt+2' },
     'hotkey-3': { label: t('quickInsertSlot', '3'), default: 'Alt+3' }
   };
+  
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'settings-modal';
@@ -1494,8 +1563,11 @@ function openSettings() {
       <div class="modal-footer"><button class="btn btn-ghost close-modal-btn">${t('cancel')}</button><button class="btn btn-primary" id="settings-save-btn">${t('saveChanges')}</button></div>
     </div>`;
   document.body.appendChild(modal);
-  setTimeout(() => modal.classList.add('visible'), 10);
-  loadShortcutsDisplay(commandNames);
+  // Use rAF to avoid layout thrash during modal open
+  requestAnimationFrame(() => {
+    modal.classList.add('visible');
+    loadShortcutsDisplay(commandNames);
+  });
   document.getElementById('open-shortcuts-link')?.addEventListener('click', (e) => { e.preventDefault(); chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }); });
 
   document.getElementById('settings-signin-btn')?.addEventListener('click', async () => {
@@ -1625,12 +1697,16 @@ async function checkPremiumStatus() {
   } catch (e) { /* silent */ }
 }
 
-// ==================== SEARCH ====================
+// ==================== SEARCH (optimized) ====================
 function initSearch() {
   const input = document.getElementById('search-input');
   let searchCache = null; // Cache lowercase versions for faster search
+  let lastQuery = '';
   
   const debouncedSearch = debounce((q) => {
+    if (q === lastQuery) return; // Skip if query hasn't changed
+    lastQuery = q;
+    
     if (!q) {
       if (state.searchOriginalPrompts) { state.prompts = state.searchOriginalPrompts; state.searchOriginalPrompts = null; searchCache = null; }
       renderPrompts();
@@ -1638,27 +1714,32 @@ function initSearch() {
     }
     if (!state.searchOriginalPrompts) {
       state.searchOriginalPrompts = [...state.prompts];
-      // Pre-compute lowercase search fields once
+      // Pre-compute lowercase search fields once (major perf win for large lists)
       searchCache = state.searchOriginalPrompts.map(p => ({
         prompt: p,
         title: p.title.toLowerCase(),
         desc: (p.description || '').toLowerCase(),
         tags: (p.tags || []).map(tg => tg.toLowerCase()),
-        text: p.text.toLowerCase()
+        text: p.text.substring(0, 500).toLowerCase() // Only search first 500 chars of text
       }));
     }
     
+    // Split query into tokens for multi-word search
+    const tokens = q.split(/\s+/).filter(Boolean);
+    
     // Use cached lowercase fields for faster filtering
     const filtered = searchCache.filter(c =>
-      c.title.includes(q) || c.desc.includes(q) ||
-      c.tags.some(tg => tg.includes(q)) || c.text.includes(q)
+      tokens.every(token =>
+        c.title.includes(token) || c.desc.includes(token) ||
+        c.tags.some(tg => tg.includes(token)) || c.text.includes(token)
+      )
     );
     state.prompts = filtered.map(c => c.prompt);
     renderPrompts();
     if (state.prompts.length === 0) {
       document.getElementById('prompts-list').innerHTML = `<div class="empty-state"><div class="empty-state-title">${t('noPromptsFound')}</div></div>`;
     }
-  }, 200);
+  }, 150); // Faster debounce for snappy feel
 
   input.addEventListener('input', () => debouncedSearch(input.value.trim().toLowerCase()));
 }
