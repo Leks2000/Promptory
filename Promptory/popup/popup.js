@@ -256,7 +256,7 @@ function renderLimitBanner() {
 // ==================== DATA LOADING ====================
 async function loadData() {
   return new Promise(resolve => {
-    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit', 'language'], result => {
+    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit', 'language', 'libraryPromptsCache'], result => {
       if (result.prompts) state.prompts = result.prompts;
       if (result.folders) state.folders = result.folders;
       if (result.settings) state.settings = { ...state.settings, ...result.settings };
@@ -264,6 +264,7 @@ async function loadData() {
       if (result.session) state.session = result.session;
       if (result.isPremium) state.isPremium = result.isPremium;
       if (result.promptLimit) state.promptLimit = result.promptLimit;
+      if (result.libraryPromptsCache && Array.isArray(result.libraryPromptsCache)) state.libraryPrompts = result.libraryPromptsCache;
       if (!result.hasLaunched) {
         state.isFirstLaunch = true;
         chrome.storage.local.set({ hasLaunched: true });
@@ -1156,6 +1157,7 @@ async function loadLibraryPrompts() {
           imageUrl: p.image_url || null
         }));
         console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts via', path);
+        saveData('libraryPromptsCache', state.libraryPrompts);
         loaded = true;
         break;
       }
@@ -1255,17 +1257,9 @@ function renderExplore() {
           <div class="explore-card-thumbnail${hasStorageImage ? ' needs-image-load' : ''}" ${hasStorageImage ? `data-image-url="${escapeHtml(p.imageUrl)}"` : ''} style="${thumbnailStyle}">
             ${thumbnailContent}
             <div class="explore-card-category-badge">${escapeHtml(p.category || 'general')}</div>
+            <div class="explore-front-gradient"></div>
+            <div class="explore-front-title">${escapeHtml(truncate(p.title, 42))}</div>
           </div>
-          <div class="explore-card-content">
-            <div class="explore-card-title">${escapeHtml(truncate(p.title, 45))}</div>
-            <div class="explore-card-meta">
-              <span class="explore-card-author">${escapeHtml(p.author)}</span>
-              <div class="explore-card-stats">
-                <span class="explore-stat">❤️ ${p.likes}</span>
-              </div>
-            </div>
-          </div>
-          <div class="explore-flip-hint">Click to view code</div>
         </div>
         <div class="explore-card-back">
           <div class="explore-card-back-header">
@@ -1280,7 +1274,7 @@ function renderExplore() {
             <button class="explore-action-btn ${isLiked ? 'liked' : ''}" data-explore-like="${p.id}" title="${t('like')}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             </button>
-            <span style="font-size:11px;color:var(--text-tertiary);">${p.likes}</span>
+            <span class="explore-like-count" data-like-count="${p.id}">${p.likes}</span>
             ${state.user ? `<button class="explore-action-btn ${isReported ? 'reported' : ''}" data-explore-report="${p.id}" title="${isReported ? t('reported') : t('report')}" ${isReported ? 'disabled' : ''}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
             </button>` : ''}
@@ -1323,7 +1317,7 @@ function renderExplore() {
           else state.userLikes.delete(id); 
           const lp = state.libraryPrompts.find(x => x.id === id); 
           if (lp) lp.likes = result.likes; 
-          renderExplore(); 
+          updateExploreLikeUI(id, result.liked, result.likes); 
         } 
       } catch { showToast(t('failedToLike'), 'error'); } 
       return; 
@@ -1352,13 +1346,37 @@ function renderExplore() {
       try {
         const resolvedUrl = await resolveImageUrl(imageUrl);
         if (resolvedUrl) {
-          el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: cover; background-position: center;`;
+          el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center; background-color:#111;`;
         }
       } catch (e) {
         console.warn('Failed to load explore card image:', e);
       }
     }
   });
+}
+
+
+function updateExploreLikeUI(promptId, liked, likes) {
+  const wrapper = document.querySelector(`.explore-card-wrapper[data-explore-id="${promptId}"]`);
+  if (!wrapper) return;
+  const likeBtn = wrapper.querySelector('[data-explore-like]');
+  const countEl = wrapper.querySelector(`[data-like-count="${promptId}"]`);
+  if (likeBtn) {
+    likeBtn.classList.toggle('liked', !!liked);
+    const icon = likeBtn.querySelector('svg');
+    if (icon) icon.setAttribute('fill', liked ? 'currentColor' : 'none');
+  }
+  if (countEl) countEl.textContent = String(likes ?? 0);
+}
+
+function updateExploreReportUI(promptId) {
+  const wrapper = document.querySelector(`.explore-card-wrapper[data-explore-id="${promptId}"]`);
+  if (!wrapper) return;
+  const reportBtn = wrapper.querySelector('[data-explore-report]');
+  if (!reportBtn) return;
+  reportBtn.classList.add('reported');
+  reportBtn.setAttribute('disabled', 'true');
+  reportBtn.setAttribute('title', t('reported'));
 }
 
 // ==================== REPORT MODAL ====================
@@ -1387,11 +1405,11 @@ function openReportModal(promptId) {
       const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompt_reports', body: { user_id: state.user.id, prompt_id: promptId, reason, details: details || null } });
       if (res?.error) throw new Error(typeof res.error === 'string' ? res.error : JSON.stringify(res.error));
       state.userReports.add(promptId);
+      updateExploreReportUI(promptId);
       showToast(t('reportSubmitted'), 'success');
       closeModal('report-modal');
-      renderExplore();
     } catch (e) {
-      if (e.message?.includes('duplicate')) { showToast(t('alreadyReported'), 'error'); state.userReports.add(promptId); }
+      if (e.message?.includes('duplicate') || e.message?.includes('23505')) { showToast(t('alreadyReported'), 'error'); state.userReports.add(promptId); updateExploreReportUI(promptId); }
       else showToast(t('failedToReport'), 'error');
     }
     btn.classList.remove('loading');
@@ -2036,9 +2054,9 @@ async function init() {
     if (state.settings.theme === 'system') applyTheme('system');
   });
 
-  // If logged in, load library and sync user data
+  // If logged in, render cached library immediately, then refresh from cloud
   if (state.session && state.user) { 
-    // Run sync first, then load library (profile must exist before library loads)
+    loadLibraryPrompts();
     syncAllData().then(() => {
       loadLibraryPrompts();
     });
