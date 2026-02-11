@@ -1087,11 +1087,15 @@ async function loadLibraryPrompts() {
   
   console.log('📚 Loading library prompts...');
   try {
-    // First try: load all library prompts (approved or null)
+    // Show approved cards for everyone + own cards for the current user
+    const currentUserId = encodeURIComponent(state.user.id);
+    const libraryPath = `library_prompts?or=(is_approved.eq.true,is_approved.is.null,author_id.eq.${currentUserId})&order=likes.desc&limit=50`;
+
+    // First try: approved cards + current user's own cards
     const res = await supabaseMsg({ 
       action: 'supabaseRequest', 
       method: 'GET', 
-      path: 'library_prompts?or=(is_approved.eq.true,is_approved.is.null)&order=likes.desc&limit=50' 
+      path: libraryPath
     });
     console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
     
@@ -1111,9 +1115,9 @@ async function loadLibraryPrompts() {
         imageUrl: p.image_url || null
       }));
       console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts');
-    } else if (res?.error) {
+    } else if (res?.error || (res?.data && Array.isArray(res.data) && res.data.length === 0)) {
       console.error('📚 Library load error:', res.error);
-      // Fallback: try without the OR filter (simpler query)
+      // Fallback: try without filters to quickly reveal RLS/query issues in production
       console.log('📚 Trying fallback query without filter...');
       const fallbackRes = await supabaseMsg({ 
         action: 'supabaseRequest', 
