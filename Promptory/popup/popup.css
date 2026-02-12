@@ -86,6 +86,14 @@ body {
   padding-left: 24px; display: flex; flex-direction: column; gap: 8px;
 }
 
+/* Folder collapsed state */
+.folder-section:not(.expanded) .folder-content {
+  display: none;
+}
+.folder-section.expanded .folder-arrow svg {
+  transform: rotate(90deg);
+}
+
 /* Folder highlight animation when navigating from folders tab */
 .folder-section.folder-highlight .folder-header {
   animation: folderHighlight 2s ease-out;
@@ -100,6 +108,14 @@ body {
   position: relative; padding: 12px;
   background: var(--bg-secondary); border: 1px solid var(--border);
   border-radius: var(--radius-md); cursor: pointer;
+  contain: layout style; /* CSS containment for render perf */
+  transition: border-color var(--transition-fast);
+}
+.prompt-card:hover {
+  border-color: var(--accent);
+}
+.prompt-card:active {
+  background: var(--bg-hover);
 }
 .prompt-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
 .prompt-title { font-size: var(--font-size-sm); font-weight: 500; color: var(--text-primary); flex: 1; line-height: 1.4; }
@@ -598,4 +614,22 @@ body {
 
 .image-remove-btn:hover {
   background: var(--error);
+}
+
+/* Copy cursor for prompt cards (click = copy) */
+.prompt-card {
+  cursor: copy;
+}
+.prompt-card .prompt-action-btn {
+  cursor: pointer;
+}
+
+/* Modal body scroll performance */
+.modal-body {
+  will-change: scroll-position;
+}
+
+/* Tab content contain */
+.tab-content {
+  contain: layout style;
 }
