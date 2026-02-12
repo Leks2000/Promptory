@@ -1,69 +1,162 @@
+/* ============================================
+   Promptory Design System v2 - Design Tokens
+   Inspired by: MagicUI, Aceternity, ReactBits
+   ============================================ */
+
 :root {
-  /* Light theme */
+  /* === LIGHT THEME === */
+
+  /* Backgrounds - layered depth */
   --bg-primary: #FFFFFF;
-  --bg-secondary: #F7F7F5;
-  --bg-tertiary: #EDECE9;
-  --bg-hover: #F1F1EF;
-  --bg-active: #E8E8E5;
-  
-  --text-primary: #37352F;
-  --text-secondary: #6B6B6B;
+  --bg-secondary: #F8F8F7;
+  --bg-tertiary: #F0EFED;
+  --bg-hover: #F3F3F1;
+  --bg-active: #EAEAE7;
+  --bg-elevated: #FFFFFF;
+  --bg-inset: #F4F4F2;
+
+  /* Text hierarchy */
+  --text-primary: #1A1A1A;
+  --text-secondary: #5C5C5C;
   --text-tertiary: #9B9A97;
   --text-placeholder: #C4C4C0;
-  
-  --accent: #2383E2;
-  --accent-hover: #1B6EC2;
-  --accent-light: #E8F0FE;
-  
-  --success: #0F7B6C;
-  --warning: #D9730D;
-  --error: #E03E3E;
-  
-  --border: #E3E2DE;
-  --border-hover: #D3D2CE;
-  --divider: #EDEDEA;
-  
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
-  
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  --text-inverse: #FFFFFF;
+
+  /* Accent - vibrant blue-violet gradient system */
+  --accent: #6C5CE7;
+  --accent-hover: #5A4BD1;
+  --accent-light: #EDE9FF;
+  --accent-rgb: 108, 92, 231;
+  --accent-glow: rgba(108, 92, 231, 0.25);
+  --accent-gradient: linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%);
+  --accent-gradient-intense: linear-gradient(135deg, #6C5CE7 0%, #fd79a8 100%);
+
+  /* Status colors - more vivid */
+  --success: #00B894;
+  --success-light: #E6FAF5;
+  --warning: #FDCB6E;
+  --warning-dark: #E17055;
+  --error: #FF6B6B;
+  --error-light: #FFE8E8;
+
+  /* Borders & Dividers */
+  --border: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.14);
+  --border-focus: var(--accent);
+  --divider: rgba(0, 0, 0, 0.05);
+
+  /* Shadows - soft & layered (MagicUI style) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.12), 0 8px 20px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 20px var(--accent-glow);
+  --shadow-card-hover: 0 8px 30px rgba(108, 92, 231, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-blur: 16px;
+
+  /* Radius - rounder, more modern */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace;
   --font-size-xs: 11px;
   --font-size-sm: 13px;
   --font-size-md: 14px;
   --font-size-lg: 16px;
   --font-size-xl: 20px;
-  
-  --transition-fast: 150ms ease;
-  --transition-normal: 200ms ease;
-  --transition-slow: 300ms ease;
+  --font-size-2xl: 24px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Transitions - spring-like cubic-beziers */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-bounce: 600ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+
+  /* Z-index scale */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 500;
+  --z-modal: 1000;
+  --z-toast: 2000;
 }
 
+
+/* === DARK THEME - premium dark mode === */
 [data-theme="dark"] {
-  --bg-primary: #191919;
-  --bg-secondary: #202020;
-  --bg-tertiary: #2F2F2F;
-  --bg-hover: #2C2C2C;
-  --bg-active: #333333;
-  
-  --text-primary: #FFFFFFCF;
-  --text-secondary: #FFFFFF80;
-  --text-tertiary: #FFFFFF48;
-  --text-placeholder: #FFFFFF30;
-  
-  --accent: #529CCA;
-  --accent-hover: #6BB0D6;
-  --accent-light: #143A52;
-  
-  --border: #FFFFFF14;
-  --border-hover: #FFFFFF20;
-  --divider: #FFFFFF0F;
-  
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.3);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+  --bg-primary: #0F0F12;
+  --bg-secondary: #17171C;
+  --bg-tertiary: #1E1E24;
+  --bg-hover: #242430;
+  --bg-active: #2A2A38;
+  --bg-elevated: #1C1C24;
+  --bg-inset: #131318;
+
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --text-tertiary: rgba(255, 255, 255, 0.32);
+  --text-placeholder: rgba(255, 255, 255, 0.18);
+  --text-inverse: #0F0F12;
+
+  --accent: #A29BFE;
+  --accent-hover: #B4AEFF;
+  --accent-light: rgba(162, 155, 254, 0.12);
+  --accent-rgb: 162, 155, 254;
+  --accent-glow: rgba(162, 155, 254, 0.3);
+  --accent-gradient: linear-gradient(135deg, #A29BFE 0%, #6C5CE7 100%);
+  --accent-gradient-intense: linear-gradient(135deg, #A29BFE 0%, #fd79a8 100%);
+
+  --success: #55EFC4;
+  --success-light: rgba(85, 239, 196, 0.1);
+  --warning: #FFEAA7;
+  --warning-dark: #E17055;
+  --error: #FF7675;
+  --error-light: rgba(255, 118, 117, 0.1);
+
+  --border: rgba(255, 255, 255, 0.06);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --border-focus: var(--accent);
+  --divider: rgba(255, 255, 255, 0.04);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.7), 0 8px 20px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 30px var(--accent-glow);
+  --shadow-card-hover: 0 8px 30px rgba(162, 155, 254, 0.15), 0 2px 8px rgba(0, 0, 0, 0.3);
+
+  --glass-bg: rgba(23, 23, 28, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-blur: 20px;
 }

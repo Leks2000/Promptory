@@ -376,7 +376,7 @@ function buildFolderSection(folder, prompts) {
 }
 
 function renderPromptCard(prompt, idx) {
-  const delay = idx < MAX_ANIM_ITEMS ? `style="animation-delay:${idx * 30}ms"` : 'style="animation:none;opacity:1;"';
+  const delay = idx < MAX_ANIM_ITEMS ? `style="animation-delay:${idx * 35}ms"` : 'style="animation:none;opacity:1;transform:none;"';
   const tagsHtml = prompt.tags?.length
     ? `<div class="tags">${prompt.tags.slice(0, 3).map(tg => `<span class="tag">#${escapeHtml(tg)}</span>`).join('')}${prompt.tags.length > 3 ? `<span class="tag">+${prompt.tags.length - 3}</span>` : ''}</div>`
     : '';
@@ -1285,7 +1285,7 @@ function renderExplore() {
     const isFlipped = flippedCards.has(p.id);
     const isLiked = state.userLikes.has(p.id);
     const isReported = state.userReports.has(p.id);
-    const delay = i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 50}ms"` : 'style="animation:none;opacity:1;"';
+    const delay = i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 60}ms"` : 'style="animation:none;opacity:1;transform:none;"';
     const categoryInfo = CATEGORY_COLORS[p.category] || CATEGORY_COLORS['general'];
     
     // Thumbnail: use image_url if available, otherwise category gradient (no emoji)
@@ -1397,7 +1397,7 @@ function renderExplore() {
           if (imageUrl) {
             resolveImageUrl(imageUrl).then(resolvedUrl => {
               if (resolvedUrl) {
-                el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center; background-color:#111;`;
+                el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center;`;
               }
             }).catch(() => {});
           }
@@ -1413,7 +1413,7 @@ function renderExplore() {
         try {
           const resolvedUrl = await resolveImageUrl(imageUrl);
           if (resolvedUrl) {
-            el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center; background-color:#111;`;
+            el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center;`;
           }
         } catch (e) {
           console.warn('Failed to load explore card image:', e);
@@ -1514,12 +1514,12 @@ function renderStats() {
   const maxPlatform = Math.max(...platforms.map(p => p[1]), 1);
 
   container.innerHTML = `<div class="stats-dashboard">
-    <div class="stats-overview"><div class="stat-card"><div class="stat-card-value">${totalPrompts}</div><div class="stat-card-label">${t('totalPrompts')}</div></div><div class="stat-card"><div class="stat-card-value">${totalUses}</div><div class="stat-card-label">${t('totalUses')}</div></div><div class="stat-card"><div class="stat-card-value">${totalFavorites}</div><div class="stat-card-label">${t('favoritesCount')}</div></div></div>
+    <div class="stats-overview"><div class="stat-card" style="animation:floatUp 400ms var(--ease-out-expo) forwards;animation-delay:0ms;"><div class="stat-card-value">${totalPrompts}</div><div class="stat-card-label">${t('totalPrompts')}</div></div><div class="stat-card" style="animation:floatUp 400ms var(--ease-out-expo) forwards;animation-delay:80ms;opacity:0;"><div class="stat-card-value">${totalUses}</div><div class="stat-card-label">${t('totalUses')}</div></div><div class="stat-card" style="animation:floatUp 400ms var(--ease-out-expo) forwards;animation-delay:160ms;opacity:0;"><div class="stat-card-value">${totalFavorites}</div><div class="stat-card-label">${t('favoritesCount')}</div></div></div>
     <div class="stats-section"><div class="stats-section-title">${t('activityLast7Days')}</div><div class="usage-chart">${dailyUses.map(d => `<div class="chart-bar-wrap"><div class="chart-bar" style="height:${Math.max((d.count / maxDaily) * 80, 2)}px;" title="${d.count}"></div><div class="chart-bar-label">${d.label}</div></div>`).join('')}</div></div>
     <div class="stats-section"><div class="stats-section-title">${t('mostUsedPrompts')}</div>${topPrompts.length > 0 ? topPrompts.map((p, i) => `<div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 30))}</span><span class="top-prompt-uses">${p.useCount} ${t('uses')}</span></div>`).join('') : `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:8px 0;">${t('noUsageData')}</div>`}</div>
     ${platforms.length > 0 ? `<div class="stats-section"><div class="stats-section-title">${t('usageByPlatform')}</div><div class="platform-stats">${platforms.map(([name, count]) => `<div class="platform-stat-row"><span class="platform-stat-name">${escapeHtml(name)}</span><div class="platform-stat-bar-bg"><div class="platform-stat-bar" style="width:${(count / maxPlatform) * 100}%;"></div></div><span class="platform-stat-count">${count}</span></div>`).join('')}</div></div>` : ''}
     ${topTags.length > 0 ? `<div class="stats-section"><div class="stats-section-title">${t('topTags')}</div><div class="tags" style="flex-wrap:wrap;">${topTags.map(([tag, count]) => `<span class="tag">#${escapeHtml(tag)} (${count})</span>`).join('')}</div></div>` : ''}
-    ${!state.isPremium && state.user ? `<div class="stats-section" style="border-color:var(--accent);"><div class="stats-section-title">${t('freePlan')}</div><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">${t('promptsUsed', state.prompts.length, getEffectiveLimit())}<div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${Math.min((state.prompts.length / getEffectiveLimit()) * 100, 100)}%;background:${state.prompts.length >= getEffectiveLimit() ? 'var(--error)' : 'var(--accent)'};border-radius:3px;"></div></div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">${t('upgradeInfo')}</div></div></div>` : ''}
+    ${!state.isPremium && state.user ? `<div class="stats-section" style="border-color:rgba(var(--accent-rgb),0.3);"><div class="stats-section-title">${t('freePlan')}</div><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">${t('promptsUsed', state.prompts.length, getEffectiveLimit())}<div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;"><div style="height:100%;width:${Math.min((state.prompts.length / getEffectiveLimit()) * 100, 100)}%;background:${state.prompts.length >= getEffectiveLimit() ? 'var(--error)' : 'var(--accent-gradient)'};border-radius:var(--radius-full);transition:width 500ms var(--ease-out-expo);"></div></div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">${t('upgradeInfo')}</div></div></div>` : ''}
   </div>`;
 }
 
