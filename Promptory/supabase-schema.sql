@@ -707,3 +707,10 @@ END $$;
 SELECT COUNT(*) as total_library_prompts FROM public.library_prompts;
 SELECT DISTINCT category FROM public.library_prompts;
 SELECT title, author, likes, downloads FROM public.library_prompts WHERE is_featured = true;
+
+-- Grants required for PostgREST reads (in addition to RLS policies)
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT ON TABLE public.library_prompts TO authenticated;
+GRANT SELECT ON TABLE public.library_likes TO authenticated;
+GRANT SELECT ON TABLE public.prompt_reports TO authenticated;
+GRANT INSERT ON TABLE public.prompt_reports TO authenticated;

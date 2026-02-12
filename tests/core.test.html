@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Promptory Core Unit Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background:#111; color:#eee; padding:20px; }
+    .ok{color:#7CFC9F}.fail{color:#ff7b7b} pre{background:#1b1b1b;padding:12px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <h1>Core Unit Tests</h1>
+  <div id="summary"></div>
+  <pre id="log"></pre>
+<script>
+const FREE_PROMPT_LIMIT = 20;
+const CATEGORY_COLORS = {
+  business:{bg:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'},
+  development:{bg:'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)'},
+  marketing:{bg:'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'},
+  creative:{bg:'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'},
+  learning:{bg:'linear-gradient(135deg, #fa709a 0%, #fee140 100%)'},
+  ai:{bg:'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)'},
+  general:{bg:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}
+};
+
+function escapeHtml(text){ if(!text) return ''; const d=document.createElement('div'); d.textContent=text; return d.innerHTML; }
+function truncate(text,max=120){ if(!text||text.length<=max) return text||''; return text.substring(0,max)+'...'; }
+function formatDate(ts){ if(!ts) return ''; const diff=Date.now()-ts; const mins=Math.floor(diff/60000); const hrs=Math.floor(mins/60); const days=Math.floor(hrs/24); if(days>7) return new Date(ts).toLocaleDateString(); if(days>0) return `${days}d`; if(hrs>0) return `${hrs}h`; if(mins>0) return `${mins}m`; return 'now'; }
+function getEffectiveLimit(state){ return (state.promptLimit>0&&state.promptLimit<=1000)?state.promptLimit:FREE_PROMPT_LIMIT; }
+function canCreatePrompt(state){ if(state.isPremium) return true; return state.prompts.length<getEffectiveLimit(state); }
+function isSupabaseStorageUrl(url){ if(!url) return false; return url.includes('supabase.co/storage/v1/') || url.startsWith('supabase-storage://'); }
+function extractStoragePath(url){ if(!url) return null; if(url.startsWith('supabase-storage://')) return url.replace('supabase-storage://',''); const p=url.match(/\/storage\/v1\/object\/(?:public|authenticated)\/(.+)$/); if(p) return p[1]; const s=url.match(/\/storage\/v1\/object\/sign\/(.+?)\?/); if(s) return s[1]; return null; }
+function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+function tokenizeSearchQuery(query){ return (query||'').toLowerCase().trim().split(/\s+/).filter(Boolean).slice(0,8); }
+
+const log = document.getElementById('log');
+let passed=0, failed=0;
+function test(name, fn){ try{ fn(); passed++; log.textContent += `✅ ${name}\n`; } catch(e){ failed++; log.textContent += `❌ ${name}: ${e.message}\n`; }}
+function expect(v){ return { toBe(x){ if(v!==x) throw new Error(`${v} !== ${x}`); }, toBeTrue(){ if(!v) throw new Error('expected true'); }, toBeFalse(){ if(v) throw new Error('expected false'); }, toContain(x){ if(!String(v).includes(x)) throw new Error(`missing ${x}`); }, toBeType(t){ if(typeof v!==t) throw new Error(`type ${typeof v} !== ${t}`); } }; }
+
+(async function run(){
+  test('escapeHtml sanitizes tags', ()=> expect(escapeHtml('<script>1<\/script>')).toContain('&lt;script&gt;'));
+  test('truncate short unchanged', ()=> expect(truncate('abc',5)).toBe('abc'));
+  test('truncate long adds ellipsis', ()=> expect(truncate('abcdef',3)).toBe('abc...'));
+  test('getEffectiveLimit valid', ()=> expect(getEffectiveLimit({promptLimit:50})).toBe(50));
+  test('getEffectiveLimit fallback', ()=> expect(getEffectiveLimit({promptLimit:9999})).toBe(20));
+  test('canCreatePrompt premium', ()=> expect(canCreatePrompt({isPremium:true,prompts:new Array(999),promptLimit:1})).toBeTrue());
+  test('canCreatePrompt free limit', ()=> expect(canCreatePrompt({isPremium:false,prompts:new Array(20),promptLimit:20})).toBeFalse());
+  test('formatDate now', ()=> expect(formatDate(Date.now()-1000)).toBe('now'));
+  test('isSupabaseStorageUrl detects scheme', ()=> expect(isSupabaseStorageUrl('supabase-storage://Lib/x.png')).toBeTrue());
+  test('extractStoragePath from scheme', ()=> expect(extractStoragePath('supabase-storage://Lib_img/u/a.png')).toBe('Lib_img/u/a.png'));
+  test('extractStoragePath from signed url', ()=> expect(extractStoragePath('https://x.supabase.co/storage/v1/object/sign/Lib_img/u/a.png?token=1')).toBe('Lib_img/u/a.png'));
+  test('tokenizeSearchQuery splits and normalizes', ()=> expect(tokenizeSearchQuery('  Hello   WORLD  ').join('|')).toBe('hello|world'));
+  test('tokenizeSearchQuery limits to 8', ()=> expect(tokenizeSearchQuery('1 2 3 4 5 6 7 8 9').length).toBe(8));
+  test('category colors has general', ()=> expect(!!CATEGORY_COLORS.general).toBeTrue());
+  test('prompt data structure minimal fields', ()=> {
+    const p={id:'1',title:'T',text:'x',tags:[],likes:0,category:'general'};
+    expect(typeof p.id).toBe('string'); expect(typeof p.title).toBe('string'); expect(typeof p.text).toBe('string');
+  });
+
+  await new Promise((resolve)=>{
+    let calls=0; const d=debounce(()=>{calls++;},40); d(); d(); d();
+    setTimeout(()=>{ try{ expect(calls).toBe(1); passed++; log.textContent += '✅ debounce collapses rapid calls\n'; }
+      catch(e){ failed++; log.textContent += `❌ debounce collapses rapid calls: ${e.message}\n`; }
+      resolve();
+    },80);
+  });
+
+  document.getElementById('summary').innerHTML = `<strong class="${failed? 'fail':'ok'}">${passed} passed, ${failed} failed</strong>`;
+})();
+</script>
+</body>
+</html>

@@ -9,6 +9,7 @@ const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0';
 const FREE_PROMPT_LIMIT = 20;
 const MAX_ANIM_ITEMS = 8; // Cap staggered animations for performance
+const SETTINGS_PROMPT_SELECT_LIMIT = 200; // Prevent settings modal lag with huge libraries
 
 // ==================== I18N ====================
 const LOCALES = {};
@@ -42,6 +43,7 @@ const state = {
   session: null,
   isFirstLaunch: false,
   libraryPrompts: [],
+  libraryError: null,
   searchOriginalPrompts: null,
   userLikes: new Set(),
   userReports: new Set(),
@@ -90,16 +92,60 @@ function supabaseMsg(params) {
   return new Promise(resolve => chrome.runtime.sendMessage(params, resolve));
 }
 
+function parseSupabaseError(error) {
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  try { return JSON.stringify(error); } catch { return String(error); }
+}
+
+function isAuthError(error) {
+  const msg = parseSupabaseError(error).toLowerCase();
+  return msg.includes('not authenticated') || msg.includes('jwt') || msg.includes('token') || msg.includes('401');
+}
+
 // Truncate text for performance (avoid rendering huge strings)
 function truncate(text, max = 120) {
   if (!text || text.length <= max) return text || '';
   return text.substring(0, max) + '...';
 }
 
+let _settingsPromptPoolCache = { key: '', items: [] };
+
+function getSettingsPromptPool() {
+  const cacheKey = `${state.prompts.length}:${state.prompts[0]?.updatedAt || 0}`;
+  if (_settingsPromptPoolCache.key === cacheKey) return _settingsPromptPoolCache.items;
+
+  const sorted = [...state.prompts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const items = sorted.slice(0, SETTINGS_PROMPT_SELECT_LIMIT);
+  _settingsPromptPoolCache = { key: cacheKey, items };
+  return items;
+}
+
+function getSettingsPromptOptions(selectedPromptId) {
+  const selectedId = selectedPromptId || null;
+  const limited = [...getSettingsPromptPool()];
+
+  if (selectedId && !limited.some(p => p.id === selectedId)) {
+    const selectedPrompt = state.prompts.find(p => p.id === selectedId);
+    if (selectedPrompt) limited.unshift(selectedPrompt);
+  }
+
+  return limited.map(p => `<option value="${p.id}" ${selectedId === p.id ? 'selected' : ''}>${escapeHtml(truncate(p.title, 25))}</option>`).join('');
+}
+
 // Debounce utility
 function debounce(fn, ms) {
   let timer;
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
+
+function tokenizeSearchQuery(query) {
+  return (query || '')
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8);
 }
 
 // ==================== IMAGE URL RESOLVER ====================
@@ -219,7 +265,7 @@ function renderLimitBanner() {
 // ==================== DATA LOADING ====================
 async function loadData() {
   return new Promise(resolve => {
-    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit', 'language'], result => {
+    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit', 'language', 'libraryPromptsCache'], result => {
       if (result.prompts) state.prompts = result.prompts;
       if (result.folders) state.folders = result.folders;
       if (result.settings) state.settings = { ...state.settings, ...result.settings };
@@ -227,6 +273,7 @@ async function loadData() {
       if (result.session) state.session = result.session;
       if (result.isPremium) state.isPremium = result.isPremium;
       if (result.promptLimit) state.promptLimit = result.promptLimit;
+      if (result.libraryPromptsCache && Array.isArray(result.libraryPromptsCache)) state.libraryPrompts = result.libraryPromptsCache;
       if (!result.hasLaunched) {
         state.isFirstLaunch = true;
         chrome.storage.local.set({ hasLaunched: true });
@@ -1081,78 +1128,86 @@ async function loadLibraryPrompts() {
   // Library prompts should be visible to authenticated users only
   if (!state.session || !state.user) {
     console.log('📚 Skipping library load - not authenticated');
+    state.libraryError = null;
     renderExplore();
     return;
   }
-  
+
   console.log('📚 Loading library prompts...');
-  try {
-    // First try: load all library prompts (approved or null)
-    const res = await supabaseMsg({ 
-      action: 'supabaseRequest', 
-      method: 'GET', 
-      path: 'library_prompts?or=(is_approved.eq.true,is_approved.is.null)&order=likes.desc&limit=50' 
-    });
-    console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
-    
-    if (res?.data && Array.isArray(res.data)) {
-      state.libraryPrompts = res.data.map(p => ({ 
-        id: p.id, 
-        title: p.title, 
-        text: p.text, 
-        description: p.description, 
-        author: p.author, 
-        authorId: p.author_id, 
-        tags: p.tags || [], 
-        likes: p.likes || 0, 
-        downloads: p.downloads || 0, 
-        category: p.category || 'general', 
-        isFeatured: p.is_featured,
-        imageUrl: p.image_url || null
-      }));
-      console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts');
-    } else if (res?.error) {
-      console.error('📚 Library load error:', res.error);
-      // Fallback: try without the OR filter (simpler query)
-      console.log('📚 Trying fallback query without filter...');
-      const fallbackRes = await supabaseMsg({ 
-        action: 'supabaseRequest', 
-        method: 'GET', 
-        path: 'library_prompts?order=likes.desc&limit=50' 
-      });
-      console.log('📚 Fallback response:', JSON.stringify(fallbackRes).substring(0, 500));
-      if (fallbackRes?.data && Array.isArray(fallbackRes.data)) {
-        state.libraryPrompts = fallbackRes.data.map(p => ({ 
-          id: p.id, 
-          title: p.title, 
-          text: p.text, 
-          description: p.description, 
-          author: p.author, 
-          authorId: p.author_id, 
-          tags: p.tags || [], 
-          likes: p.likes || 0, 
-          downloads: p.downloads || 0, 
-          category: p.category || 'general', 
+  state.libraryError = null;
+
+  const queries = [
+    'library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url,created_at&order=created_at.desc.nullslast&limit=100',
+    'library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url&limit=100',
+    'library_prompts?order=likes.desc&limit=100'
+  ];
+
+  let lastError = null;
+  let loaded = false;
+
+  for (const path of queries) {
+    try {
+      const res = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path });
+      console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
+
+      if (res?.data && Array.isArray(res.data)) {
+        state.libraryPrompts = res.data.map(p => ({
+          id: p.id,
+          title: p.title,
+          text: p.text,
+          description: p.description,
+          author: p.author,
+          authorId: p.author_id,
+          tags: p.tags || [],
+          likes: p.likes || 0,
+          downloads: p.downloads || 0,
+          category: p.category || 'general',
           isFeatured: p.is_featured,
           imageUrl: p.image_url || null
         }));
-        console.log('📚 Fallback loaded', state.libraryPrompts.length, 'library prompts');
+        console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts via', path);
+        saveData('libraryPromptsCache', state.libraryPrompts);
+        loaded = true;
+        break;
       }
+
+      if (res?.error) {
+        lastError = res.error;
+        console.warn('📚 Library query failed:', path, parseSupabaseError(res.error));
+      }
+    } catch (e) {
+      lastError = e;
+      console.warn('📚 Library query threw:', path, e);
     }
-    
-    // Load user likes and reports
-    try {
-      const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
-      if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
-    } catch (e) { console.warn('📚 Failed to load likes:', e); }
-    
-    try {
-      const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
-      if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
-    } catch (e) { console.warn('📚 Failed to load reports:', e); }
-  } catch (e) { 
-    console.error('Failed to load library:', e); 
   }
+
+  if (!loaded && lastError) {
+    const errorText = parseSupabaseError(lastError);
+    state.libraryError = errorText;
+
+    if (isAuthError(lastError)) {
+      console.warn('📚 Session seems invalid while loading library. Clearing local session.');
+      state.session = null;
+      state.user = null;
+      await saveData('session', null);
+      await saveData('user', null);
+      showToast(t('signInToExplore'), 'error');
+    } else {
+      console.warn('📚 Library unavailable. Possible RLS or schema issue:', errorText);
+    }
+  }
+
+  // Load user likes and reports
+  try {
+    const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
+    if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
+  } catch (e) { console.warn('📚 Failed to load likes:', e); }
+
+  try {
+    const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
+    if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
+  } catch (e) { console.warn('📚 Failed to load reports:', e); }
+
   renderExplore();
 }
 
@@ -1181,7 +1236,10 @@ function renderExplore() {
   }
   
   if (state.libraryPrompts.length === 0) {
-    list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('noPublicPrompts')}</div><div class="empty-state-text">${t('beFirstToShare')}</div></div>`;
+    const debugHint = state.libraryError
+      ? `<div class="empty-state-text" style="margin-top:8px;font-size:12px;opacity:.75;">Library load error: ${escapeHtml(truncate(state.libraryError, 160))}</div>`
+      : '';
+    list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('noPublicPrompts')}</div><div class="empty-state-text">${t('beFirstToShare')}</div>${debugHint}</div>`;
     return;
   }
   
@@ -1208,17 +1266,9 @@ function renderExplore() {
           <div class="explore-card-thumbnail${hasStorageImage ? ' needs-image-load' : ''}" ${hasStorageImage ? `data-image-url="${escapeHtml(p.imageUrl)}"` : ''} style="${thumbnailStyle}">
             ${thumbnailContent}
             <div class="explore-card-category-badge">${escapeHtml(p.category || 'general')}</div>
+            <div class="explore-front-gradient"></div>
+            <div class="explore-front-title">${escapeHtml(truncate(p.title, 42))}</div>
           </div>
-          <div class="explore-card-content">
-            <div class="explore-card-title">${escapeHtml(truncate(p.title, 45))}</div>
-            <div class="explore-card-meta">
-              <span class="explore-card-author">${escapeHtml(p.author)}</span>
-              <div class="explore-card-stats">
-                <span class="explore-stat">❤️ ${p.likes}</span>
-              </div>
-            </div>
-          </div>
-          <div class="explore-flip-hint">Click to view code</div>
         </div>
         <div class="explore-card-back">
           <div class="explore-card-back-header">
@@ -1233,7 +1283,7 @@ function renderExplore() {
             <button class="explore-action-btn ${isLiked ? 'liked' : ''}" data-explore-like="${p.id}" title="${t('like')}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             </button>
-            <span style="font-size:11px;color:var(--text-tertiary);">${p.likes}</span>
+            <span class="explore-like-count" data-like-count="${p.id}">${p.likes}</span>
             ${state.user ? `<button class="explore-action-btn ${isReported ? 'reported' : ''}" data-explore-report="${p.id}" title="${isReported ? t('reported') : t('report')}" ${isReported ? 'disabled' : ''}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
             </button>` : ''}
@@ -1276,26 +1326,13 @@ function renderExplore() {
           else state.userLikes.delete(id); 
           const lp = state.libraryPrompts.find(x => x.id === id); 
           if (lp) lp.likes = result.likes; 
-          renderExplore(); 
+          updateExploreLikeUI(id, result.liked, result.likes); 
         } 
       } catch { showToast(t('failedToLike'), 'error'); } 
       return; 
     }
     const reportBtn = e.target.closest('[data-explore-report]');
     if (reportBtn) { e.stopPropagation(); if (!state.userReports.has(reportBtn.dataset.exploreReport)) openReportModal(reportBtn.dataset.exploreReport); return; }
-    // Card flip on click
-    const wrapper = e.target.closest('.explore-card-wrapper');
-    if (wrapper && !e.target.closest('button')) {
-      const card = wrapper.querySelector('.explore-card');
-      const id = wrapper.dataset.exploreId;
-      if (card.classList.contains('flipped')) { 
-        card.classList.remove('flipped'); 
-        flippedCards.delete(id); 
-      } else { 
-        card.classList.add('flipped'); 
-        flippedCards.add(id); 
-      }
-    }
   };
   
   // Async: load images from private Supabase Storage for explore cards
@@ -1305,13 +1342,37 @@ function renderExplore() {
       try {
         const resolvedUrl = await resolveImageUrl(imageUrl);
         if (resolvedUrl) {
-          el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: cover; background-position: center;`;
+          el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center; background-color:#111;`;
         }
       } catch (e) {
         console.warn('Failed to load explore card image:', e);
       }
     }
   });
+}
+
+
+function updateExploreLikeUI(promptId, liked, likes) {
+  const wrapper = document.querySelector(`.explore-card-wrapper[data-explore-id="${promptId}"]`);
+  if (!wrapper) return;
+  const likeBtn = wrapper.querySelector('[data-explore-like]');
+  const countEl = wrapper.querySelector(`[data-like-count="${promptId}"]`);
+  if (likeBtn) {
+    likeBtn.classList.toggle('liked', !!liked);
+    const icon = likeBtn.querySelector('svg');
+    if (icon) icon.setAttribute('fill', liked ? 'currentColor' : 'none');
+  }
+  if (countEl) countEl.textContent = String(likes ?? 0);
+}
+
+function updateExploreReportUI(promptId) {
+  const wrapper = document.querySelector(`.explore-card-wrapper[data-explore-id="${promptId}"]`);
+  if (!wrapper) return;
+  const reportBtn = wrapper.querySelector('[data-explore-report]');
+  if (!reportBtn) return;
+  reportBtn.classList.add('reported');
+  reportBtn.setAttribute('disabled', 'true');
+  reportBtn.setAttribute('title', t('reported'));
 }
 
 // ==================== REPORT MODAL ====================
@@ -1340,11 +1401,11 @@ function openReportModal(promptId) {
       const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompt_reports', body: { user_id: state.user.id, prompt_id: promptId, reason, details: details || null } });
       if (res?.error) throw new Error(typeof res.error === 'string' ? res.error : JSON.stringify(res.error));
       state.userReports.add(promptId);
+      updateExploreReportUI(promptId);
       showToast(t('reportSubmitted'), 'success');
       closeModal('report-modal');
-      renderExplore();
     } catch (e) {
-      if (e.message?.includes('duplicate')) { showToast(t('alreadyReported'), 'error'); state.userReports.add(promptId); }
+      if (e.message?.includes('duplicate') || e.message?.includes('23505')) { showToast(t('alreadyReported'), 'error'); state.userReports.add(promptId); updateExploreReportUI(promptId); }
       else showToast(t('failedToReport'), 'error');
     }
     btn.classList.remove('loading');
@@ -1414,16 +1475,16 @@ function openSettings() {
         </div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('language')}</label><select id="settings-lang"><option value="en" ${_lang === 'en' ? 'selected' : ''}>${t('langEnglish')}</option><option value="ru" ${_lang === 'ru' ? 'selected' : ''}>${t('langRussian')}</option></select></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('keyboardShortcuts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('shortcutsHint')} <a href="#" id="open-shortcuts-link" style="color:var(--accent);">${t('chromeShortcuts')}</a></span><div class="hotkey-rebind-section" id="shortcuts-display"></div></div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('quickInsertPrompts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('quickInsertHint')}</span><div class="hotkey-section">
+        <div class="form-group"><label class="form-label">${t('quickInsertPrompts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('quickInsertHint')}</span><span class="form-hint" style="margin-bottom:8px;display:block;">${state.prompts.length > SETTINGS_PROMPT_SELECT_LIMIT ? `Showing recent ${SETTINGS_PROMPT_SELECT_LIMIT} prompts for faster settings` : ''}</span><div class="hotkey-section">
           ${[1, 2, 3].map(n => {
             const slotId = `slot${n}`;
             const slot = hotkeys[slotId] || {};
             const assigned = slot.promptId ? state.prompts.find(p => p.id === slot.promptId) : null;
-            return `<div class="hotkey-item"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)}</div><div class="hotkey-description">${assigned ? escapeHtml(truncate(assigned.title, 25)) : t('noPromptAssigned')}</div></div><div class="hotkey-key"><select class="hotkey-prompt-select" data-hotkey-slot="${slotId}"><option value="">${t('selectPrompt')}</option>${state.prompts.map(p => `<option value="${p.id}" ${slot.promptId === p.id ? 'selected' : ''}>${escapeHtml(truncate(p.title, 25))}</option>`).join('')}</select><div class="hotkey-badge">Alt+${n}</div></div></div>`;
+            return `<div class="hotkey-item"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)}</div><div class="hotkey-description">${assigned ? escapeHtml(truncate(assigned.title, 25)) : t('noPromptAssigned')}</div></div><div class="hotkey-key"><select class="hotkey-prompt-select" data-hotkey-slot="${slotId}"><option value="">${t('selectPrompt')}</option>${getSettingsPromptOptions(slot.promptId)}</select><div class="hotkey-badge">Alt+${n}</div></div></div>`;
           }).join('')}
         </div></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('theme')}</label><select id="settings-theme"><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>${t('themeDark')}</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>${t('themeLight')}</option><option value="system" ${s.theme === 'system' ? 'selected' : ''}>${t('themeSystem')}</option></select></div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;"><button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button></div></div><div class="divider"></div>
+        <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;"><button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button><button class="btn btn-primary" id="settings-donate-btn">Donate / Support</button></div></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v1.1.0<br>${t('aboutDescription')}</div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-ghost close-modal-btn">${t('cancel')}</button><button class="btn btn-primary" id="settings-save-btn">${t('saveChanges')}</button></div>
@@ -1469,6 +1530,10 @@ function openSettings() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `promptvault-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href);
     showToast(t('dataExported'), 'success');
   });
+  document.getElementById('settings-donate-btn')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://donationalerts.com/r/knightcoreking' });
+  });
+
   document.getElementById('settings-import-btn').addEventListener('click', () => {
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
     input.onchange = async (e) => {
@@ -1565,8 +1630,9 @@ function initSearch() {
   const input = document.getElementById('search-input');
   let searchCache = null; // Cache lowercase versions for faster search
   
-  const debouncedSearch = debounce((q) => {
-    if (!q) {
+  const debouncedSearch = debounce((rawQuery) => {
+    const tokens = tokenizeSearchQuery(rawQuery);
+    if (tokens.length === 0) {
       if (state.searchOriginalPrompts) { state.prompts = state.searchOriginalPrompts; state.searchOriginalPrompts = null; searchCache = null; }
       renderPrompts();
       return;
@@ -1585,8 +1651,7 @@ function initSearch() {
     
     // Use cached lowercase fields for faster filtering
     const filtered = searchCache.filter(c =>
-      c.title.includes(q) || c.desc.includes(q) ||
-      c.tags.some(tg => tg.includes(q)) || c.text.includes(q)
+      tokens.every(q => c.title.includes(q) || c.desc.includes(q) || c.tags.some(tg => tg.includes(q)) || c.text.includes(q))
     );
     state.prompts = filtered.map(c => c.prompt);
     renderPrompts();
@@ -1595,7 +1660,7 @@ function initSearch() {
     }
   }, 200);
 
-  input.addEventListener('input', () => debouncedSearch(input.value.trim().toLowerCase()));
+  input.addEventListener('input', () => debouncedSearch(input.value));
 }
 
 // ==================== UPGRADE MODAL ====================
@@ -1989,9 +2054,9 @@ async function init() {
     if (state.settings.theme === 'system') applyTheme('system');
   });
 
-  // If logged in, load library and sync user data
+  // If logged in, render cached library immediately, then refresh from cloud
   if (state.session && state.user) { 
-    // Run sync first, then load library (profile must exist before library loads)
+    loadLibraryPrompts();
     syncAllData().then(() => {
       loadLibraryPrompts();
     });

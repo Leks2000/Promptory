@@ -145,7 +145,7 @@ function insertIntoTextarea(element, text) {
 async function showVariableDialog(text, variables) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
-    overlay.className = 'promptvault-overlay';
+    overlay.className = `promptvault-overlay ${shouldUseLiteOverlay() ? 'promptvault-overlay-lite' : 'promptvault-overlay-blur'}`;
     // Build HTML with limited variable fields for performance
     const fieldsHtml = variables.slice(0, 20).map(v => `
       <div class="promptvault-field">
@@ -189,16 +189,35 @@ async function showVariableDialog(text, variables) {
 
 // ---------- Search Overlay (Ctrl+Shift+P) - performance-optimized ----------
 let searchOverlayPrompts = []; // Cache prompts to avoid repeated fetches
+const searchResultsCache = new Map(); // Query cache for fast repeated searches
 let searchOverlayRAF = null; // RAF handle for cleanup
+let searchIdleHandle = null; // requestIdleCallback handle for cleanup
+
+function shouldUseLiteOverlay() {
+  const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const lowCpu = typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
+  const lowMemory = typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 4;
+  const supportsBackdrop = typeof CSS !== 'undefined' && (CSS.supports('backdrop-filter: blur(4px)') || CSS.supports('-webkit-backdrop-filter: blur(4px)'));
+  return reducedMotion || lowCpu || lowMemory || !supportsBackdrop;
+}
+
+function closeSearchOverlay(overlay, removeDelay = 150) {
+  if (!overlay) return;
+  overlay.classList.remove('visible');
+  if (searchOverlayRAF) { cancelAnimationFrame(searchOverlayRAF); searchOverlayRAF = null; }
+  if (searchIdleHandle && window.cancelIdleCallback) {
+    cancelIdleCallback(searchIdleHandle);
+    searchIdleHandle = null;
+  }
+  searchResultsCache.clear();
+  setTimeout(() => overlay.remove(), removeDelay);
+  searchOverlayVisible = false;
+}
 
 function toggleSearchOverlay() {
   const existing = document.getElementById('promptvault-search-overlay');
   if (existing) {
-    existing.classList.remove('visible');
-    if (searchOverlayRAF) { cancelAnimationFrame(searchOverlayRAF); searchOverlayRAF = null; }
-    setTimeout(() => existing.remove(), 150);
-    searchOverlayVisible = false;
-    searchResultsCache.clear(); // Clear cache when closing
+    closeSearchOverlay(existing, 150);
     return;
   }
 
@@ -207,7 +226,7 @@ function toggleSearchOverlay() {
   // Create overlay with minimal DOM operations
   const overlay = document.createElement('div');
   overlay.id = 'promptvault-search-overlay';
-  overlay.className = 'promptvault-overlay';
+  overlay.className = `promptvault-overlay ${shouldUseLiteOverlay() ? 'promptvault-overlay-lite' : 'promptvault-overlay-blur'}`;
   
   // Use template literal without extra whitespace
   overlay.innerHTML = `<div class="promptvault-search-dialog"><div class="promptvault-search-header"><input type="text" id="promptvault-search-input" placeholder="${ct('searchPlaceholder')}"></div><div class="promptvault-search-results" id="promptvault-search-results"><div class="promptvault-search-loading">${ct('loading')}</div></div><div class="promptvault-search-footer"><span>${ct('enterToInsert')}</span><span>${ct('escToClose')}</span></div></div>`;
@@ -242,7 +261,12 @@ function toggleSearchOverlay() {
   const performSearch = (q) => {
     if (q === lastQuery) return;
     lastQuery = q;
-    
+
+    if (searchResultsCache.has(q)) {
+      renderSearchResultsOptimized(searchResultsCache.get(q), q);
+      return;
+    }
+
     const filtered = q ? searchOverlayPrompts.filter(p => {
       const ql = q.toLowerCase();
       // Fast path: title check first (most common match)
@@ -252,10 +276,13 @@ function toggleSearchOverlay() {
       // Description check
       if ((p.description || '').toLowerCase().includes(ql)) return true;
       // Text check - limited to 200 chars for speed
-      if (p.text.substring(0, 200).toLowerCase().includes(ql)) return true;
+      if ((p.text || '').substring(0, 200).toLowerCase().includes(ql)) return true;
       return false;
     }) : searchOverlayPrompts;
-    
+
+    // Keep cache bounded for low memory usage
+    if (searchResultsCache.size > 40) searchResultsCache.clear();
+    searchResultsCache.set(q, filtered);
     renderSearchResultsOptimized(filtered, q);
   };
   
@@ -271,7 +298,11 @@ function toggleSearchOverlay() {
     
     // Use requestIdleCallback if available, otherwise setTimeout
     if (window.requestIdleCallback) {
-      searchTimer = requestIdleCallback(() => performSearch(q), { timeout: 150 });
+      if (searchIdleHandle && window.cancelIdleCallback) cancelIdleCallback(searchIdleHandle);
+      searchIdleHandle = requestIdleCallback(() => {
+        searchIdleHandle = null;
+        performSearch(q);
+      }, { timeout: 150 });
     } else {
       searchTimer = setTimeout(() => performSearch(q), 100);
     }
@@ -281,17 +312,13 @@ function toggleSearchOverlay() {
 
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {
-      overlay.classList.remove('visible');
-      setTimeout(() => overlay.remove(), 200);
-      searchOverlayVisible = false;
+      closeSearchOverlay(overlay, 200);
     }
   });
 
   overlay.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      overlay.classList.remove('visible');
-      setTimeout(() => overlay.remove(), 200);
-      searchOverlayVisible = false;
+      closeSearchOverlay(overlay, 200);
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
@@ -341,11 +368,7 @@ function renderSearchResultsOptimized(prompts, query) {
       const prompt = searchOverlayPrompts.find(p => p.id === id);
       if (prompt) {
         const overlay = document.getElementById('promptvault-search-overlay');
-        if (overlay) {
-          overlay.classList.remove('visible');
-          setTimeout(() => overlay.remove(), 150);
-          searchOverlayVisible = false;
-        }
+        if (overlay) closeSearchOverlay(overlay, 150);
         insertPrompt(prompt.text, prompt.variables || []);
         // Fire and forget usage update
         chrome.storage.local.get(['prompts'], (res) => {

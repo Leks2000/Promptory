@@ -20,6 +20,14 @@
 }
 .promptvault-overlay.visible { opacity: 1; }
 
+.promptvault-overlay.promptvault-overlay-blur {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.promptvault-overlay.promptvault-overlay-lite {
+  background: rgba(0, 0, 0, 0.55);
+}
+
 /* Variable dialog */
 .promptvault-dialog {
   background: #1a1a1a;
@@ -157,3 +165,11 @@
   transform: translateX(-50%) translateY(0); opacity: 1;
 }
 .promptvault-notification svg { color: #0F7B6C; flex-shrink: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .promptvault-overlay { transition: none; }
+  .promptvault-search-dialog { transition: none; transform: none; }
+  .promptvault-overlay.promptvault-overlay-blur {
+    background: rgba(0, 0, 0, 0.55);
+  }
+}

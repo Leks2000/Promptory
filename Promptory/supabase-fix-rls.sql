@@ -173,3 +173,10 @@ GRANT EXECUTE ON FUNCTION sync_user_on_login() TO authenticated;
 
 SELECT 'RLS policies and functions updated successfully!' as message;
 SELECT id, email, is_premium, prompt_limit FROM public.profiles ORDER BY created_at;
+
+-- STEP 8: Ensure table privileges for PostgREST reads (RLS is not enough)
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT ON TABLE public.library_prompts TO authenticated;
+GRANT SELECT ON TABLE public.library_likes TO authenticated;
+GRANT SELECT ON TABLE public.prompt_reports TO authenticated;
+GRANT INSERT ON TABLE public.prompt_reports TO authenticated;

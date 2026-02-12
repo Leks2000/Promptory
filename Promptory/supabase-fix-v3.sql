@@ -237,6 +237,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+
+-- Ensure authenticated users have table privileges for Library API reads
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT ON TABLE public.library_prompts TO authenticated;
+GRANT SELECT ON TABLE public.library_likes TO authenticated;
+GRANT SELECT ON TABLE public.prompt_reports TO authenticated;
+GRANT INSERT ON TABLE public.prompt_reports TO authenticated;
+
 -- ===========================================
 -- STEP 8: Grant execute permissions
 -- ===========================================
