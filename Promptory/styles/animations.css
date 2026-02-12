@@ -1,8 +1,15 @@
-/* Tab transitions */
+/* ============================================
+   Promptory Animations v2
+   Inspired by: MagicUI shimmer, Aceternity glare,
+   ReactBits spring, 21st.dev micro-interactions
+   ============================================ */
+
+/* ========== TAB TRANSITIONS ========== */
 .tab-content {
   opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 200ms ease, transform 200ms ease;
+  transform: translateY(10px);
+  transition: opacity 280ms var(--ease-out-expo),
+              transform 280ms var(--ease-out-expo);
   display: none;
 }
 
@@ -12,75 +19,113 @@
   display: block;
 }
 
-/* Prompt card slide in (staggered) */
-.prompt-card {
+/* ========== CARD ENTRANCE - staggered reveal ========== */
+.prompt-card,
+.folder-card {
   opacity: 0;
-  transform: translateY(6px);
-  animation: slideIn 200ms ease forwards;
+  transform: translateY(12px) scale(0.98);
+  animation: cardReveal 400ms var(--ease-out-expo) forwards;
 }
 
-.prompt-card:nth-child(1) { animation-delay: 0ms; }
-.prompt-card:nth-child(2) { animation-delay: 40ms; }
-.prompt-card:nth-child(3) { animation-delay: 80ms; }
-.prompt-card:nth-child(4) { animation-delay: 120ms; }
-.prompt-card:nth-child(5) { animation-delay: 160ms; }
-.prompt-card:nth-child(6) { animation-delay: 200ms; }
+/* Staggered delays - up to 8 items */
+.prompt-card:nth-child(1), .folder-card:nth-child(1) { animation-delay: 0ms; }
+.prompt-card:nth-child(2), .folder-card:nth-child(2) { animation-delay: 40ms; }
+.prompt-card:nth-child(3), .folder-card:nth-child(3) { animation-delay: 70ms; }
+.prompt-card:nth-child(4), .folder-card:nth-child(4) { animation-delay: 100ms; }
+.prompt-card:nth-child(5), .folder-card:nth-child(5) { animation-delay: 130ms; }
+.prompt-card:nth-child(6), .folder-card:nth-child(6) { animation-delay: 155ms; }
+.prompt-card:nth-child(7), .folder-card:nth-child(7) { animation-delay: 175ms; }
+.prompt-card:nth-child(8), .folder-card:nth-child(8) { animation-delay: 195ms; }
 
-@keyframes slideIn {
-  to { 
-    opacity: 1; 
-    transform: translateY(0); 
+@keyframes cardReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
-/* Card hover - unified for all cards */
+/* ========== CARD HOVER - lift & glow ========== */
 .prompt-card,
 .folder-card {
-  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
-              background-color 150ms ease,
-              box-shadow 200ms ease,
-              border-color 150ms ease;
+  transition: transform 300ms var(--ease-out-expo),
+              box-shadow 300ms var(--ease-out-expo),
+              border-color 200ms ease,
+              background-color 200ms ease;
 }
 
 .prompt-card:hover,
 .folder-card:hover {
-  transform: translateY(-2px);
-  background-color: var(--bg-hover);
-  box-shadow: var(--shadow-md);
-  border-color: var(--border-hover);
+  transform: translateY(-3px) scale(1.005);
+  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(var(--accent-rgb), 0.2);
 }
 
 .prompt-card:active,
 .folder-card:active {
-  transform: translateY(0) scale(0.99);
+  transform: translateY(-1px) scale(0.995);
+  transition-duration: 100ms;
 }
 
-/* Loading skeleton */
+/* ========== SHIMMER LOADING (MagicUI-inspired) ========== */
 .skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   background: linear-gradient(
     90deg,
-    var(--bg-tertiary) 25%,
-    var(--bg-hover) 50%,
-    var(--bg-tertiary) 75%
+    transparent 0%,
+    rgba(var(--accent-rgb), 0.06) 40%,
+    rgba(var(--accent-rgb), 0.1) 50%,
+    rgba(var(--accent-rgb), 0.06) 60%,
+    transparent 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: var(--radius-sm);
+  animation: shimmerSlide 1.8s ease-in-out infinite;
 }
 
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+@keyframes shimmerSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
-/* Flip card for Explore - optimized */
+/* ========== EXPLORE CARDS - cinematic flip with glow ========== */
 .explore-card-wrapper {
-  perspective: 1000px;
-  height: 180px;
-  margin-bottom: 0;
+  perspective: 1200px;
+  height: 220px;
+  contain: layout style;
   opacity: 0;
-  transform: translateY(10px);
-  animation: cardAppear 300ms ease forwards;
+  transform: translateY(16px) scale(0.96);
+  animation: exploreReveal 500ms var(--ease-out-expo) forwards;
+}
+
+/* Staggered explore cards */
+.explore-card-wrapper:nth-child(1) { animation-delay: 0ms; }
+.explore-card-wrapper:nth-child(2) { animation-delay: 60ms; }
+.explore-card-wrapper:nth-child(3) { animation-delay: 110ms; }
+.explore-card-wrapper:nth-child(4) { animation-delay: 155ms; }
+.explore-card-wrapper:nth-child(5) { animation-delay: 195ms; }
+.explore-card-wrapper:nth-child(6) { animation-delay: 230ms; }
+
+@keyframes exploreReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .explore-card {
@@ -88,8 +133,16 @@
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 700ms cubic-bezier(0.25, 0.8, 0.25, 1),
+              box-shadow 300ms ease;
   cursor: pointer;
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .explore-card-wrapper:hover .explore-card {
+    transform: rotateY(180deg) translateZ(0);
+  }
 }
 
 .explore-card.flipped {
@@ -99,39 +152,33 @@
 .explore-card-front,
 .explore-card-back {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   overflow: hidden;
-  transition: box-shadow 200ms ease, border-color 200ms ease;
+  transition: box-shadow 300ms ease, border-color 200ms ease;
 }
 
-.explore-card-front {
-  display: flex;
-  flex-direction: column;
-}
+.explore-card-front { display: block; }
 
 .explore-card-back {
   transform: rotateY(180deg);
-  padding: 12px;
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
 }
 
-/* Hover effect for explore cards */
+/* Hover glow for explore cards */
 .explore-card-wrapper:hover .explore-card-front,
 .explore-card-wrapper:hover .explore-card-back {
-  box-shadow: var(--shadow-lg);
-  border-color: var(--border-hover);
+  box-shadow: 0 10px 40px rgba(var(--accent-rgb), 0.15);
+  border-color: rgba(var(--accent-rgb), 0.25);
 }
 
-/* Ripple effect */
+/* ========== RIPPLE EFFECT ========== */
 .ripple {
   position: relative;
   overflow: hidden;
@@ -141,70 +188,73 @@
   content: '';
   position: absolute;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.06);
-  width: 100px;
-  height: 100px;
-  margin-left: -50px;
-  margin-top: -50px;
+  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.15) 0%, transparent 70%);
+  width: 120px;
+  height: 120px;
+  margin-left: -60px;
+  margin-top: -60px;
   transform: scale(0);
   pointer-events: none;
+  opacity: 0;
 }
 
 .ripple:active::after {
-  animation: ripple-anim 400ms ease-out;
+  animation: rippleExpand 500ms var(--ease-out-expo);
 }
 
-@keyframes ripple-anim {
-  to { 
-    transform: scale(4); 
-    opacity: 0; 
-  }
+@keyframes rippleExpand {
+  0% { transform: scale(0); opacity: 1; }
+  100% { transform: scale(4); opacity: 0; }
 }
 
-/* Toast notifications */
+/* ========== TOAST NOTIFICATION - slide up with spring ========== */
 .toast {
   position: fixed;
-  bottom: 16px;
+  bottom: var(--space-4);
   left: 50%;
-  transform: translateX(-50%) translateY(100%);
+  transform: translateX(-50%) translateY(120%) scale(0.9);
   opacity: 0;
-  transition: all 250ms ease;
-  z-index: 10000;
-  padding: 12px 20px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  transition: all 350ms var(--ease-out-expo);
+  z-index: var(--z-toast);
+  padding: 10px 20px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
   box-shadow: var(--shadow-lg);
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   pointer-events: none;
+  white-space: nowrap;
 }
 
 .toast.visible {
-  transform: translateX(-50%) translateY(0);
+  transform: translateX(-50%) translateY(0) scale(1);
   opacity: 1;
 }
 
 .toast.success {
   background: var(--success);
-  color: white;
+  color: var(--text-inverse);
   border-color: var(--success);
 }
 
 .toast.error {
   background: var(--error);
-  color: white;
+  color: var(--text-inverse);
   border-color: var(--error);
 }
 
-/* Collapse/Expand folders - improved animation */
+/* ========== FOLDER COLLAPSE/EXPAND ========== */
 .folder-content {
   max-height: 0;
   overflow: hidden;
   opacity: 0;
-  transition: max-height 350ms cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 250ms ease,
-              padding 250ms ease;
+  transition: max-height 400ms var(--ease-out-expo),
+              opacity 300ms ease,
+              padding 300ms ease;
   padding-top: 0;
   padding-bottom: 0;
 }
@@ -212,35 +262,22 @@
 .folder-section.expanded .folder-content {
   max-height: 2000px;
   opacity: 1;
-  padding-top: 8px;
+  padding-top: var(--space-2);
   padding-bottom: 0;
 }
 
 .folder-arrow {
-  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 350ms var(--ease-out-expo);
 }
 
 .folder-section.expanded .folder-arrow {
   transform: rotate(90deg);
 }
 
-/* Smooth folder card animation */
-.folder-card {
-  opacity: 0;
-  transform: translateY(6px);
-  animation: slideIn 200ms ease forwards;
-}
-
-.folder-card:nth-child(1) { animation-delay: 0ms; }
-.folder-card:nth-child(2) { animation-delay: 40ms; }
-.folder-card:nth-child(3) { animation-delay: 80ms; }
-.folder-card:nth-child(4) { animation-delay: 120ms; }
-.folder-card:nth-child(5) { animation-delay: 160ms; }
-
-/* Modal fade in */
+/* ========== MODAL - backdrop blur + spring scale ========== */
 .modal-overlay {
   opacity: 0;
-  transition: opacity var(--transition-normal);
+  transition: opacity 250ms ease;
   pointer-events: none;
 }
 
@@ -250,10 +287,10 @@
 }
 
 .modal {
-  transform: translateY(-20px) scale(0.95);
+  transform: translateY(-24px) scale(0.92);
   opacity: 0;
-  transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1), 
-              opacity 200ms ease;
+  transition: transform 350ms var(--ease-out-expo),
+              opacity 250ms ease;
 }
 
 .modal-overlay.visible .modal {
@@ -261,98 +298,79 @@
   opacity: 1;
 }
 
-/* Button press */
+/* ========== BUTTON INTERACTIONS ========== */
 button {
-  transition: transform 50ms ease, 
-              background-color var(--transition-fast);
+  transition: transform 80ms ease,
+              background-color var(--transition-fast),
+              box-shadow var(--transition-fast);
 }
 
 button:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
-/* Fade in */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.fade-in {
-  animation: fadeIn 300ms ease;
-}
-
-/* Empty state */
-.empty-state {
-  opacity: 0;
-  animation: fadeIn 400ms ease 200ms forwards;
-}
-
-/* Smooth scroll behavior */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Hover scale animation for action buttons */
+/* ========== ACTION BUTTONS - hover scale ========== */
 .prompt-action-btn,
 .btn-icon {
   transition: transform var(--transition-fast),
               background-color var(--transition-fast),
-              color var(--transition-fast);
+              color var(--transition-fast),
+              box-shadow var(--transition-fast);
 }
 
 .prompt-action-btn:hover,
 .btn-icon:hover {
-  transform: scale(1.1);
+  transform: scale(1.12);
 }
 
 .prompt-action-btn:active,
 .btn-icon:active {
-  transform: scale(0.95);
+  transform: scale(0.92);
 }
 
-/* Tag chip animation */
+/* ========== TAG POP-IN (spring) ========== */
 .tag {
   opacity: 0;
-  transform: scale(0.8);
-  animation: tagPop 200ms cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  transform: scale(0.7) translateY(4px);
+  animation: tagSpring 350ms var(--transition-spring) forwards;
 }
 
-@keyframes tagPop {
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+@keyframes tagSpring {
+  0% { opacity: 0; transform: scale(0.7) translateY(4px); }
+  60% { opacity: 1; transform: scale(1.08) translateY(-1px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Context menu slide in */
+/* ========== CONTEXT MENU - slide + fade ========== */
 .context-menu {
   opacity: 0;
-  transform: translateY(-8px) scale(0.95);
-  animation: menuSlideDown 200ms ease forwards;
+  transform: translateY(-6px) scale(0.96);
+  animation: contextMenuIn 200ms var(--ease-out-expo) forwards;
 }
 
-@keyframes menuSlideDown {
+@keyframes contextMenuIn {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
 }
 
-/* Favorite star animation */
+/* ========== FAVORITE STAR - bounce ========== */
 .prompt-action-btn.active svg {
-  animation: starBounce 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: starPop 400ms var(--transition-spring);
 }
 
-@keyframes starBounce {
+@keyframes starPop {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.3); }
+  40% { transform: scale(1.35) rotate(8deg); }
+  70% { transform: scale(0.9) rotate(-3deg); }
 }
 
-/* Folder header hover animation - unified with cards */
+/* ========== FOLDER HEADER HOVER ========== */
 .folder-header {
-  transition: background-color 150ms ease,
-              transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 200ms ease;
+  transition: background-color 200ms ease,
+              transform 250ms var(--ease-out-expo),
+              box-shadow 250ms ease;
 }
 
 .folder-header:hover {
@@ -365,19 +383,48 @@ html {
   transform: translateY(0);
 }
 
-/* Loading dots animation */
+/* ========== GENERIC FADE IN ========== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 300ms ease;
+}
+
+/* ========== EMPTY STATE REVEAL ========== */
+.empty-state {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: emptyReveal 500ms var(--ease-out-expo) 200ms forwards;
+}
+
+@keyframes emptyReveal {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== SMOOTH SCROLL ========== */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ========== LOADING DOTS ========== */
 @keyframes loadingDots {
   0%, 20% { content: '.'; }
   40% { content: '..'; }
   60%, 100% { content: '...'; }
 }
 
-/* Smooth height transition for textarea */
+/* ========== TEXTAREA RESIZE SMOOTH ========== */
 textarea {
   transition: height 200ms ease;
 }
 
-/* Button loading state */
+/* ========== BUTTON LOADING STATE ========== */
 .btn.loading {
   position: relative;
   color: transparent;
@@ -391,67 +438,52 @@ textarea {
   height: 16px;
   top: 50%;
   left: 50%;
-  margin-left: -8px;
-  margin-top: -8px;
+  margin: -8px 0 0 -8px;
   border: 2px solid transparent;
   border-top-color: currentColor;
   border-radius: 50%;
-  animation: spin 600ms linear infinite;
+  animation: spinSmooth 700ms linear infinite;
 }
 
-@keyframes spin {
+@keyframes spinSmooth {
   to { transform: rotate(360deg); }
 }
 
-/* Search input focus glow */
+/* ========== SEARCH INPUT FOCUS GLOW (Aceternity-style) ========== */
 input[type="text"]:focus,
 input[type="search"]:focus,
 textarea:focus {
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
   transition: border-color var(--transition-fast),
               box-shadow var(--transition-fast);
 }
 
-/* Stagger animation for explore cards */
-.explore-card-wrapper {
-  opacity: 0;
-  transform: translateY(10px);
-  animation: cardAppear 300ms ease forwards;
-}
-
-.explore-card-wrapper:nth-child(1) { animation-delay: 0ms; }
-.explore-card-wrapper:nth-child(2) { animation-delay: 50ms; }
-.explore-card-wrapper:nth-child(3) { animation-delay: 100ms; }
-.explore-card-wrapper:nth-child(4) { animation-delay: 150ms; }
-.explore-card-wrapper:nth-child(5) { animation-delay: 200ms; }
-.explore-card-wrapper:nth-child(6) { animation-delay: 250ms; }
-
-@keyframes cardAppear {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Pulse animation for notification */
+/* ========== PULSE ========== */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  50% { opacity: 0.5; }
 }
 
 .pulse {
   animation: pulse 2s ease-in-out infinite;
 }
 
-/* Glow effect for active favorite */
+/* ========== GLOW PULSE (for active accent elements) ========== */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.2); }
+  50% { box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.4); }
+}
+
+/* ========== FAVORITE STAR COLOR ========== */
 .prompt-action-btn.active {
-  color: var(--warning);
+  color: var(--warning-dark);
 }
 
 .prompt-action-btn.active:hover {
   color: #F5A623;
 }
 
-/* Hotkey badge animation */
+/* ========== HOTKEY BADGE ========== */
 .hotkey-badge {
   display: inline-flex;
   align-items: center;
@@ -463,45 +495,49 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
-  font-family: 'SF Mono', 'Menlo', monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
-  transition: all 150ms ease;
+  transition: all 200ms ease;
 }
 
 .hotkey-badge:hover {
   background: var(--bg-hover);
   border-color: var(--accent);
   color: var(--accent);
+  box-shadow: var(--shadow-glow);
 }
 
-/* Flip indicator */
+/* ========== FLIP INDICATOR ========== */
 .flip-indicator {
   position: absolute;
   bottom: 8px;
   right: 8px;
-  width: 24px;
-  height: 24px;
-  background: var(--bg-tertiary);
+  width: 26px;
+  height: 26px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 200ms ease;
+  transform: scale(0.8);
+  transition: opacity 200ms ease, transform 250ms var(--ease-out-expo);
 }
 
 .explore-card-front:hover .flip-indicator {
   opacity: 1;
+  transform: scale(1);
 }
 
-/* Code preview styling */
+/* ========== CODE PREVIEW ========== */
 .code-preview {
-  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.4;
-  background: var(--bg-tertiary);
+  background: var(--bg-inset);
   border-radius: var(--radius-sm);
-  padding: 8px;
+  padding: var(--space-2);
   color: var(--text-secondary);
   overflow: hidden;
   max-height: 80px;
@@ -515,5 +551,94 @@ textarea:focus {
   left: 0;
   right: 0;
   height: 24px;
-  background: linear-gradient(transparent, var(--bg-tertiary));
+  background: linear-gradient(transparent, var(--bg-inset));
+}
+
+/* ========== TAB INDICATOR SLIDE (Aceternity-style) ========== */
+.tab-btn {
+  position: relative;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--accent-gradient);
+  border-radius: var(--radius-full);
+  animation: tabIndicatorIn 300ms var(--ease-out-expo);
+}
+
+@keyframes tabIndicatorIn {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* ========== GRADIENT BORDER SHIMMER (MagicUI border-beam) ========== */
+.border-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.border-shimmer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    transparent 30%,
+    rgba(var(--accent-rgb), 0.3) 50%,
+    transparent 70%
+  );
+  background-size: 250% 250%;
+  animation: borderShimmer 3s ease-in-out infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+@keyframes borderShimmer {
+  0%, 100% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+}
+
+/* ========== FLOAT-UP ANIMATION (for stats numbers) ========== */
+@keyframes floatUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== GRADIENT TEXT (MagicUI animated-gradient-text) ========== */
+.gradient-text {
+  background: var(--accent-gradient-intense);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ========== RECORDING PULSE ========== */
+@keyframes recordingPulse {
+  0%, 100% { border-color: var(--accent); box-shadow: 0 0 0 rgba(var(--accent-rgb), 0); }
+  50% { border-color: var(--accent); box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.3); }
+}
+
+.hotkey-badge.recording {
+  animation: recordingPulse 1.2s ease infinite;
 }
