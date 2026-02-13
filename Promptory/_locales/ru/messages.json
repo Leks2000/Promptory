@@ -234,5 +234,11 @@
   "clickToUpload": { "message": "Нажмите для загрузки изображения" },
   "remove": { "message": "Удалить" },
   "imageTooLarge": { "message": "Изображение слишком большое (макс. 2МБ)" },
-  "imageUploadFailed": { "message": "Ошибка загрузки изображения" }
+  "imageUploadFailed": { "message": "Ошибка загрузки изображения" },
+
+  "supportDeveloper": { "message": "Поддержать разработчика" },
+  "supportViaDonation": { "message": "Поддержать через DonationAlerts" },
+  "helpDevelopment": { "message": "Помогите нам улучшить Promptory" },
+  "community": { "message": "Сообщество и ссылки" },
+  "clickToFlip": { "message": "Нажмите, чтобы перевернуть" }
 }

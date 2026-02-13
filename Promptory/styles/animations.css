@@ -1,7 +1,7 @@
 /* ============================================
-   Promptory Animations v2
-   Inspired by: MagicUI shimmer, Aceternity glare,
-   ReactBits spring, 21st.dev micro-interactions
+   Promptory Animations v3 - Premium Edition
+   Inspired by: MagicUI Border Beam, Aceternity Spotlight,
+   ReactBits Spring, 21st.dev Glare, Shine Border
    ============================================ */
 
 /* ========== TAB TRANSITIONS ========== */
@@ -133,17 +133,14 @@
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 700ms cubic-bezier(0.25, 0.8, 0.25, 1),
+  transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1),
               box-shadow 300ms ease;
   cursor: pointer;
   will-change: transform;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .explore-card-wrapper:hover .explore-card {
-    transform: rotateY(180deg) translateZ(0);
-  }
-}
+/* Removed hover flip - now click only to prevent stuck state */
+/* Cards flip only on click for better mobile/touch support */
 
 .explore-card.flipped {
   transform: rotateY(180deg);
@@ -641,4 +638,533 @@ textarea:focus {
 
 .hotkey-badge.recording {
   animation: recordingPulse 1.2s ease infinite;
+}
+
+/* ============================================
+   NEW PREMIUM ANIMATIONS - MagicUI/Aceternity Style
+   ============================================ */
+
+/* ========== BORDER BEAM EFFECT (MagicUI) ========== */
+.border-beam {
+  position: relative;
+  overflow: hidden;
+}
+
+.border-beam::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--border-beam-angle, 0deg),
+    transparent 0%,
+    transparent 25%,
+    var(--accent) 50%,
+    transparent 75%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: borderBeamRotate 4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes borderBeamRotate {
+  from { --border-beam-angle: 0deg; }
+  to { --border-beam-angle: 360deg; }
+}
+
+@property --border-beam-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* ========== SHINE BORDER (MagicUI) ========== */
+.shine-border {
+  position: relative;
+  overflow: hidden;
+}
+
+.shine-border::before {
+  content: '';
+  position: absolute;
+  inset: -100%;
+  background: conic-gradient(
+    from 90deg at 50% 50%,
+    transparent 0%,
+    rgba(var(--accent-rgb), 0.4) 25%,
+    transparent 50%
+  );
+  animation: shineBorderRotate 3s linear infinite;
+  pointer-events: none;
+}
+
+.shine-border::after {
+  content: '';
+  position: absolute;
+  inset: 1.5px;
+  border-radius: inherit;
+  background: var(--bg-secondary);
+}
+
+@keyframes shineBorderRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ========== SPOTLIGHT EFFECT (Aceternity) ========== */
+.spotlight {
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight::before {
+  content: '';
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background: radial-gradient(
+    circle at var(--spotlight-x, 50%) var(--spotlight-y, 50%),
+    rgba(var(--accent-rgb), 0.15) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+.spotlight:hover::before {
+  opacity: 1;
+}
+
+/* ========== GLARE CARD EFFECT (Aceternity/Linear style) ========== */
+.glare-card {
+  position: relative;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  transition: transform 300ms var(--ease-out-expo);
+}
+
+.glare-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 60%
+  );
+  transform: translateX(-100%) translateY(-100%);
+  transition: transform 600ms var(--ease-out-expo);
+  pointer-events: none;
+}
+
+.glare-card:hover::before {
+  transform: translateX(100%) translateY(100%);
+}
+
+.glare-card:hover {
+  transform: translateY(-4px) scale(1.01);
+}
+
+/* ========== MAGNETIC HOVER (ReactBits style) ========== */
+.magnetic-hover {
+  transition: transform 300ms var(--ease-out-expo);
+}
+
+.magnetic-hover:hover {
+  transform: translateY(-6px) scale(1.02);
+}
+
+.magnetic-hover:active {
+  transform: translateY(-2px) scale(0.98);
+  transition-duration: 100ms;
+}
+
+/* ========== GLOW PULSE ON FOCUS ========== */
+.glow-on-focus:focus-within {
+  animation: glowPulseFocus 2s ease-in-out infinite;
+}
+
+@keyframes glowPulseFocus {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
+  50% { box-shadow: 0 0 20px 4px rgba(var(--accent-rgb), 0.3); }
+}
+
+/* ========== ANIMATED LIST ITEM (ReactBits) ========== */
+.animated-list-item {
+  opacity: 0;
+  transform: translateX(-20px);
+  animation: listItemSlideIn 400ms var(--ease-out-expo) forwards;
+}
+
+@keyframes listItemSlideIn {
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ========== PARTICLE BURST (click effect) ========== */
+.particle-burst {
+  position: relative;
+}
+
+.particle-burst::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.4) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0);
+  pointer-events: none;
+}
+
+.particle-burst:active::after {
+  animation: particleBurst 400ms var(--ease-out-expo);
+}
+
+@keyframes particleBurst {
+  0% { opacity: 1; transform: scale(0); }
+  100% { opacity: 0; transform: scale(2.5); }
+}
+
+/* ========== SMOOTH GRADIENT FLOW ========== */
+.gradient-flow {
+  background: linear-gradient(
+    90deg,
+    var(--accent),
+    #fd79a8,
+    var(--accent),
+    #74b9ff
+  );
+  background-size: 300% 100%;
+  animation: gradientFlow 6s ease-in-out infinite;
+}
+
+@keyframes gradientFlow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ========== TYPEWRITER CURSOR ========== */
+.typewriter-cursor::after {
+  content: '|';
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ========== NEON GLOW TEXT ========== */
+.neon-glow {
+  text-shadow: 
+    0 0 5px rgba(var(--accent-rgb), 0.8),
+    0 0 10px rgba(var(--accent-rgb), 0.6),
+    0 0 20px rgba(var(--accent-rgb), 0.4),
+    0 0 40px rgba(var(--accent-rgb), 0.2);
+  animation: neonPulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes neonPulse {
+  from {
+    text-shadow: 
+      0 0 5px rgba(var(--accent-rgb), 0.5),
+      0 0 10px rgba(var(--accent-rgb), 0.3);
+  }
+  to {
+    text-shadow: 
+      0 0 10px rgba(var(--accent-rgb), 1),
+      0 0 20px rgba(var(--accent-rgb), 0.8),
+      0 0 30px rgba(var(--accent-rgb), 0.6);
+  }
+}
+
+/* ========== SCALE IN BOUNCE (for modals/cards) ========== */
+@keyframes scaleInBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.scale-in-bounce {
+  animation: scaleInBounce 500ms var(--ease-out-expo);
+}
+
+/* ========== SLIDE UP FADE (staggered reveal) ========== */
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up-fade {
+  animation: slideUpFade 400ms var(--ease-out-expo) forwards;
+}
+
+/* Stagger delays for slide-up-fade */
+.slide-up-fade:nth-child(1) { animation-delay: 0ms; }
+.slide-up-fade:nth-child(2) { animation-delay: 50ms; }
+.slide-up-fade:nth-child(3) { animation-delay: 100ms; }
+.slide-up-fade:nth-child(4) { animation-delay: 150ms; }
+.slide-up-fade:nth-child(5) { animation-delay: 200ms; }
+.slide-up-fade:nth-child(6) { animation-delay: 250ms; }
+
+/* ========== HOVER LIFT WITH SHADOW ========== */
+.hover-lift {
+  transition: 
+    transform 300ms var(--ease-out-expo),
+    box-shadow 300ms var(--ease-out-expo);
+}
+
+.hover-lift:hover {
+  transform: translateY(-8px);
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.15),
+    0 0 30px rgba(var(--accent-rgb), 0.1);
+}
+
+/* ========== SHIMMER TEXT (MagicUI animated-shiny-text) ========== */
+.shimmer-text {
+  background: linear-gradient(
+    120deg,
+    var(--text-primary) 0%,
+    var(--text-primary) 40%,
+    var(--accent) 50%,
+    var(--text-primary) 60%,
+    var(--text-primary) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmerText 3s ease-in-out infinite;
+}
+
+@keyframes shimmerText {
+  0%, 100% { background-position: 200% center; }
+  50% { background-position: 0% center; }
+}
+
+/* ========== WOBBLE SHAKE (for errors/warnings) ========== */
+@keyframes wobbleShake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.wobble-shake {
+  animation: wobbleShake 500ms ease-in-out;
+}
+
+/* ========== AURORA BACKGROUND (premium effect) ========== */
+.aurora-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.aurora-bg::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(162, 155, 254, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(253, 121, 168, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(116, 185, 255, 0.1) 0%, transparent 50%);
+  animation: auroraMove 20s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes auroraMove {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  33% { transform: rotate(120deg) scale(1.1); }
+  66% { transform: rotate(240deg) scale(0.9); }
+}
+
+/* ========== SETTINGS LINK HOVER (social links) ========== */
+.settings-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: all 250ms var(--ease-out-expo);
+  font-size: var(--font-size-sm);
+}
+
+.settings-link:hover {
+  background: var(--bg-hover);
+  border-color: rgba(var(--accent-rgb), 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.15);
+  text-decoration: none;
+}
+
+.settings-link:active {
+  transform: translateY(0);
+}
+
+.settings-link svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: color 200ms ease;
+}
+
+.settings-link:hover svg {
+  color: var(--accent);
+}
+
+.settings-link-text {
+  flex: 1;
+}
+
+.settings-link-title {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.settings-link-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+/* ========== DONATION BUTTON SPECIAL ========== */
+.donation-link {
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.1) 0%, rgba(253, 203, 110, 0.1) 100%);
+  border-color: rgba(255, 107, 107, 0.2);
+}
+
+.donation-link:hover {
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.2) 0%, rgba(253, 203, 110, 0.2) 100%);
+  border-color: rgba(255, 107, 107, 0.4);
+  box-shadow: 0 4px 20px rgba(255, 107, 107, 0.2);
+}
+
+.donation-link svg {
+  color: #FF6B6B;
+}
+
+.donation-link:hover svg {
+  color: #FF6B6B;
+  animation: heartbeat 1s ease-in-out infinite;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  25% { transform: scale(1.1); }
+  50% { transform: scale(1); }
+  75% { transform: scale(1.1); }
+}
+
+/* ========== SOCIAL ICONS COLORS ========== */
+.telegram-link:hover {
+  border-color: rgba(0, 136, 204, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 136, 204, 0.15);
+}
+
+.telegram-link:hover svg {
+  color: #0088CC;
+}
+
+.itch-link:hover {
+  border-color: rgba(250, 92, 92, 0.3);
+  box-shadow: 0 4px 15px rgba(250, 92, 92, 0.15);
+}
+
+.itch-link:hover svg {
+  color: #FA5C5C;
+}
+
+/* ========== ENHANCED CARD ANIMATIONS ========== */
+.prompt-card.glare-card::before,
+.folder-card.glare-card::before {
+  z-index: 1;
+}
+
+/* ========== SUCCESS COPY ANIMATION ========== */
+@keyframes copySuccess {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.copy-success-anim {
+  animation: copySuccess 300ms var(--ease-out-expo);
+}
+
+/* ========== EXPLORE CARD IMPROVED FLIP ========== */
+.explore-card {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.explore-card.flipped {
+  transform: rotateY(180deg);
+  transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Remove hover flip on touch devices to prevent stuck state */
+@media (hover: none) {
+  .explore-card-wrapper:hover .explore-card:not(.flipped) {
+    transform: none;
+  }
+}
+
+/* Ensure click-to-flip works better */
+.explore-card-wrapper {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ========== MODAL NO BLUR (performance) ========== */
+.modal-overlay.no-blur {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* ========== PERFORMANCE OPTIMIZATIONS ========== */
+.prompt-card,
+.folder-card,
+.explore-card-wrapper {
+  will-change: transform, opacity;
+  contain: layout style paint;
+}
+
+/* Reduce animation on low-power mode */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

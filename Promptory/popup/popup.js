@@ -380,9 +380,9 @@ function renderPromptCard(prompt, idx) {
   const tagsHtml = prompt.tags?.length
     ? `<div class="tags">${prompt.tags.slice(0, 3).map(tg => `<span class="tag">#${escapeHtml(tg)}</span>`).join('')}${prompt.tags.length > 3 ? `<span class="tag">+${prompt.tags.length - 3}</span>` : ''}</div>`
     : '';
-  // Card click = copy. Actions: fav, edit, insert, menu
+  // Card click = copy. Actions: fav, edit, insert, menu. Added glare-card for premium hover effect
   return `
-    <div class="prompt-card" data-prompt-id="${prompt.id}" ${delay} title="${t('clickToCopy') || 'Click to copy'}">
+    <div class="prompt-card glare-card" data-prompt-id="${prompt.id}" ${delay} title="${t('clickToCopy') || 'Click to copy'}">
       <div class="prompt-card-header">
         <div class="prompt-title">${escapeHtml(truncate(prompt.title, 60))}</div>
         <div class="prompt-actions">
@@ -1370,18 +1370,33 @@ function renderExplore() {
     }
     const reportBtn = e.target.closest('[data-explore-report]');
     if (reportBtn) { e.stopPropagation(); if (!state.userReports.has(reportBtn.dataset.exploreReport)) openReportModal(reportBtn.dataset.exploreReport); return; }
-    // Card flip on click
+    // Card flip on click - improved logic to prevent stuck state
     const wrapper = e.target.closest('.explore-card-wrapper');
     if (wrapper && !e.target.closest('button')) {
       const card = wrapper.querySelector('.explore-card');
       const id = wrapper.dataset.exploreId;
-      if (card.classList.contains('flipped')) { 
+      
+      // Toggle flip state with improved handling
+      if (flippedCards.has(id)) { 
         card.classList.remove('flipped'); 
-        flippedCards.delete(id); 
+        flippedCards.delete(id);
+        // Force reflow to ensure animation completes
+        card.offsetHeight;
       } else { 
+        // First close any other flipped cards for better UX
+        document.querySelectorAll('.explore-card.flipped').forEach(otherCard => {
+          const otherId = otherCard.closest('.explore-card-wrapper')?.dataset.exploreId;
+          if (otherId && otherId !== id) {
+            otherCard.classList.remove('flipped');
+            flippedCards.delete(otherId);
+          }
+        });
         card.classList.add('flipped'); 
-        flippedCards.add(id); 
+        flippedCards.add(id);
       }
+      
+      // Prevent event propagation to avoid double triggers
+      e.stopPropagation();
     }
   };
   
@@ -1536,7 +1551,7 @@ function openSettings() {
   };
   
   const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
+  modal.className = 'modal-overlay no-blur';
   modal.id = 'settings-modal';
   modal.innerHTML = `
     <div class="modal" style="max-width:500px;">
@@ -1558,7 +1573,34 @@ function openSettings() {
         </div></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('theme')}</label><select id="settings-theme"><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>${t('themeDark')}</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>${t('themeLight')}</option><option value="system" ${s.theme === 'system' ? 'selected' : ''}>${t('themeSystem')}</option></select></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;"><button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button></div></div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v1.1.0<br>${t('aboutDescription')}</div></div>
+        <div class="form-group"><label class="form-label">${t('supportDeveloper') || 'Support Developer'}</label>
+          <a href="https://donationalerts.com/r/knightcoreking" target="_blank" class="settings-link donation-link">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <div class="settings-link-text">
+              <div class="settings-link-title">${t('supportViaDonation') || 'Support via DonationAlerts'}</div>
+              <div class="settings-link-subtitle">${t('helpDevelopment') || 'Help us improve Promptory'}</div>
+            </div>
+          </a>
+        </div><div class="divider"></div>
+        <div class="form-group"><label class="form-label">${t('community') || 'Community & Links'}</label>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <a href="https://t.me/Something_Promptory" target="_blank" class="settings-link telegram-link">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.198 2.433a2.242 2.242 0 0 0-1.022.215l-16.5 7.5a2.25 2.25 0 0 0 .126 4.133l3.978 1.326 1.518 4.854a1.5 1.5 0 0 0 2.565.535l2.012-2.324 3.845 2.884a2.25 2.25 0 0 0 3.503-1.193l3.75-16.5a2.25 2.25 0 0 0-2.775-2.43z"/></svg>
+              <div class="settings-link-text">
+                <div class="settings-link-title">Telegram</div>
+                <div class="settings-link-subtitle">@Something_Promptory</div>
+              </div>
+            </a>
+            <a href="https://softerror-studios.itch.io" target="_blank" class="settings-link itch-link">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <div class="settings-link-text">
+                <div class="settings-link-title">itch.io Games</div>
+                <div class="settings-link-subtitle">softerror-studios.itch.io</div>
+              </div>
+            </a>
+          </div>
+        </div><div class="divider"></div>
+        <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v1.2.0<br>${t('aboutDescription')}</div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-ghost close-modal-btn">${t('cancel')}</button><button class="btn btn-primary" id="settings-save-btn">${t('saveChanges')}</button></div>
     </div>`;
