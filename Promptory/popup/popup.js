@@ -1370,33 +1370,33 @@ function renderExplore() {
     }
     const reportBtn = e.target.closest('[data-explore-report]');
     if (reportBtn) { e.stopPropagation(); if (!state.userReports.has(reportBtn.dataset.exploreReport)) openReportModal(reportBtn.dataset.exploreReport); return; }
-    // Card flip on click - improved logic to prevent stuck state
+    // Card flip on click - only for touch devices (hover handles desktop)
+    // On desktop: cards flip on hover (CSS handles this)
+    // On mobile/touch: cards flip on tap (JS handles this)
     const wrapper = e.target.closest('.explore-card-wrapper');
     if (wrapper && !e.target.closest('button')) {
       const card = wrapper.querySelector('.explore-card');
       const id = wrapper.dataset.exploreId;
       
-      // Toggle flip state with improved handling
-      if (flippedCards.has(id)) { 
-        card.classList.remove('flipped'); 
-        flippedCards.delete(id);
-        // Force reflow to ensure animation completes
-        card.offsetHeight;
-      } else { 
-        // First close any other flipped cards for better UX
-        document.querySelectorAll('.explore-card.flipped').forEach(otherCard => {
-          const otherId = otherCard.closest('.explore-card-wrapper')?.dataset.exploreId;
-          if (otherId && otherId !== id) {
-            otherCard.classList.remove('flipped');
-            flippedCards.delete(otherId);
-          }
-        });
-        card.classList.add('flipped'); 
-        flippedCards.add(id);
+      // Only toggle flip class on touch devices (no hover support)
+      if (!window.matchMedia('(hover: hover)').matches) {
+        if (flippedCards.has(id)) { 
+          card.classList.remove('flipped'); 
+          flippedCards.delete(id);
+        } else { 
+          // First close any other flipped cards for better UX
+          document.querySelectorAll('.explore-card.flipped').forEach(otherCard => {
+            const otherId = otherCard.closest('.explore-card-wrapper')?.dataset.exploreId;
+            if (otherId && otherId !== id) {
+              otherCard.classList.remove('flipped');
+              flippedCards.delete(otherId);
+            }
+          });
+          card.classList.add('flipped'); 
+          flippedCards.add(id);
+        }
+        e.stopPropagation();
       }
-      
-      // Prevent event propagation to avoid double triggers
-      e.stopPropagation();
     }
   };
   
@@ -1486,14 +1486,30 @@ function openReportModal(promptId) {
     btn.classList.add('loading');
     try {
       const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompt_reports', body: { user_id: state.user.id, prompt_id: promptId, reason, details: details || null } });
-      if (res?.error) throw new Error(typeof res.error === 'string' ? res.error : JSON.stringify(res.error));
+      if (res?.error) {
+        const errorMsg = parseSupabaseError(res.error);
+        console.error('Report error:', errorMsg);
+        throw new Error(errorMsg);
+      }
       state.userReports.add(promptId);
       updateExploreReportUI(promptId);
       showToast(t('reportSubmitted'), 'success');
       closeModal('report-modal');
     } catch (e) {
-      if (e.message?.includes('duplicate') || e.message?.includes('23505')) { showToast(t('alreadyReported'), 'error'); state.userReports.add(promptId); updateExploreReportUI(promptId); }
-      else showToast(t('failedToReport'), 'error');
+      const errorMsg = e.message || String(e);
+      console.error('Report submission failed:', errorMsg);
+      if (errorMsg.includes('duplicate') || errorMsg.includes('23505')) { 
+        showToast(t('alreadyReported'), 'error'); 
+        state.userReports.add(promptId); 
+        updateExploreReportUI(promptId); 
+      } else if (errorMsg.includes('not authenticated') || errorMsg.includes('jwt') || errorMsg.includes('401')) {
+        showToast(t('signInRequired') || 'Please sign in to report', 'error');
+      } else if (errorMsg.includes('permission') || errorMsg.includes('RLS') || errorMsg.includes('policy')) {
+        showToast(t('permissionDenied') || 'Permission denied. Please try again.', 'error');
+      } else {
+        // Show specific error message to user
+        showToast(`${t('failedToReport')}: ${truncate(errorMsg, 100)}`, 'error');
+      }
     }
     btn.classList.remove('loading');
   });

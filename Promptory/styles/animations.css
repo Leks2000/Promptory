@@ -139,11 +139,19 @@
   will-change: transform;
 }
 
-/* Removed hover flip - now click only to prevent stuck state */
-/* Cards flip only on click for better mobile/touch support */
-
-.explore-card.flipped {
+/* Hover flip - cards flip on mouse hover */
+.explore-card-wrapper:hover .explore-card {
   transform: rotateY(180deg);
+}
+
+/* For touch devices, use flipped class */
+@media (hover: none) {
+  .explore-card-wrapper:hover .explore-card {
+    transform: none;
+  }
+  .explore-card.flipped {
+    transform: rotateY(180deg);
+  }
 }
 
 .explore-card-front,
@@ -215,8 +223,7 @@
   z-index: var(--z-toast);
   padding: 10px 20px;
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  /* Blur removed for performance */
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-full);
   box-shadow: var(--shadow-lg);
@@ -511,8 +518,8 @@ textarea:focus {
   right: 8px;
   width: 26px;
   height: 26px;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.7);
+  /* Blur removed for performance */
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1125,9 +1132,12 @@ textarea:focus {
   will-change: transform;
 }
 
-.explore-card.flipped {
-  transform: rotateY(180deg);
-  transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+/* For touch devices only - use class toggle */
+@media (hover: none) {
+  .explore-card.flipped {
+    transform: rotateY(180deg);
+    transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }
 
 /* Remove hover flip on touch devices to prevent stuck state */
