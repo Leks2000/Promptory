@@ -234,5 +234,11 @@
   "clickToUpload": { "message": "Click to upload image" },
   "remove": { "message": "Remove" },
   "imageTooLarge": { "message": "Image too large (max 2MB)" },
-  "imageUploadFailed": { "message": "Image upload failed" }
+  "imageUploadFailed": { "message": "Image upload failed" },
+
+  "supportDeveloper": { "message": "Support Developer" },
+  "supportViaDonation": { "message": "Support via DonationAlerts" },
+  "helpDevelopment": { "message": "Help us improve Promptory" },
+  "community": { "message": "Community & Links" },
+  "clickToFlip": { "message": "Click to flip" }
 }

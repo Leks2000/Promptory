@@ -54,10 +54,10 @@
   --shadow-glow: 0 0 20px var(--accent-glow);
   --shadow-card-hover: 0 8px 30px rgba(108, 92, 231, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
 
-  /* Glassmorphism */
-  --glass-bg: rgba(255, 255, 255, 0.72);
+  /* Glassmorphism - blur disabled for performance */
+  --glass-bg: rgba(255, 255, 255, 0.92);
   --glass-border: rgba(255, 255, 255, 0.4);
-  --glass-blur: 16px;
+  --glass-blur: 0px;
 
   /* Radius - rounder, more modern */
   --radius-xs: 4px;
@@ -156,7 +156,7 @@
   --shadow-glow: 0 0 30px var(--accent-glow);
   --shadow-card-hover: 0 8px 30px rgba(162, 155, 254, 0.15), 0 2px 8px rgba(0, 0, 0, 0.3);
 
-  --glass-bg: rgba(23, 23, 28, 0.75);
+  --glass-bg: rgba(23, 23, 28, 0.95);
   --glass-border: rgba(255, 255, 255, 0.06);
-  --glass-blur: 20px;
+  --glass-blur: 0px;
 }
