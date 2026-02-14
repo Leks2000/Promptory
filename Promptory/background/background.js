@@ -2,8 +2,8 @@
 
 const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0';
-// Extension ID for redirect URL
-const EXTENSION_ID = 'clachikkapfdfldgkmdhkmpmgagonnml';
+// Redirect URL is computed dynamically from chrome.identity
+const REDIRECT_URL = chrome.identity.getRedirectURL();
 
 // ---------- Installation ----------
 chrome.runtime.onInstalled.addListener((details) => {
@@ -388,17 +388,104 @@ async function handleGetImageAsDataUrl(message) {
 }
 
 // ---------- Supabase Auth via Chrome Identity API ----------
+
+// Pending auth resolver - used by the tab-based auth flow
+let _pendingAuthResolve = null;
+
+// Listen for tab URL changes to intercept OAuth callback
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Check if the tab navigated to our redirect URL
+  if (changeInfo.url && changeInfo.url.startsWith(REDIRECT_URL)) {
+    console.log('🔹 Intercepted auth redirect:', changeInfo.url);
+    finishOAuthFromTab(tabId, changeInfo.url);
+  }
+});
+
+// Process OAuth tokens from intercepted tab URL
+async function finishOAuthFromTab(tabId, url) {
+  try {
+    // Parse tokens from URL hash
+    const parsedUrl = new URL(url);
+    const hashParams = new URLSearchParams(parsedUrl.hash.replace('#', ''));
+    
+    // Check for errors
+    const error = hashParams.get('error') || parsedUrl.searchParams.get('error');
+    const errorDesc = hashParams.get('error_description') || parsedUrl.searchParams.get('error_description');
+    if (error) {
+      console.error('❌ OAuth error:', errorDesc || error);
+      // Close the tab and show auth-callback with error
+      try { await chrome.tabs.update(tabId, { url: chrome.runtime.getURL('auth-callback.html') + '?error=' + encodeURIComponent(errorDesc || error) }); } catch (e) {}
+      if (_pendingAuthResolve) {
+        _pendingAuthResolve({ success: false, error: errorDesc || error });
+        _pendingAuthResolve = null;
+      }
+      return;
+    }
+    
+    const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
+    const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
+
+    if (!accessToken) {
+      console.error('❌ No access token in redirect URL');
+      if (_pendingAuthResolve) {
+        _pendingAuthResolve({ success: false, error: 'No access token received' });
+        _pendingAuthResolve = null;
+      }
+      return;
+    }
+
+    console.log('✅ Got access token from tab redirect');
+
+    // Fetch user info from Supabase
+    const user = await fetchUserInfo(accessToken);
+    console.log('✅ Got user:', user.email);
+
+    // Save session
+    const session = {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: Date.now() + (expiresIn * 1000)
+    };
+
+    await chrome.storage.local.set({ session, user });
+    console.log('✅ Session saved from tab redirect');
+
+    // Redirect the auth tab to a success page, then close it
+    try {
+      await chrome.tabs.update(tabId, { url: chrome.runtime.getURL('auth-callback.html') + '#success=true' });
+      // Close after a brief delay so user sees success
+      setTimeout(async () => {
+        try { await chrome.tabs.remove(tabId); } catch (e) { /* tab may already be closed */ }
+      }, 1500);
+    } catch (e) {
+      console.log('🔹 Could not update/close auth tab:', e.message);
+    }
+
+    // Resolve the pending auth promise
+    if (_pendingAuthResolve) {
+      _pendingAuthResolve({ success: true, user, session });
+      _pendingAuthResolve = null;
+    }
+  } catch (err) {
+    console.error('❌ finishOAuthFromTab error:', err);
+    if (_pendingAuthResolve) {
+      _pendingAuthResolve({ success: false, error: err.message });
+      _pendingAuthResolve = null;
+    }
+  }
+}
+
 async function handleGoogleSignIn() {
   try {
-    // Use chrome.identity.getRedirectURL() for proper callback
-    const callbackUrl = chrome.identity.getRedirectURL();
+    const callbackUrl = REDIRECT_URL;
     console.log('🔹 Callback URL:', callbackUrl);
 
     // Build auth URL with Supabase - redirect to extension callback
     const authUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUrl)}`;
     console.log('🔹 Auth URL:', authUrl);
 
-    // Try launchWebAuthFlow first (works in most browsers)
+    // Try launchWebAuthFlow first (works in standard Chrome)
     try {
       const responseUrl = await chrome.identity.launchWebAuthFlow({
         url: authUrl,
@@ -419,12 +506,11 @@ async function handleGoogleSignIn() {
       const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
 
       if (!accessToken) {
-        // Check for error in URL
         const errorDesc = hashParams.get('error_description') || url.searchParams.get('error_description');
         throw new Error(errorDesc || 'No access token in response');
       }
 
-      console.log('✅ Got access token');
+      console.log('✅ Got access token via launchWebAuthFlow');
 
       // Fetch user info from Supabase
       const user = await fetchUserInfo(accessToken);
@@ -443,44 +529,32 @@ async function handleGoogleSignIn() {
       return { success: true, user, session };
 
     } catch (launchError) {
-      console.warn('⚠️ launchWebAuthFlow failed, trying tab method:', launchError.message);
+      console.warn('⚠️ launchWebAuthFlow failed, using tab method:', launchError.message);
       
-      // Fallback: Open in new tab (for Brave and other browsers that block launchWebAuthFlow)
+      // Fallback: Open auth in a new tab
+      // The chrome.tabs.onUpdated listener above will intercept the redirect
       const tab = await chrome.tabs.create({ 
         url: authUrl, 
         active: true 
       });
-
       console.log('🔹 Opened auth tab:', tab.id);
 
-      // Wait for auth-callback.html to save session
+      // Return a promise that resolves when the onUpdated listener catches the redirect
       return new Promise((resolve) => {
-        let checkCount = 0;
-        const maxChecks = 120; // 60 seconds (120 * 500ms)
+        // Cancel any previous pending auth
+        if (_pendingAuthResolve) {
+          _pendingAuthResolve({ success: false, error: 'Cancelled by new auth attempt' });
+        }
+        _pendingAuthResolve = resolve;
         
-        const checkInterval = setInterval(async () => {
-          checkCount++;
-          
-          const { session, user } = await chrome.storage.local.get(['session', 'user']);
-          
-          if (session && user) {
-            clearInterval(checkInterval);
-            console.log('✅ Session detected:', user.email);
-            
-            // Close auth tab if still open
-            try {
-              await chrome.tabs.remove(tab.id);
-            } catch (e) {
-              console.log('🔹 Auth tab already closed');
-            }
-            
-            resolve({ success: true, user, session });
-          } else if (checkCount >= maxChecks) {
-            clearInterval(checkInterval);
-            console.error('❌ Timeout waiting for auth');
-            resolve({ success: false, error: 'Timeout waiting for authentication' });
+        // Timeout after 120 seconds
+        setTimeout(() => {
+          if (_pendingAuthResolve === resolve) {
+            _pendingAuthResolve = null;
+            console.error('❌ Timeout waiting for auth tab redirect');
+            resolve({ success: false, error: 'Timeout waiting for authentication. Please try again.' });
           }
-        }, 500);
+        }, 120000);
       });
     }
 

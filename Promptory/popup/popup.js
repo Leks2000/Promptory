@@ -446,13 +446,43 @@ async function toggleFavorite(id) {
   if (!p) return;
   p.isFavorite = !p.isFavorite;
   p.updatedAt = Date.now();
+  _suppressStorageRender = true;
   await saveData('prompts', state.prompts);
+  _suppressStorageRender = false;
   showToast(p.isFavorite ? t('addedToFavorites') : t('removedFromFavorites'), 'success');
-  // Batch UI updates
-  renderPrompts();
+  // In-place update for prompts list; only re-render favorites tab (it's simpler)
+  updatePromptCardFavorite(id, p.isFavorite);
   renderFavorites();
   syncPromptToSupabase(p);
 }
+
+// ==================== IN-PLACE UI UPDATES (prevent full re-render flicker) ====================
+// Update a prompt card's useCount without re-rendering the entire list
+function updatePromptCardUseCount(promptId, useCount) {
+  const card = document.querySelector(`.prompt-card[data-prompt-id="${promptId}"]`);
+  if (!card) return false;
+  const stat = card.querySelector('.prompt-stat');
+  if (stat) stat.textContent = t('usedTimes', useCount);
+  return true;
+}
+
+// Update a prompt card's favorite state in-place
+function updatePromptCardFavorite(promptId, isFavorite) {
+  // Update in prompts list
+  const cards = document.querySelectorAll(`.prompt-card[data-prompt-id="${promptId}"]`);
+  cards.forEach(card => {
+    const favBtn = card.querySelector('[data-action="toggle-fav"]');
+    if (favBtn) {
+      favBtn.classList.toggle('active', isFavorite);
+      favBtn.title = isFavorite ? t('removeFromFavorites') : t('addToFavorites');
+      const svg = favBtn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', isFavorite ? 'currentColor' : 'none');
+    }
+  });
+}
+
+// Flag to suppress storage listener re-renders during our own saves
+let _suppressStorageRender = false;
 
 // ==================== COPY PROMPT (single unified copy function) ====================
 // This is THE copy function used everywhere - card click, button click, context menu, explore
@@ -480,9 +510,12 @@ async function copyPrompt(id) {
   if (ok) {
     p.useCount = (p.useCount || 0) + 1;
     p.updatedAt = Date.now();
+    _suppressStorageRender = true;
     await saveData('prompts', state.prompts);
+    _suppressStorageRender = false;
     showToast(t('copiedToClipboard'), 'success');
-    renderPrompts();
+    // In-place update instead of full re-render
+    updatePromptCardUseCount(id, p.useCount);
     trackUsage(p, 'copy');
     syncPromptToSupabase(p);
   } else {
@@ -499,9 +532,12 @@ async function insertPromptToPage(id) {
     await chrome.tabs.sendMessage(tab.id, { action: 'insertPrompt', text: p.text, variables: p.variables || [] });
     p.useCount = (p.useCount || 0) + 1;
     p.updatedAt = Date.now();
+    _suppressStorageRender = true;
     await saveData('prompts', state.prompts);
+    _suppressStorageRender = false;
     showToast(t('promptInserted'), 'success');
-    renderPrompts();
+    // In-place update instead of full re-render
+    updatePromptCardUseCount(id, p.useCount);
     const platform = new URL(tab.url || '').hostname.replace('www.', '') || 'unknown';
     trackUsage(p, 'insert', platform);
     syncPromptToSupabase(p); // Continuous sync
@@ -509,8 +545,12 @@ async function insertPromptToPage(id) {
     await navigator.clipboard.writeText(p.text);
     p.useCount = (p.useCount || 0) + 1;
     p.updatedAt = Date.now();
+    _suppressStorageRender = true;
     await saveData('prompts', state.prompts);
+    _suppressStorageRender = false;
     showToast(t('copiedClipboardNotSupported'), 'success');
+    // In-place update instead of full re-render
+    updatePromptCardUseCount(id, p.useCount);
     trackUsage(p, 'clipboard');
     syncPromptToSupabase(p); // Continuous sync
   }
@@ -575,7 +615,9 @@ function closeContextMenu() {
 async function deletePrompt(id) {
   if (!confirm(t('deletePromptConfirm'))) return;
   state.prompts = state.prompts.filter(p => p.id !== id);
+  _suppressStorageRender = true;
   await saveData('prompts', state.prompts);
+  _suppressStorageRender = false;
   showToast(t('promptDeleted'), 'success');
   renderPrompts();
   renderFavorites();
@@ -982,8 +1024,12 @@ async function savePrompt(editingId) {
   pendingImageFile = null;
   showToast(editingId ? t('promptUpdated') : t('promptCreated'), 'success');
   closeModal('prompt-editor-modal');
-  renderPrompts();
-  renderFavorites();
+  // Only do a full re-render for save/create - this is the one case where it's needed
+  // Use a small delay to let the modal close animation finish first (reduces perceived flicker)
+  requestAnimationFrame(() => {
+    renderPrompts();
+    renderFavorites();
+  });
 }
 
 // ==================== IMAGE UPLOAD ====================
@@ -1090,8 +1136,10 @@ function _renderFoldersImmediate() {
       if (!confirm(t('deleteFolderConfirm', f.name) + (count ? '\n' + t('promptsMovedToUncategorized', count) : ''))) return;
       state.folders = state.folders.filter(x => x.id !== fId);
       state.prompts.forEach(p => { if (p.folderId === fId) p.folderId = null; });
+      _suppressStorageRender = true;
       await saveData('folders', state.folders);
       await saveData('prompts', state.prompts);
+      _suppressStorageRender = false;
       showToast(t('folderDeleted'), 'success');
       renderFolders();
       renderPrompts();
@@ -1120,11 +1168,13 @@ function openFolderEditor(folderId = null) {
     if (!name) { document.getElementById('fe-name-err').style.display = 'block'; return; }
     if (folderId) { const f = state.folders.find(x => x.id === folderId); if (f) { f.name = name; f.updatedAt = Date.now(); syncFolderToSupabase(f); } }
     else { const newF = { id: crypto.randomUUID(), name, createdAt: Date.now(), updatedAt: Date.now() }; state.folders.push(newF); syncFolderToSupabase(newF); }
+    _suppressStorageRender = true;
     await saveData('folders', state.folders);
+    _suppressStorageRender = false;
     showToast(folderId ? t('folderUpdated') : t('folderCreated'), 'success');
     closeModal('folder-editor-modal');
     renderFolders();
-    renderPrompts();
+    // Don't re-render prompts list here - it causes visible flicker on folders tab
   });
   modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('folder-editor-modal')));
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('folder-editor-modal'); });
@@ -2181,6 +2231,17 @@ async function init() {
   document.getElementById('settings-btn').addEventListener('click', openSettings);
 
   chrome.storage.onChanged.addListener((changes) => {
+    // Skip re-renders when the change was triggered by our own saves (prevents flicker)
+    if (_suppressStorageRender) {
+      // Still update state silently
+      if (changes.prompts) state.prompts = changes.prompts.newValue || [];
+      if (changes.folders) state.folders = changes.folders.newValue || [];
+      if (changes.user) state.user = changes.user.newValue;
+      if (changes.session) state.session = changes.session.newValue;
+      if (changes.isPremium) state.isPremium = changes.isPremium.newValue;
+      if (changes.promptLimit) state.promptLimit = changes.promptLimit.newValue;
+      return;
+    }
     if (changes.prompts) { state.prompts = changes.prompts.newValue || []; renderPrompts(); renderFavorites(); }
     if (changes.folders) { state.folders = changes.folders.newValue || []; renderFolders(); renderPrompts(); }
     if (changes.user) { state.user = changes.user.newValue; renderExplore(); }
