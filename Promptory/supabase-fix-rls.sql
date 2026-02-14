@@ -178,4 +178,4 @@ SELECT id, email, is_premium, prompt_limit FROM public.profiles ORDER BY created
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT ON TABLE public.library_prompts TO authenticated;
 GRANT SELECT ON TABLE public.library_likes TO authenticated;
-GRANT SELECT ON TABLE public.prompt_reports TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.prompt_reports TO authenticated;

@@ -753,35 +753,52 @@ async function handleSupabaseRequest(message) {
   };
 
   // For POST to tables (not rpc), add upsert handling
+  // Exception: prompt_reports should use plain INSERT (not upsert) - duplicate is an error
   if (method === 'POST' && !path.startsWith('rpc/') && !path.startsWith('storage/')) {
-    headers['Prefer'] = 'return=representation,resolution=merge-duplicates';
+    if (path.startsWith('prompt_reports')) {
+      headers['Prefer'] = 'return=representation';
+    } else {
+      headers['Prefer'] = 'return=representation,resolution=merge-duplicates';
+    }
   } else if (method === 'POST') {
     headers['Prefer'] = 'return=representation';
   }
 
   Object.keys(headers).forEach(k => headers[k] === undefined && delete headers[k]);
 
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-      method: method || 'GET',
-      headers,
-      body: body ? JSON.stringify(body) : undefined
-    });
+  const maxRetries = (method || 'GET') === 'GET' ? 2 : 0; // Only retry GETs automatically
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+        method: method || 'GET',
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
 
-    if (!res.ok) {
-      const text = await res.text();
-      return { error: text };
+      if (!res.ok) {
+        const text = await res.text();
+        // Retry on server errors (5xx) for GET requests
+        if (res.status >= 500 && attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+          continue;
+        }
+        return { error: text };
+      }
+
+      const contentType = res.headers.get('content-type');
+      if (res.status === 204 || !contentType || !contentType.includes('application/json')) {
+        return { data: null };
+      }
+
+      const data = await res.json();
+      return { data };
+    } catch (err) {
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        continue;
+      }
+      return { error: err.message };
     }
-
-    const contentType = res.headers.get('content-type');
-    if (res.status === 204 || !contentType || !contentType.includes('application/json')) {
-      return { data: null };
-    }
-
-    const data = await res.json();
-    return { data };
-  } catch (err) {
-    return { error: err.message };
   }
 }
 

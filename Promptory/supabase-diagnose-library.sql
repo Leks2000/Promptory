@@ -26,7 +26,7 @@ ORDER BY tablename, cmd, policyname;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT ON TABLE public.library_prompts TO authenticated;
 GRANT SELECT ON TABLE public.library_likes TO authenticated;
-GRANT SELECT ON TABLE public.prompt_reports TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.prompt_reports TO authenticated;
 -- (idempotent: safe to run many times)
 DROP POLICY IF EXISTS "Authenticated can view library prompts" ON public.library_prompts;
 CREATE POLICY "Authenticated can view library prompts" ON public.library_prompts
