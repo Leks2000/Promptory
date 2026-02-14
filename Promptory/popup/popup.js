@@ -52,6 +52,15 @@ const state = {
 };
 
 // ==================== UTILITIES ====================
+// Simple client-side rate limiter to prevent spam clicks on likes/reports
+const _rateLimits = {};
+function isRateLimited(key, cooldownMs = 2000) {
+  const now = Date.now();
+  if (_rateLimits[key] && now - _rateLimits[key] < cooldownMs) return true;
+  _rateLimits[key] = now;
+  return false;
+}
+
 function escapeHtml(text) {
   if (!text) return '';
   const div = document.createElement('div');
@@ -90,6 +99,34 @@ function formatDate(ts) {
 
 function supabaseMsg(params) {
   return new Promise(resolve => chrome.runtime.sendMessage(params, resolve));
+}
+
+// Retry wrapper with exponential backoff for critical Supabase operations
+async function supabaseMsgWithRetry(params, { maxRetries = 2, baseDelay = 1000 } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await supabaseMsg(params);
+      // Don't retry on auth/permission errors - they won't resolve themselves
+      if (res?.error) {
+        const errStr = parseSupabaseError(res.error).toLowerCase();
+        if (errStr.includes('not authenticated') || errStr.includes('jwt') || errStr.includes('permission') || errStr.includes('rls') || errStr.includes('duplicate') || errStr.includes('23505')) {
+          return res;
+        }
+        // Retry on server/network errors
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)));
+          continue;
+        }
+      }
+      return res;
+    } catch (e) {
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)));
+        continue;
+      }
+      return { error: e.message || 'Network error' };
+    }
+  }
 }
 
 function parseSupabaseError(error) {
@@ -479,6 +516,48 @@ function updatePromptCardFavorite(promptId, isFavorite) {
       if (svg) svg.setAttribute('fill', isFavorite ? 'currentColor' : 'none');
     }
   });
+}
+
+// Update a prompt card's text content in-place (title, tags, folder move)
+// Returns true if the card was updated in-place, false if a full re-render is needed
+function updatePromptCardInPlace(promptId, prompt) {
+  const card = document.querySelector(`.prompt-card[data-prompt-id="${promptId}"]`);
+  if (!card) return false;
+  
+  // Check if folder changed — if so, we need full re-render since card moved sections
+  const currentSection = card.closest('.folder-section');
+  const currentFolderId = currentSection?.dataset?.folderId;
+  const newFolderId = prompt.folderId || 'uncategorized';
+  if (currentFolderId && currentFolderId !== newFolderId) return false;
+  
+  // Update title text
+  const titleEl = card.querySelector('.prompt-title');
+  if (titleEl) titleEl.textContent = truncate(prompt.title, 60);
+  
+  // Update tags
+  const existingTags = card.querySelector('.tags');
+  const header = card.querySelector('.prompt-card-header');
+  if (prompt.tags?.length) {
+    const tagsHtml = `<div class="tags">${prompt.tags.slice(0, 3).map(tg => `<span class="tag">#${escapeHtml(tg)}</span>`).join('')}${prompt.tags.length > 3 ? `<span class="tag">+${prompt.tags.length - 3}</span>` : ''}</div>`;
+    if (existingTags) {
+      existingTags.outerHTML = tagsHtml;
+    } else if (header) {
+      header.insertAdjacentHTML('afterend', tagsHtml);
+    }
+  } else if (existingTags) {
+    existingTags.remove();
+  }
+  
+  return true;
+}
+
+// Update a folder name in-place without re-rendering
+function updateFolderNameInPlace(folderId, newName) {
+  const section = document.querySelector(`.folder-section[data-folder-id="${folderId}"]`);
+  if (!section) return false;
+  const nameEl = section.querySelector('.folder-name');
+  if (nameEl) nameEl.textContent = newName;
+  return true;
 }
 
 // Flag to suppress storage listener re-renders during our own saves
@@ -1024,12 +1103,17 @@ async function savePrompt(editingId) {
   pendingImageFile = null;
   showToast(editingId ? t('promptUpdated') : t('promptCreated'), 'success');
   closeModal('prompt-editor-modal');
-  // Only do a full re-render for save/create - this is the one case where it's needed
-  // Use a small delay to let the modal close animation finish first (reduces perceived flicker)
-  requestAnimationFrame(() => {
-    renderPrompts();
-    renderFavorites();
-  });
+  // For edits: try in-place update (no flicker). Full re-render only when needed (new prompt or folder change)
+  if (editingId) {
+    const updatedPrompt = state.prompts.find(x => x.id === editingId);
+    if (!updatedPrompt || !updatePromptCardInPlace(editingId, updatedPrompt)) {
+      requestAnimationFrame(() => { renderPrompts(); renderFavorites(); });
+    } else {
+      renderFavorites();
+    }
+  } else {
+    requestAnimationFrame(() => { renderPrompts(); renderFavorites(); });
+  }
 }
 
 // ==================== IMAGE UPLOAD ====================
@@ -1173,7 +1257,14 @@ function openFolderEditor(folderId = null) {
     _suppressStorageRender = false;
     showToast(folderId ? t('folderUpdated') : t('folderCreated'), 'success');
     closeModal('folder-editor-modal');
-    renderFolders();
+    // For edits: try in-place name update (no flicker). Full re-render only for new folders
+    if (folderId) {
+      if (!updateFolderNameInPlace(folderId, name)) {
+        renderFolders();
+      }
+    } else {
+      renderFolders();
+    }
     // Don't re-render prompts list here - it causes visible flicker on folders tab
   });
   modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('folder-editor-modal')));
@@ -1234,7 +1325,7 @@ async function loadLibraryPrompts() {
 
   for (const path of queries) {
     try {
-      const res = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path });
+      const res = await supabaseMsgWithRetry({ action: 'supabaseRequest', method: 'GET', path });
       console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
 
       if (res?.data && Array.isArray(res.data)) {
@@ -1404,7 +1495,8 @@ function renderExplore() {
     if (likeBtn) { 
       e.stopPropagation(); 
       if (!state.user) { showToast(t('signInToLike') || 'Sign in to like prompts', 'error'); return; }
-      const id = likeBtn.dataset.exploreLike; 
+      const id = likeBtn.dataset.exploreLike;
+      if (isRateLimited('like_' + id, 1500)) return;
       try { 
         const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/toggle_library_like', body: { prompt_uuid: id } }); 
         if (res?.data) { 
@@ -1419,7 +1511,7 @@ function renderExplore() {
       return; 
     }
     const reportBtn = e.target.closest('[data-explore-report]');
-    if (reportBtn) { e.stopPropagation(); if (!state.userReports.has(reportBtn.dataset.exploreReport)) openReportModal(reportBtn.dataset.exploreReport); return; }
+    if (reportBtn) { e.stopPropagation(); if (isRateLimited('report', 3000)) return; if (!state.userReports.has(reportBtn.dataset.exploreReport)) openReportModal(reportBtn.dataset.exploreReport); return; }
     // Card flip on click - only for touch devices (hover handles desktop)
     // On desktop: cards flip on hover (CSS handles this)
     // On mobile/touch: cards flip on tap (JS handles this)
@@ -1529,6 +1621,7 @@ function openReportModal(promptId) {
     opt.addEventListener('click', () => { modal.querySelectorAll('.report-reason-option').forEach(o => o.classList.remove('selected')); opt.classList.add('selected'); opt.querySelector('input').checked = true; });
   });
   document.getElementById('report-submit-btn').addEventListener('click', async () => {
+    if (isRateLimited('report_submit', 5000)) return;
     const reason = modal.querySelector('input[name="report-reason"]:checked')?.value;
     const details = document.getElementById('report-details')?.value.trim();
     if (!reason) return;
@@ -1655,6 +1748,13 @@ function openSettings() {
               <div class="settings-link-text">
                 <div class="settings-link-title">Telegram</div>
                 <div class="settings-link-subtitle">@Something_Promptory</div>
+              </div>
+            </a>
+            <a href="https://t.me/WORLD_ArIn_NEWS" target="_blank" class="settings-link telegram-link">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.198 2.433a2.242 2.242 0 0 0-1.022.215l-16.5 7.5a2.25 2.25 0 0 0 .126 4.133l3.978 1.326 1.518 4.854a1.5 1.5 0 0 0 2.565.535l2.012-2.324 3.845 2.884a2.25 2.25 0 0 0 3.503-1.193l3.75-16.5a2.25 2.25 0 0 0-2.775-2.43z"/></svg>
+              <div class="settings-link-text">
+                <div class="settings-link-title">AI News</div>
+                <div class="settings-link-subtitle">@WORLD_ArIn_NEWS</div>
               </div>
             </a>
             <a href="https://softerror-studios.itch.io" target="_blank" class="settings-link itch-link">
@@ -1974,7 +2074,7 @@ async function syncAllData() {
     let profileExists = false;
     
     try {
-      const syncRes = await supabaseMsg({ 
+      const syncRes = await supabaseMsgWithRetry({ 
         action: 'supabaseRequest', 
         method: 'POST', 
         path: 'rpc/sync_user_on_login',

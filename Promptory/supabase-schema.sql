@@ -712,4 +712,4 @@ SELECT title, author, likes, downloads FROM public.library_prompts WHERE is_feat
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT ON TABLE public.library_prompts TO authenticated;
 GRANT SELECT ON TABLE public.library_likes TO authenticated;
-GRANT SELECT ON TABLE public.prompt_reports TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.prompt_reports TO authenticated;

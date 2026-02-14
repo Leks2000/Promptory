@@ -242,7 +242,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT ON TABLE public.library_prompts TO authenticated;
 GRANT SELECT ON TABLE public.library_likes TO authenticated;
-GRANT SELECT ON TABLE public.prompt_reports TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.prompt_reports TO authenticated;
 
 -- ===========================================
 -- STEP 8: Grant execute permissions
