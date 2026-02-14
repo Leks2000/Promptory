@@ -2054,15 +2054,24 @@ async function syncPromptToSupabase(prompt) {
   // Fallback: direct sync (if modules not loaded)
   if (!state.session || !state.user) return;
   try { 
+    // Validate folder_id: only include if the folder exists locally 
+    // (it may not exist in cloud yet, causing FK violation)
+    const validFolderId = prompt.folderId && state.folders.some(f => f.id === prompt.folderId) 
+      ? prompt.folderId : null;
     const body = { 
-      id: prompt.id, user_id: state.user.id, folder_id: prompt.folderId || null, 
+      id: prompt.id, user_id: state.user.id, folder_id: validFolderId, 
       title: prompt.title, text: prompt.text, description: prompt.description, 
       image_url: prompt.imageUrl || null, platform: prompt.platform || 'universal', 
       tags: prompt.tags || [], variables: prompt.variables || [], 
       is_favorite: prompt.isFavorite || false, use_count: prompt.useCount || 0, 
       updated_at: new Date().toISOString() 
     };
-    await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body }); 
+    const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body }); 
+    // If folder FK failed, retry without folder_id
+    if (res?.error && typeof res.error === 'string' && res.error.includes('folder_id')) {
+      body.folder_id = null;
+      await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body });
+    }
   } catch (e) { console.error('Sync failed:', e); }
 }
 
@@ -2305,11 +2314,13 @@ async function syncAllData() {
       }
     }
     
-    // Step 4: Update UI
-    renderPrompts(); 
-    renderFolders(); 
-    renderFavorites();
-    renderLimitBanner();
+    // Step 4: Update UI (single batched render, not multiple)
+    requestAnimationFrame(() => {
+      renderPrompts(); 
+      renderFolders(); 
+      renderFavorites();
+      renderLimitBanner();
+    });
     
     console.log('✅ Sync complete! Prompts:', state.prompts.length, 'Folders:', state.folders.length, 'Premium:', state.isPremium);
   } catch (e) { 
@@ -2341,6 +2352,8 @@ function updateStaticTexts() {
 }
 
 // ==================== INIT ====================
+let _initRenderDone = false; // Guard against duplicate renders during init
+
 async function init() {
   // Load i18n locales first
   await loadLocale('en');
@@ -2376,15 +2389,14 @@ async function init() {
     mainApp.style.display = 'flex';
   }
 
-  // Update static text from i18n
-  updateStaticTexts();
-
+  // Initialize tabs and search BEFORE any rendering
   initTabs();
-  renderPrompts();
-  renderFolders();
-  renderFavorites();
-  renderExplore();
   initSearch();
+
+  // Update static text from i18n — this also does the FIRST render of all tabs
+  updateStaticTexts();
+  _initRenderDone = true;
+  // No extra renderPrompts/renderFolders/etc here — updateStaticTexts already did them
 
   document.getElementById('new-prompt-btn').addEventListener('click', () => openPromptEditor());
   document.getElementById('new-folder-btn').addEventListener('click', () => openFolderEditor());
@@ -2414,13 +2426,21 @@ async function init() {
     if (state.settings.theme === 'system') applyTheme('system');
   });
 
-  // If logged in, render cached library immediately, then refresh from cloud
+  // If logged in, sync data from cloud ONCE, then load library ONCE after
   if (state.session && state.user) { 
-    loadLibraryPrompts();
-    syncAllData().then(() => {
-      loadLibraryPrompts();
-    });
-    checkPremiumStatus(); 
+    // Render cached library immediately (from libraryPromptsCache)
+    renderExplore();
+    // Then sync + refresh — sequential, not parallel, to avoid double-render
+    try {
+      await syncAllData();
+    } catch (e) {
+      console.error('Initial sync failed:', e);
+    }
+    // Load library prompts ONCE after sync is done
+    await loadLibraryPrompts();
+    // Check premium status (uses sync_user_on_login which was already called in syncAllData)
+    // Only do a lightweight check here — don't call sync_user_on_login again
+    renderLimitBanner();
   }
 }
 
