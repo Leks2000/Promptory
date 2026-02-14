@@ -240,5 +240,18 @@
   "supportViaDonation": { "message": "Support via DonationAlerts" },
   "helpDevelopment": { "message": "Help us improve Promptory" },
   "community": { "message": "Community & Links" },
-  "clickToFlip": { "message": "Click to flip" }
+  "clickToFlip": { "message": "Click to flip" },
+
+  "offlineMode": { "message": "Offline — changes will sync when reconnected" },
+  "syncingChanges": { "message": "Syncing changes" },
+  "offlineSynced": { "message": "All offline changes synced" },
+  "loadMore": { "message": "Load More" },
+  "loading": { "message": "Loading..." },
+  "clickToCopy": { "message": "Click to copy" },
+  "coverImage": { "message": "Cover Image" },
+  "optional": { "message": "optional" },
+  "signInToSave": { "message": "Sign in to save prompts" },
+  "signInToLike": { "message": "Sign in to like prompts" },
+  "signInRequired": { "message": "Sign in required" },
+  "permissionDenied": { "message": "Permission denied" }
 }

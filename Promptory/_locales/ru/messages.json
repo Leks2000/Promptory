@@ -240,5 +240,18 @@
   "supportViaDonation": { "message": "Поддержать через DonationAlerts" },
   "helpDevelopment": { "message": "Помогите нам улучшить Promptory" },
   "community": { "message": "Сообщество и ссылки" },
-  "clickToFlip": { "message": "Нажмите, чтобы перевернуть" }
+  "clickToFlip": { "message": "Нажмите, чтобы перевернуть" },
+
+  "offlineMode": { "message": "Офлайн — изменения синхронизируются при подключении" },
+  "syncingChanges": { "message": "Синхронизация" },
+  "offlineSynced": { "message": "Все офлайн-изменения синхронизированы" },
+  "loadMore": { "message": "Загрузить ещё" },
+  "loading": { "message": "Загрузка..." },
+  "clickToCopy": { "message": "Нажмите, чтобы скопировать" },
+  "coverImage": { "message": "Обложка" },
+  "optional": { "message": "необязательно" },
+  "signInToSave": { "message": "Войдите, чтобы сохранять промпты" },
+  "signInToLike": { "message": "Войдите, чтобы ставить лайки" },
+  "signInRequired": { "message": "Необходимо войти" },
+  "permissionDenied": { "message": "Доступ запрещён" }
 }

@@ -1,6 +1,6 @@
 // PromptVault Options page functionality
 
-const HOTKEY_PROMPT_SELECT_LIMIT = 200;
+const HOTKEY_PROMPT_SELECT_LIMIT = CONFIG.SETTINGS_PROMPT_SELECT_LIMIT;
 
 // ==================== LOAD SETTINGS ====================
 function loadSettings() {
