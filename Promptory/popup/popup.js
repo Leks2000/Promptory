@@ -4,12 +4,13 @@
 (function() {
 'use strict';
 
-// ==================== CONSTANTS ====================
-const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0';
-const FREE_PROMPT_LIMIT = 20;
-const MAX_ANIM_ITEMS = 8; // Cap staggered animations for performance
-const SETTINGS_PROMPT_SELECT_LIMIT = 200; // Prevent settings modal lag with huge libraries
+// ==================== CONSTANTS (from shared config.js) ====================
+const SUPABASE_URL = CONFIG.SUPABASE_URL;
+const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
+const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT;
+const MAX_ANIM_ITEMS = CONFIG.MAX_ANIM_ITEMS;
+const SETTINGS_PROMPT_SELECT_LIMIT = CONFIG.SETTINGS_PROMPT_SELECT_LIMIT;
+const LIBRARY_PAGE_SIZE = CONFIG.LIBRARY_PAGE_SIZE;
 
 // ==================== I18N ====================
 const LOCALES = {};
@@ -518,17 +519,11 @@ function updatePromptCardFavorite(promptId, isFavorite) {
   });
 }
 
-// Update a prompt card's text content in-place (title, tags, folder move)
+// Update a prompt card's text content in-place (title, tags, useCount, favorite)
 // Returns true if the card was updated in-place, false if a full re-render is needed
 function updatePromptCardInPlace(promptId, prompt) {
   const card = document.querySelector(`.prompt-card[data-prompt-id="${promptId}"]`);
   if (!card) return false;
-  
-  // Check if folder changed — if so, we need full re-render since card moved sections
-  const currentSection = card.closest('.folder-section');
-  const currentFolderId = currentSection?.dataset?.folderId;
-  const newFolderId = prompt.folderId || 'uncategorized';
-  if (currentFolderId && currentFolderId !== newFolderId) return false;
   
   // Update title text
   const titleEl = card.querySelector('.prompt-title');
@@ -547,6 +542,13 @@ function updatePromptCardInPlace(promptId, prompt) {
   } else if (existingTags) {
     existingTags.remove();
   }
+  
+  // Update useCount
+  const stat = card.querySelector('.prompt-stat');
+  if (stat) stat.textContent = t('usedTimes', prompt.useCount || 0);
+  
+  // Update favorite button state
+  updatePromptCardFavorite(promptId, prompt.isFavorite);
   
   return true;
 }
@@ -1086,9 +1088,11 @@ async function savePrompt(editingId) {
   }
   
   const variables = [...new Set((text.match(/\{([^}]+)\}/g) || []).map(m => m.slice(1, -1)))];
+  let previousFolderId = null;
   if (editingId) {
     const p = state.prompts.find(x => x.id === editingId);
     if (p) { 
+      previousFolderId = p.folderId || null;
       Object.assign(p, { title, text, description: desc, folderId, platform, tags, variables, imageUrl, updatedAt: Date.now() }); 
       syncPromptToSupabase(p); 
     }
@@ -1098,7 +1102,10 @@ async function savePrompt(editingId) {
     state.prompts.unshift(newP);
     syncPromptToSupabase(newP);
   }
+  // Suppress storage listener re-renders during our own save (prevents full page reload flicker)
+  _suppressStorageRender = true;
   await saveData('prompts', state.prompts);
+  _suppressStorageRender = false;
   saveBtn.classList.remove('loading');
   pendingImageFile = null;
   showToast(editingId ? t('promptUpdated') : t('promptCreated'), 'success');
@@ -1106,9 +1113,12 @@ async function savePrompt(editingId) {
   // For edits: try in-place update (no flicker). Full re-render only when needed (new prompt or folder change)
   if (editingId) {
     const updatedPrompt = state.prompts.find(x => x.id === editingId);
-    if (!updatedPrompt || !updatePromptCardInPlace(editingId, updatedPrompt)) {
+    const folderChanged = (previousFolderId || 'uncategorized') !== (folderId || 'uncategorized');
+    if (folderChanged || !updatedPrompt || !updatePromptCardInPlace(editingId, updatedPrompt)) {
+      // Folder changed or card not found — need full re-render but use rAF to avoid layout thrash
       requestAnimationFrame(() => { renderPrompts(); renderFavorites(); });
     } else {
+      // In-place update succeeded — only refresh favorites in case it's also there
       renderFavorites();
     }
   } else {
@@ -1302,7 +1312,11 @@ function _renderFavoritesImmediate() {
 }
 
 // ==================== EXPLORE ====================
-async function loadLibraryPrompts() {
+let _libraryPage = 0;
+let _libraryHasMore = true;
+let _libraryLoading = false;
+
+async function loadLibraryPrompts(append = false) {
   // Library prompts should be visible to authenticated users only
   if (!state.session || !state.user) {
     console.log('📚 Skipping library load - not authenticated');
@@ -1311,13 +1325,23 @@ async function loadLibraryPrompts() {
     return;
   }
 
-  console.log('📚 Loading library prompts...');
+  if (_libraryLoading) return;
+  _libraryLoading = true;
+  
+  if (!append) {
+    _libraryPage = 0;
+    _libraryHasMore = true;
+  }
+
+  console.log('📚 Loading library prompts page', _libraryPage);
   state.libraryError = null;
+  
+  const offset = _libraryPage * LIBRARY_PAGE_SIZE;
 
   const queries = [
-    'library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url,created_at&order=created_at.desc.nullslast&limit=100',
-    'library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url&limit=100',
-    'library_prompts?order=likes.desc&limit=100'
+    `library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url,created_at&order=created_at.desc.nullslast&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`,
+    `library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`,
+    `library_prompts?order=likes.desc&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`
   ];
 
   let lastError = null;
@@ -1326,10 +1350,9 @@ async function loadLibraryPrompts() {
   for (const path of queries) {
     try {
       const res = await supabaseMsgWithRetry({ action: 'supabaseRequest', method: 'GET', path });
-      console.log('📚 Library response:', JSON.stringify(res).substring(0, 500));
 
       if (res?.data && Array.isArray(res.data)) {
-        state.libraryPrompts = res.data.map(p => ({
+        const newItems = res.data.map(p => ({
           id: p.id,
           title: p.title,
           text: p.text,
@@ -1343,7 +1366,18 @@ async function loadLibraryPrompts() {
           isFeatured: p.is_featured,
           imageUrl: p.image_url || null
         }));
-        console.log('📚 Loaded', state.libraryPrompts.length, 'library prompts via', path);
+        
+        if (append) {
+          // Avoid duplicates
+          const existingIds = new Set(state.libraryPrompts.map(p => p.id));
+          const unique = newItems.filter(p => !existingIds.has(p.id));
+          state.libraryPrompts = [...state.libraryPrompts, ...unique];
+        } else {
+          state.libraryPrompts = newItems;
+        }
+        
+        _libraryHasMore = newItems.length >= LIBRARY_PAGE_SIZE;
+        console.log('📚 Loaded', newItems.length, 'library prompts, total:', state.libraryPrompts.length);
         saveData('libraryPromptsCache', state.libraryPrompts);
         loaded = true;
         break;
@@ -1364,28 +1398,28 @@ async function loadLibraryPrompts() {
     state.libraryError = errorText;
 
     if (isAuthError(lastError)) {
-      console.warn('📚 Session seems invalid while loading library. Clearing local session.');
       state.session = null;
       state.user = null;
       await saveData('session', null);
       await saveData('user', null);
       showToast(t('signInToExplore'), 'error');
-    } else {
-      console.warn('📚 Library unavailable. Possible RLS or schema issue:', errorText);
     }
   }
 
-  // Load user likes and reports
-  try {
-    const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
-    if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
-  } catch (e) { console.warn('📚 Failed to load likes:', e); }
+  // Load user likes and reports (only on first page)
+  if (!append) {
+    try {
+      const likesRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'library_likes?select=prompt_id' });
+      if (likesRes?.data) state.userLikes = new Set(likesRes.data.map(l => l.prompt_id));
+    } catch (e) { /* silent */ }
 
-  try {
-    const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
-    if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
-  } catch (e) { console.warn('📚 Failed to load reports:', e); }
+    try {
+      const reportsRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompt_reports?select=prompt_id' });
+      if (reportsRes?.data) state.userReports = new Set(reportsRes.data.map(r => r.prompt_id));
+    } catch (e) { /* silent */ }
+  }
 
+  _libraryLoading = false;
   renderExplore();
 }
 
@@ -1560,10 +1594,9 @@ function renderExplore() {
           }
         }
       });
-    }, { rootMargin: '100px' }); // Pre-load when 100px away from viewport
+    }, { rootMargin: '100px' });
     imageElements.forEach(el => imgObserver.observe(el));
   } else {
-    // Fallback for no IntersectionObserver
     imageElements.forEach(async (el) => {
       const imageUrl = el.dataset.imageUrl;
       if (imageUrl) {
@@ -1572,9 +1605,23 @@ function renderExplore() {
           if (resolvedUrl) {
             el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center;`;
           }
-        } catch (e) {
-          console.warn('Failed to load explore card image:', e);
-        }
+        } catch (e) { /* silent */ }
+      }
+    });
+  }
+  
+  // Add "Load More" button for pagination
+  if (_libraryHasMore) {
+    const loadMoreContainer = document.createElement('div');
+    loadMoreContainer.className = 'explore-load-more';
+    loadMoreContainer.style.cssText = 'grid-column: 1 / -1; text-align: center; padding: 16px 0;';
+    loadMoreContainer.innerHTML = `<button class="btn btn-secondary btn-sm ripple" id="explore-load-more-btn">${_libraryLoading ? (t('loading') || 'Loading...') : (t('loadMore') || 'Load More')}</button>`;
+    list.appendChild(loadMoreContainer);
+    
+    document.getElementById('explore-load-more-btn')?.addEventListener('click', () => {
+      if (!_libraryLoading) {
+        _libraryPage++;
+        loadLibraryPrompts(true);
       }
     });
   }
@@ -1766,7 +1813,7 @@ function openSettings() {
             </a>
           </div>
         </div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v1.2.0<br>${t('aboutDescription')}</div></div>
+        <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v${CONFIG.VERSION}<br>${t('aboutDescription')}</div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-ghost close-modal-btn">${t('cancel')}</button><button class="btn btn-primary" id="settings-save-btn">${t('saveChanges')}</button></div>
     </div>`;
@@ -1999,67 +2046,46 @@ function closeModal(id) {
   if (modal) { modal.classList.remove('visible'); setTimeout(() => modal.remove(), 250); }
 }
 
-// ==================== SUPABASE SYNC ====================
+// ==================== SUPABASE SYNC (with offline queue support) ====================
 async function syncPromptToSupabase(prompt) {
-  if (!state.session || !state.user) {
-    console.log('⏭️ Skipping sync - no session');
-    return;
+  if (typeof Promptory !== 'undefined' && Promptory.syncPromptToCloud) {
+    return Promptory.syncPromptToCloud(prompt);
   }
+  // Fallback: direct sync (if modules not loaded)
+  if (!state.session || !state.user) return;
   try { 
-    console.log('☁️ Syncing prompt to cloud:', prompt.title);
     const body = { 
-      id: prompt.id, 
-      user_id: state.user.id, 
-      folder_id: prompt.folderId || null, 
-      title: prompt.title, 
-      text: prompt.text, 
-      description: prompt.description, 
-      image_url: prompt.imageUrl || null,
-      platform: prompt.platform || 'universal', 
-      tags: prompt.tags || [], 
-      variables: prompt.variables || [], 
-      is_favorite: prompt.isFavorite || false, 
-      use_count: prompt.useCount || 0, 
+      id: prompt.id, user_id: state.user.id, folder_id: prompt.folderId || null, 
+      title: prompt.title, text: prompt.text, description: prompt.description, 
+      image_url: prompt.imageUrl || null, platform: prompt.platform || 'universal', 
+      tags: prompt.tags || [], variables: prompt.variables || [], 
+      is_favorite: prompt.isFavorite || false, use_count: prompt.useCount || 0, 
       updated_at: new Date().toISOString() 
     };
-    const res = await supabaseMsg({ 
-      action: 'supabaseRequest', 
-      method: 'POST', 
-      path: 'prompts', 
-      body 
-    }); 
-    if (res?.error) {
-      console.warn('⚠️ Sync error for prompt:', prompt.title, res.error);
-      // If error contains "foreign key", the folder might not exist in cloud
-      if (typeof res.error === 'string' && res.error.includes('folder_id')) {
-        console.log('🔄 Retrying without folder_id...');
-        body.folder_id = null;
-        const retry = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body });
-        if (retry?.error) {
-          console.warn('⚠️ Retry also failed:', retry.error);
-        } else {
-          console.log('✅ Synced prompt (without folder):', prompt.title);
-        }
-      }
-    } else {
-      console.log('✅ Synced prompt:', prompt.title);
-    }
-  } catch (e) { 
-    console.error('❌ Sync failed:', e); 
-  }
+    await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body }); 
+  } catch (e) { console.error('Sync failed:', e); }
 }
 
 async function syncPromptDeleteToSupabase(id) {
+  if (typeof Promptory !== 'undefined' && Promptory.syncPromptDeleteToCloud) {
+    return Promptory.syncPromptDeleteToCloud(id);
+  }
   if (!state.session || !state.user) return;
   try { await supabaseMsg({ action: 'supabaseRequest', method: 'DELETE', path: `prompts?id=eq.${id}` }); } catch (e) { /* silent */ }
 }
 
 async function syncFolderToSupabase(folder) {
+  if (typeof Promptory !== 'undefined' && Promptory.syncFolderToCloud) {
+    return Promptory.syncFolderToCloud(folder);
+  }
   if (!state.session || !state.user) return;
   try { await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'folders', body: { id: folder.id, user_id: state.user.id, name: folder.name, updated_at: new Date().toISOString() } }); } catch (e) { /* silent */ }
 }
 
 async function syncFolderDeleteToSupabase(id) {
+  if (typeof Promptory !== 'undefined' && Promptory.syncFolderDeleteToCloud) {
+    return Promptory.syncFolderDeleteToCloud(id);
+  }
   if (!state.session || !state.user) return;
   try { await supabaseMsg({ action: 'supabaseRequest', method: 'DELETE', path: `folders?id=eq.${id}` }); } catch (e) { /* silent */ }
 }
@@ -2163,15 +2189,15 @@ async function syncAllData() {
         updatedAt: new Date(f.updated_at).getTime() 
       }));
       
-      // Bidirectional merge: combine cloud + local, newest wins on conflicts
+      // Smart bidirectional merge for folders
       const cloudFolderMap = new Map(cloudFolders.map(f => [f.id, f]));
       const localFolders = [...state.folders];
       const mergedFolders = new Map();
       
-      // Add all cloud folders
+      // Start with all cloud folders
       cloudFolders.forEach(f => mergedFolders.set(f.id, f));
       
-      // Add local folders that don't exist in cloud, or are newer
+      // Merge local folders
       for (const lf of localFolders) {
         const cf = cloudFolderMap.get(lf.id);
         if (!cf) {
@@ -2179,10 +2205,15 @@ async function syncAllData() {
           mergedFolders.set(lf.id, lf);
           await syncFolderToSupabase(lf);
           console.log('📤 Uploaded local folder:', lf.name);
-        } else if (lf.updatedAt > cf.updatedAt) {
-          // Local is newer - update cloud
-          mergedFolders.set(lf.id, lf);
-          await syncFolderToSupabase(lf);
+        } else {
+          // Both exist - take the newer name, preserve earliest creation
+          const localNewer = lf.updatedAt > cf.updatedAt;
+          const merged = {
+            ...(localNewer ? lf : cf),
+            createdAt: Math.min(lf.createdAt || Infinity, cf.createdAt || Infinity)
+          };
+          mergedFolders.set(lf.id, merged);
+          if (localNewer) await syncFolderToSupabase(merged);
         }
       }
       
@@ -2215,15 +2246,20 @@ async function syncAllData() {
         updatedAt: new Date(p.updated_at).getTime() 
       }));
       
-      // Bidirectional merge: combine cloud + local, newest wins on conflicts
+      // Smart bidirectional merge: field-level conflict resolution
+      // Instead of "newer wins everything", we merge intelligently:
+      // - useCount: always take the MAX (both sides may have usage data)
+      // - isFavorite: take from the newer version
+      // - text/title/tags/etc: take from the newer version
+      // - This prevents losing usage counts or favorites
       const cloudPromptMap = new Map(cloudPrompts.map(p => [p.id, p]));
       const localPrompts = [...state.prompts];
       const mergedPrompts = new Map();
       
-      // Add all cloud prompts
+      // Start with all cloud prompts
       cloudPrompts.forEach(p => mergedPrompts.set(p.id, p));
       
-      // Add local prompts that don't exist in cloud, or are newer
+      // Merge local prompts with cloud
       for (const lp of localPrompts) {
         const cp = cloudPromptMap.get(lp.id);
         if (!cp) {
@@ -2231,10 +2267,27 @@ async function syncAllData() {
           mergedPrompts.set(lp.id, lp);
           await syncPromptToSupabase(lp);
           console.log('📤 Uploaded local prompt:', lp.title);
-        } else if (lp.updatedAt > cp.updatedAt) {
-          // Local is newer - update cloud
-          mergedPrompts.set(lp.id, lp);
-          await syncPromptToSupabase(lp);
+        } else {
+          // Both exist - smart merge
+          const localNewer = lp.updatedAt > cp.updatedAt;
+          const base = localNewer ? lp : cp;
+          const other = localNewer ? cp : lp;
+          
+          // Merge: take content from newer, but preserve max useCount and combine favorites
+          const merged = {
+            ...base,
+            useCount: Math.max(lp.useCount || 0, cp.useCount || 0),
+            isFavorite: localNewer ? lp.isFavorite : cp.isFavorite,
+            // Preserve the earlier creation date
+            createdAt: Math.min(lp.createdAt || Infinity, cp.createdAt || Infinity)
+          };
+          
+          mergedPrompts.set(lp.id, merged);
+          
+          // If local is newer, sync the merged result to cloud
+          if (localNewer) {
+            await syncPromptToSupabase(merged);
+          }
         }
       }
       
@@ -2295,6 +2348,13 @@ async function init() {
 
   await loadData();
   applyTheme(state.settings.theme);
+  
+  // Initialize offline queue module
+  if (typeof Promptory !== 'undefined' && Promptory.initOffline) {
+    // Share state with offline module
+    Promptory.state = state;
+    await Promptory.initOffline();
+  }
 
   const welcomeScreen = document.getElementById('welcome-screen');
   const mainApp = document.getElementById('main-app');

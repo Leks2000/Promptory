@@ -1033,3 +1033,52 @@ body {
     transparent 50%
   );
 }
+
+
+/* ========== OFFLINE INDICATOR ========== */
+.offline-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-4);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  transition: all var(--transition-fast);
+}
+
+.offline-indicator.offline {
+  background: var(--error-light);
+  color: var(--error);
+  border-bottom: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+.offline-indicator.syncing {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.2);
+}
+
+.offline-indicator svg {
+  flex-shrink: 0;
+}
+
+.offline-indicator.syncing svg {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+
+/* ========== EXPLORE LOAD MORE ========== */
+.explore-load-more {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: var(--space-4) 0;
+}
+
+.explore-load-more .btn {
+  min-width: 140px;
+}

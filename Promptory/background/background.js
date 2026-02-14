@@ -1,7 +1,10 @@
 // Promptory Background Service Worker
 
-const SUPABASE_URL = 'https://vofgfvlgchqheksvlibl.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0';
+// Import shared config
+importScripts('../config.js');
+
+const SUPABASE_URL = CONFIG.SUPABASE_URL;
+const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
 // Redirect URL is computed dynamically from chrome.identity
 const REDIRECT_URL = chrome.identity.getRedirectURL();
 
