@@ -177,7 +177,7 @@
 
   "dataManagement": { "message": "Управление данными" },
   "exportAllData": { "message": "Экспорт данных (JSON)" },
-  "importData": { "message": "Импорт данных (JSON)" },
+  "importData": { "message": "Импорт данных (JSON / CSV)" },
   "dataExported": { "message": "Данные экспортированы" },
   "dataImported": { "message": "Данные импортированы" },
   "replaceAllData": { "message": "Заменить все текущие данные?" },
@@ -253,5 +253,9 @@
   "signInToSave": { "message": "Войдите, чтобы сохранять промпты" },
   "signInToLike": { "message": "Войдите, чтобы ставить лайки" },
   "signInRequired": { "message": "Необходимо войти" },
-  "permissionDenied": { "message": "Доступ запрещён" }
+  "permissionDenied": { "message": "Доступ запрещён" },
+
+  "sessionExpired": { "message": "Сессия истекла. Войдите снова для синхронизации данных." },
+  "importConfirmCount": { "message": "Импортировать $1 промптов?" },
+  "importCSVHelp": { "message": "CSV должен содержать колонки \"title\" и/или \"text\"" }
 }
