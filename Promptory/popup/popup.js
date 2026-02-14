@@ -177,6 +177,27 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
 
+// CSV line parser (handles quoted fields with commas/newlines)
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { result.push(current); current = ''; }
+      else { current += ch; }
+    }
+  }
+  result.push(current);
+  return result;
+}
+
 // ==================== IMAGE URL RESOLVER ====================
 // Resolves Supabase Storage URLs to displayable URLs (handles private buckets)
 const imageCache = new Map(); // Cache resolved image URLs
@@ -1331,6 +1352,8 @@ async function loadLibraryPrompts(append = false) {
   if (!append) {
     _libraryPage = 0;
     _libraryHasMore = true;
+    // Show skeleton immediately if no cached data
+    if (state.libraryPrompts.length === 0) renderExplore();
   }
 
   console.log('📚 Loading library prompts page', _libraryPage);
@@ -1378,7 +1401,9 @@ async function loadLibraryPrompts(append = false) {
         
         _libraryHasMore = newItems.length >= LIBRARY_PAGE_SIZE;
         console.log('📚 Loaded', newItems.length, 'library prompts, total:', state.libraryPrompts.length);
+        _suppressStorageRender = true;
         saveData('libraryPromptsCache', state.libraryPrompts);
+        _suppressStorageRender = false;
         loaded = true;
         break;
       }
@@ -1444,6 +1469,14 @@ function renderExplore() {
   if (!state.user || !state.session) {
     list.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">${t('signInToExplore')}</div><div class="empty-state-text">${t('discoverPrompts')}</div><button class="btn btn-primary ripple" id="explore-signin-btn">${t('signIn')}</button></div>`;
     document.getElementById('explore-signin-btn')?.addEventListener('click', () => document.getElementById('settings-btn').click());
+    return;
+  }
+  
+  // Show skeleton while loading
+  if (state.libraryPrompts.length === 0 && !state.libraryError && _libraryLoading) {
+    list.innerHTML = Array.from({ length: 4 }, () =>
+      `<div class="skeleton-explore-card"><div class="skeleton-explore-thumb skeleton"></div><div class="skeleton-explore-body"><div class="skeleton skeleton-text w-80"></div><div class="skeleton skeleton-text w-40"></div></div></div>`
+    ).join('');
     return;
   }
   
@@ -1711,6 +1744,17 @@ function openReportModal(promptId) {
 function renderStats() {
   const container = document.getElementById('stats-content');
   if (!container) return;
+  
+  // Show skeleton if prompts haven't loaded yet
+  if (state.prompts.length === 0 && !_initRenderDone) {
+    container.innerHTML = `<div class="stats-dashboard">
+      <div class="skeleton-stats-overview"><div class="skeleton skeleton-stat-card"></div><div class="skeleton skeleton-stat-card"></div><div class="skeleton skeleton-stat-card"></div></div>
+      <div class="skeleton skeleton-chart"></div>
+      <div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div>
+    </div>`;
+    return;
+  }
+
   const totalPrompts = state.prompts.length;
   const totalUses = state.prompts.reduce((s, p) => s + (p.useCount || 0), 0);
   const totalFavorites = state.prompts.filter(p => p.isFavorite).length;
@@ -1813,7 +1857,7 @@ function openSettings() {
             </a>
           </div>
         </div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v${CONFIG.VERSION}<br>${t('aboutDescription')}</div></div>
+        <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v${CONFIG.VERSION}<br>${t('aboutDescription')}<div style="margin-top:8px;display:flex;gap:12px;"><a href="${chrome.runtime.getURL('privacy.html')}" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Privacy Policy</a><a href="${chrome.runtime.getURL('terms.html')}" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Terms of Service</a></div></div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-ghost close-modal-btn">${t('cancel')}</button><button class="btn btn-primary" id="settings-save-btn">${t('saveChanges')}</button></div>
     </div>`;
@@ -1862,12 +1906,108 @@ function openSettings() {
     showToast(t('dataExported'), 'success');
   });
   document.getElementById('settings-import-btn').addEventListener('click', () => {
-    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.csv';
     input.onchange = async (e) => {
       const file = e.target.files[0]; if (!file) return;
+      const fileName = file.name.toLowerCase();
+      
       try {
-        const data = JSON.parse(await file.text());
-        if (!data.prompts && !data.folders) throw new Error('Invalid');
+        const fileText = await file.text();
+        
+        // --- CSV Import ---
+        if (fileName.endsWith('.csv')) {
+          const lines = fileText.split('\n').map(l => l.trim()).filter(Boolean);
+          if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+          
+          // Parse header
+          const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+          const titleIdx = headers.findIndex(h => h === 'title' || h === 'name');
+          const textIdx = headers.findIndex(h => h === 'text' || h === 'prompt' || h === 'content');
+          const descIdx = headers.findIndex(h => h === 'description' || h === 'desc');
+          const tagsIdx = headers.findIndex(h => h === 'tags');
+          const folderIdx = headers.findIndex(h => h === 'folder');
+          const platformIdx = headers.findIndex(h => h === 'platform');
+          
+          if (titleIdx === -1 && textIdx === -1) {
+            throw new Error('CSV must have at least a "title" or "text" column. Found columns: ' + headers.join(', '));
+          }
+          
+          const imported = [];
+          const errors = [];
+          for (let i = 1; i < lines.length; i++) {
+            try {
+              const cols = parseCSVLine(lines[i]);
+              const title = (titleIdx >= 0 ? cols[titleIdx] : '').trim();
+              const text = (textIdx >= 0 ? cols[textIdx] : '').trim();
+              if (!title && !text) { errors.push(`Row ${i + 1}: empty title and text`); continue; }
+              
+              const tags = tagsIdx >= 0 && cols[tagsIdx] ? cols[tagsIdx].split(/[,;|]/).map(t => t.trim().replace(/^#/, '')).filter(Boolean) : [];
+              const variables = [...new Set((text.match(/\{([^}]+)\}/g) || []).map(m => m.slice(1, -1)))];
+              
+              // Match folder by name
+              let folderId = null;
+              if (folderIdx >= 0 && cols[folderIdx]) {
+                const folderName = cols[folderIdx].trim();
+                const f = state.folders.find(f => f.name.toLowerCase() === folderName.toLowerCase());
+                folderId = f ? f.id : null;
+              }
+              
+              imported.push({
+                id: crypto.randomUUID(),
+                title: title || text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+                text: text || title,
+                description: descIdx >= 0 ? (cols[descIdx] || '').trim() : '',
+                folderId,
+                platform: platformIdx >= 0 ? (cols[platformIdx] || 'universal').trim() : 'universal',
+                tags,
+                variables,
+                isFavorite: false,
+                useCount: 0,
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+              });
+            } catch (rowErr) {
+              errors.push(`Row ${i + 1}: ${rowErr.message}`);
+            }
+          }
+          
+          if (imported.length === 0) throw new Error('No valid prompts found in CSV' + (errors.length ? '. Errors:\n' + errors.slice(0, 5).join('\n') : ''));
+          if (!confirm(t('importConfirmCount', imported.length) || `Import ${imported.length} prompts?` + (errors.length ? ` (${errors.length} rows skipped)` : ''))) return;
+          
+          state.prompts = [...imported, ...state.prompts];
+          await saveData('prompts', state.prompts);
+          showToast((t('dataImported') || 'Data imported') + ` (${imported.length} prompts)`, 'success');
+          closeModal('settings-modal');
+          renderPrompts(); renderFolders(); renderFavorites();
+          return;
+        }
+        
+        // --- JSON Import (with detailed validation) ---
+        let data;
+        try {
+          data = JSON.parse(fileText);
+        } catch (parseErr) {
+          throw new Error('Invalid JSON: ' + parseErr.message.substring(0, 100));
+        }
+        
+        // Validate structure
+        if (typeof data !== 'object' || data === null) throw new Error('JSON root must be an object, got: ' + typeof data);
+        if (!data.prompts && !data.folders) throw new Error('JSON must contain "prompts" and/or "folders" arrays. Found keys: ' + Object.keys(data).join(', '));
+        
+        if (data.prompts) {
+          if (!Array.isArray(data.prompts)) throw new Error('"prompts" must be an array, got: ' + typeof data.prompts);
+          // Validate each prompt has minimal fields
+          const invalid = [];
+          data.prompts.forEach((p, i) => {
+            if (!p.title && !p.text) invalid.push(`prompts[${i}]: missing title and text`);
+            if (typeof p !== 'object') invalid.push(`prompts[${i}]: not an object`);
+          });
+          if (invalid.length > 0) {
+            throw new Error(`${invalid.length} invalid prompt(s):\n${invalid.slice(0, 5).join('\n')}${invalid.length > 5 ? '\n...' : ''}`);
+          }
+        }
+        if (data.folders && !Array.isArray(data.folders)) throw new Error('"folders" must be an array, got: ' + typeof data.folders);
+        
         if (!confirm(t('replaceAllData'))) return;
         if (data.prompts) state.prompts = data.prompts;
         if (data.folders) state.folders = data.folders;
@@ -1876,7 +2016,7 @@ function openSettings() {
         showToast(t('dataImported'), 'success');
         closeModal('settings-modal');
         renderPrompts(); renderFolders(); renderFavorites();
-      } catch { showToast(t('importFailed'), 'error'); }
+      } catch (err) { showToast((t('importFailed') || 'Import failed') + ': ' + (err.message || String(err)), 'error'); }
     };
     input.click();
   });
@@ -2031,8 +2171,8 @@ function showUpgradeModal() {
   setTimeout(() => modal.classList.add('visible'), 10);
   
   document.getElementById('upgrade-contact-btn').addEventListener('click', () => {
-    // Open contact/email link for premium upgrade
-    window.open('mailto:support@promptory.app?subject=Premium%20Upgrade%20Request', '_blank');
+    // Open Telegram channel for premium upgrade requests
+    window.open('https://t.me/Something_Promptory', '_blank');
     closeModal('upgrade-modal');
   });
   
@@ -2182,8 +2322,10 @@ async function syncAllData() {
       }
     }
     
+    _suppressStorageRender = true;
     await saveData('isPremium', state.isPremium);
     await saveData('promptLimit', state.promptLimit);
+    _suppressStorageRender = false;
 
     // Step 2: Sync folders (bidirectional merge)
     console.log('📁 Syncing folders...');
@@ -2227,7 +2369,9 @@ async function syncAllData() {
       }
       
       state.folders = Array.from(mergedFolders.values());
+      _suppressStorageRender = true;
       await saveData('folders', state.folders);
+      _suppressStorageRender = false;
       console.log('✅ Merged folders:', state.folders.length);
     } else if (fRes?.error) {
       console.warn('⚠️ Failed to fetch folders:', fRes.error);
@@ -2301,7 +2445,9 @@ async function syncAllData() {
       }
       
       state.prompts = Array.from(mergedPrompts.values()).sort((a, b) => b.createdAt - a.createdAt);
+      _suppressStorageRender = true;
       await saveData('prompts', state.prompts);
+      _suppressStorageRender = false;
       console.log('✅ Merged prompts:', state.prompts.length);
     } else if (pRes?.error) {
       console.warn('⚠️ Failed to fetch prompts:', pRes.error);
@@ -2414,6 +2560,16 @@ async function init() {
       if (changes.promptLimit) state.promptLimit = changes.promptLimit.newValue;
       return;
     }
+    // Session expired notification
+    if (changes.sessionExpired && changes.sessionExpired.newValue === true) {
+      state.user = null;
+      state.session = null;
+      showToast(t('sessionExpired') || 'Session expired. Please sign in again.', 'error');
+      renderExplore();
+      // Clear the flag
+      chrome.storage.local.set({ sessionExpired: false });
+      return;
+    }
     if (changes.prompts) { state.prompts = changes.prompts.newValue || []; renderPrompts(); renderFavorites(); }
     if (changes.folders) { state.folders = changes.folders.newValue || []; renderFolders(); renderPrompts(); }
     if (changes.user) { state.user = changes.user.newValue; renderExplore(); }
@@ -2428,15 +2584,14 @@ async function init() {
 
   // If logged in, sync data from cloud ONCE, then load library ONCE after
   if (state.session && state.user) { 
-    // Render cached library immediately (from libraryPromptsCache)
-    renderExplore();
-    // Then sync + refresh — sequential, not parallel, to avoid double-render
+    // Don't call renderExplore() separately here — updateStaticTexts() already rendered the cached version
+    // syncAllData() will render prompts/folders/favorites at the end, so skip extra renders
     try {
       await syncAllData();
     } catch (e) {
       console.error('Initial sync failed:', e);
     }
-    // Load library prompts ONCE after sync is done
+    // Load library prompts ONCE after sync is done (this calls renderExplore at the end)
     await loadLibraryPrompts();
     // Check premium status (uses sync_user_on_login which was already called in syncAllData)
     // Only do a lightweight check here — don't call sync_user_on_login again

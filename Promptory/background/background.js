@@ -129,12 +129,26 @@ chrome.commands.onCommand.addListener(async (command) => {
       if (prompt) {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab) {
+          const sendInsert = () => chrome.tabs.sendMessage(tab.id, {
+            action: 'insertPrompt',
+            text: prompt.text,
+            variables: prompt.variables || []
+          });
           try {
-            await chrome.tabs.sendMessage(tab.id, {
-              action: 'insertPrompt',
-              text: prompt.text,
-              variables: prompt.variables || []
-            });
+            await sendInsert();
+          } catch (e) {
+            // Content script not present — inject programmatically then retry
+            try {
+              await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/content.js'] });
+              await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content/content.css'] });
+              await new Promise(r => setTimeout(r, 200));
+              await sendInsert();
+            } catch (injectErr) {
+              console.error('Failed to insert hotkey prompt (inject):', injectErr);
+              return;
+            }
+          }
+          try {
             prompt.useCount = (prompt.useCount || 0) + 1;
             prompt.updatedAt = Date.now();
             await chrome.storage.local.set({ prompts });
@@ -144,7 +158,7 @@ chrome.commands.onCommand.addListener(async (command) => {
               trackUsageInBackground(result.session, prompt, platform);
             }
           } catch (e) {
-            console.error('Failed to insert hotkey prompt:', e);
+            console.error('Failed to update hotkey usage:', e);
           }
         }
       }
@@ -194,7 +208,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
           sendResponse({ success: true });
         } catch (e) {
-          sendResponse({ success: false, error: e.message });
+          // Content script not injected on this tab — inject programmatically then retry
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content/content.js']
+            });
+            await chrome.scripting.insertCSS({
+              target: { tabId: tab.id },
+              files: ['content/content.css']
+            });
+            // Small delay to let the content script initialise
+            await new Promise(r => setTimeout(r, 200));
+            await chrome.tabs.sendMessage(tab.id, {
+              action: 'insertPrompt',
+              text: message.text,
+              variables: message.variables || []
+            });
+            sendResponse({ success: true });
+          } catch (injectErr) {
+            sendResponse({ success: false, error: injectErr.message });
+          }
         }
       } else {
         sendResponse({ success: false, error: 'No active tab' });
@@ -637,8 +671,8 @@ async function getValidToken() {
         return newSession.access_token;
       } else {
         console.error('Token refresh failed with status:', res.status);
-        // Clear invalid session
-        await chrome.storage.local.set({ session: null, user: null });
+        // Clear invalid session and notify user
+        await chrome.storage.local.set({ session: null, user: null, sessionExpired: true });
         return null;
       }
     } catch (e) {

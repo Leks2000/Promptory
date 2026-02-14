@@ -177,7 +177,7 @@
 
   "dataManagement": { "message": "Data Management" },
   "exportAllData": { "message": "Export All Data (JSON)" },
-  "importData": { "message": "Import Data (JSON)" },
+  "importData": { "message": "Import Data (JSON / CSV)" },
   "dataExported": { "message": "Data exported" },
   "dataImported": { "message": "Data imported" },
   "replaceAllData": { "message": "Replace all current data?" },
@@ -253,5 +253,9 @@
   "signInToSave": { "message": "Sign in to save prompts" },
   "signInToLike": { "message": "Sign in to like prompts" },
   "signInRequired": { "message": "Sign in required" },
-  "permissionDenied": { "message": "Permission denied" }
+  "permissionDenied": { "message": "Permission denied" },
+
+  "sessionExpired": { "message": "Session expired. Please sign in again to sync data." },
+  "importConfirmCount": { "message": "Import $1 prompts?" },
+  "importCSVHelp": { "message": "CSV must have \"title\" and/or \"text\" columns" }
 }
