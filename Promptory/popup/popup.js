@@ -2226,23 +2226,37 @@ function openSettings() {
     btn.classList.add('loading');
     const result = await new Promise(resolve => chrome.runtime.sendMessage({ action: 'signInWithGoogle' }, resolve));
     btn.classList.remove('loading');
+    
     if (result?.success) {
       state.user = result.user;
       state.session = result.session;
-      // Ensure user/session are saved to local storage for persistence
+      
+      // Save to storage
       await saveData('user', state.user);
       await saveData('session', state.session);
-      showToast(t('signedInSuccess'), 'success');
+      
+      // ✅ IMMEDIATELY close modal and show success (FAST UX)
       closeModal('settings-modal');
+      showToast(t('signedInSuccess'), 'success');
       renderExplore();
-      // First sync profile/data, THEN load library (order matters for profile creation)
-      await syncAllData();
-      await loadLibraryPrompts();
-      checkPremiumStatus();
+      
+      // ⚡ Run heavy sync operations in background (non-blocking)
+      setTimeout(async () => {
+        console.log('🔄 Background sync started...');
+        try {
+          await syncAllData();
+          await loadLibraryPrompts();
+          await checkPremiumStatus();
+          console.log('✅ Background sync complete');
+        } catch (e) {
+          console.error('❌ Background sync error:', e);
+        }
+      }, 100);
     } else {
       showToast(t('signInFailed') + ': ' + (result?.error || ''), 'error');
     }
   });
+  
   document.getElementById('settings-signout-btn')?.addEventListener('click', async () => {
     if (!confirm(t('signOutConfirm'))) return;
     const btn = document.getElementById('settings-signout-btn');
@@ -2719,6 +2733,24 @@ function initSearch() {
   input.addEventListener('input', () => debouncedSearch(input.value.trim().toLowerCase()));
 }
 
+function generateUniqueCheckoutUrl(baseUrl, userEmail, userId) {
+  const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  
+  const params = new URLSearchParams();
+  params.set('checkout', uniqueId); // Forces new session
+  
+  if (userEmail) {
+    params.set('checkout[email]', userEmail);
+  }
+  
+  if (userId) {
+    params.set('checkout[custom][user_id]', userId);
+  }
+  
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  return `${baseUrl}${separator}${params.toString()}`;
+}
+
 // ==================== UPGRADE MODAL ====================
 function showUpgradeModal() {
   const hasCheckoutUrl = CONFIG.LEMONSQUEEZY_CHECKOUT_URL && CONFIG.LEMONSQUEEZY_CHECKOUT_URL.length > 0;
@@ -2771,18 +2803,16 @@ function showUpgradeModal() {
   setTimeout(() => modal.classList.add('visible'), 10);
   
   // LemonSqueezy checkout
-  document.getElementById('upgrade-buy-btn')?.addEventListener('click', () => {
-    let checkoutUrl = CONFIG.LEMONSQUEEZY_CHECKOUT_URL;
-    // Pass user email for pre-fill if signed in
-    if (state.user?.email) {
-      const sep = checkoutUrl.includes('?') ? '&' : '?';
-      checkoutUrl += `${sep}checkout[email]=${encodeURIComponent(state.user.email)}`;
-      if (state.user.id) {
-        checkoutUrl += `&checkout[custom][user_id]=${encodeURIComponent(state.user.id)}`;
-      }
-    }
-    window.open(checkoutUrl, '_blank');
-  });
+document.getElementById('upgrade-buy-btn')?.addEventListener('click', () => {
+  const checkoutUrl = generateUniqueCheckoutUrl(
+    CONFIG.LEMONSQUEEZY_CHECKOUT_URL,
+    state.user?.email,
+    state.user?.id
+  );
+  
+  console.log('🛒 Opening checkout:', checkoutUrl);
+  window.open(checkoutUrl, '_blank');
+});
   
   // Manage subscription portal
   document.getElementById('upgrade-manage-btn')?.addEventListener('click', () => {

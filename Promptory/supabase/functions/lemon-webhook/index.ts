@@ -59,14 +59,35 @@ function getSupabaseAdmin() {
   });
 }
 
+// Define types for webhook data
+interface WebhookAttributes {
+  id?: string;
+  status?: string;
+  user_email?: string;
+  customer_email?: string;
+  custom_data?: CustomData;
+  first_order_item?: {
+    custom_data?: CustomData;
+  };
+}
+
+interface CustomData {
+  user_id?: string;
+  user_email?: string;
+}
+
+interface WebhookData {
+  id?: string;
+  attributes?: WebhookAttributes;
+}
+
 // --- Map LemonSqueezy event to premium status update ---
 async function handleSubscriptionEvent(
   eventName: string,
-  data: any,
-  rawPayload: string
+  data: WebhookData
 ) {
   const supabase = getSupabaseAdmin();
-  const attrs = data?.attributes || data;
+  const attrs = data?.attributes || data as unknown as WebhookAttributes;
   const customData = attrs?.custom_data || attrs?.first_order_item?.custom_data || {};
   
   // Try to extract user info from multiple possible locations
@@ -150,7 +171,7 @@ async function handleSubscriptionEvent(
   }
 
   // Update profile
-  const updateData: any = {
+  const updateData: Record<string, unknown> = {
     is_premium: isPremium,
     prompt_limit: isPremium ? 9999 : 20,
     updated_at: new Date().toISOString(),
@@ -203,7 +224,7 @@ serve(async (req) => {
   }
 
   // Parse JSON payload
-  let payload: any;
+  let payload: { meta?: { event_name?: string }; data?: WebhookData };
   try {
     payload = JSON.parse(rawBody);
   } catch {
@@ -223,7 +244,7 @@ serve(async (req) => {
   console.log(`[webhook] Received event: ${eventName}`);
 
   try {
-    await handleSubscriptionEvent(eventName, payload?.data, rawBody);
+    await handleSubscriptionEvent(eventName, payload?.data || {});
   } catch (e) {
     console.error("[webhook] Handler error:", e);
     // Still return 200 so LemonSqueezy doesn't retry indefinitely

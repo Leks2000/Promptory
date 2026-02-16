@@ -49,7 +49,7 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, _tab) => {
   if (info.menuItemId === 'save-as-prompt') {
     const text = info.selectionText;
     if (!text) return;
@@ -89,7 +89,7 @@ chrome.commands.onCommand.addListener(async (command) => {
     if (tab) {
       try {
         await chrome.tabs.sendMessage(tab.id, { action: 'openSearchOverlay' });
-      } catch (e) {
+      } catch (_e) {
         try {
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
@@ -136,7 +136,7 @@ chrome.commands.onCommand.addListener(async (command) => {
           });
           try {
             await sendInsert();
-          } catch (e) {
+          } catch (_e) {
             // Content script not present — inject programmatically then retry
             try {
               await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/content.js'] });
@@ -157,8 +157,8 @@ chrome.commands.onCommand.addListener(async (command) => {
               const platform = new URL(tab.url || '').hostname.replace('www.', '');
               trackUsageInBackground(result.session, prompt, platform);
             }
-          } catch (e) {
-            console.error('Failed to update hotkey usage:', e);
+          } catch (_e) {
+            console.error('Failed to update hotkey usage:', _e);
           }
         }
       }
@@ -184,11 +184,13 @@ async function trackUsageInBackground(session, prompt, platform) {
         p_action: 'hotkey'
       })
     });
-  } catch (e) { console.error('Background usage tracking failed:', e); }
+  } catch (_e) { 
+    console.error('Background usage tracking failed:', _e); 
+  }
 }
 
 // ---------- Message Handler ----------
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === 'getPrompts') {
     chrome.storage.local.get(['prompts'], (res) => {
       sendResponse({ prompts: res.prompts || [] });
@@ -207,7 +209,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             variables: message.variables || []
           });
           sendResponse({ success: true });
-        } catch (e) {
+        } catch (_e) {
           // Content script not injected on this tab — inject programmatically then retry
           try {
             await chrome.scripting.executeScript({
@@ -430,7 +432,7 @@ async function handleGetImageAsDataUrl(message) {
 let _pendingAuthResolve = null;
 
 // Listen for tab URL changes to intercept OAuth callback
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, _tab) => {
   // Check if the tab navigated to our redirect URL
   if (changeInfo.url && changeInfo.url.startsWith(REDIRECT_URL)) {
     console.log('🔹 Intercepted auth redirect:', changeInfo.url);
@@ -451,7 +453,13 @@ async function finishOAuthFromTab(tabId, url) {
     if (error) {
       console.error('❌ OAuth error:', errorDesc || error);
       // Close the tab and show auth-callback with error
-      try { await chrome.tabs.update(tabId, { url: chrome.runtime.getURL('auth-callback.html') + '?error=' + encodeURIComponent(errorDesc || error) }); } catch (e) {}
+      try { 
+        await chrome.tabs.update(tabId, { 
+          url: chrome.runtime.getURL('auth-callback.html') + '?error=' + encodeURIComponent(errorDesc || error) 
+        }); 
+      } catch (_e) {
+        // Tab may be closed
+      }
       if (_pendingAuthResolve) {
         _pendingAuthResolve({ success: false, error: errorDesc || error });
         _pendingAuthResolve = null;
@@ -493,10 +501,14 @@ async function finishOAuthFromTab(tabId, url) {
       await chrome.tabs.update(tabId, { url: chrome.runtime.getURL('auth-callback.html') + '#success=true' });
       // Close after a brief delay so user sees success
       setTimeout(async () => {
-        try { await chrome.tabs.remove(tabId); } catch (e) { /* tab may already be closed */ }
+        try { 
+          await chrome.tabs.remove(tabId); 
+        } catch (_e) { 
+          // Tab may already be closed
+        }
       }, 1500);
-    } catch (e) {
-      console.log('🔹 Could not update/close auth tab:', e.message);
+    } catch (_e) {
+      console.log('🔹 Could not update/close auth tab:', _e.message);
     }
 
     // Resolve the pending auth promise
@@ -513,47 +525,81 @@ async function finishOAuthFromTab(tabId, url) {
   }
 }
 
+// Utility: base64url decode (JWT-safe, works in Service Workers)
+function base64urlDecode(str) {
+  // Convert base64url to base64
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  // Pad with = if needed
+  while (base64.length % 4) base64 += '=';
+  
+  // Decode base64 to binary string
+  const binaryString = atob(base64);
+  
+  // Convert to UTF-8 string
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  
+  // Decode UTF-8
+  return new TextDecoder().decode(bytes);
+}
+
 async function handleGoogleSignIn() {
   try {
     const callbackUrl = REDIRECT_URL;
-    console.log('🔹 Callback URL:', callbackUrl);
 
-    // Build auth URL with Supabase - redirect to extension callback
-    const authUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUrl)}`;
-    console.log('🔹 Auth URL:', authUrl);
+    const authUrl =
+      `${SUPABASE_URL}/auth/v1/authorize` +
+      `?provider=google` +
+      `&redirect_to=${encodeURIComponent(callbackUrl)}` +
+      `&prompt=select_account` +
+      `&access_type=offline`;
 
-    // Try launchWebAuthFlow first (works in standard Chrome)
+    const responseUrl = await chrome.identity.launchWebAuthFlow({
+      url: authUrl,
+      interactive: true
+    });
+
+    if (!responseUrl) {
+      throw new Error('No response URL received');
+    }
+
+    const url = new URL(responseUrl);
+    const hashParams = new URLSearchParams(url.hash.replace('#', ''));
+
+    const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
+    const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
+
+    if (!accessToken) {
+      const errorDesc =
+        hashParams.get('error_description') ||
+        url.searchParams.get('error_description');
+      throw new Error(errorDesc || 'No access token received');
+    }
+
+    // 🚀 Декодируем JWT безопасно для Service Worker
     try {
-      const responseUrl = await chrome.identity.launchWebAuthFlow({
-        url: authUrl,
-        interactive: true
-      });
+      const parts = accessToken.split('.');
+      if (parts.length !== 3) throw new Error('Invalid JWT format');
+      
+      const payloadJson = base64urlDecode(parts[1]);
+      const payload = JSON.parse(payloadJson);
 
-      console.log('🔹 Response URL:', responseUrl);
+      const user = {
+        id: payload.sub,
+        email: payload.email,
+        name:
+          payload.user_metadata?.full_name ||
+          payload.user_metadata?.name ||
+          payload.email?.split('@')[0],
+        avatar:
+          payload.user_metadata?.avatar_url ||
+          payload.picture ||
+          ''
+      };
 
-      if (!responseUrl) {
-        throw new Error('No response URL received');
-      }
-
-      // Parse tokens from URL hash
-      const url = new URL(responseUrl);
-      const hashParams = new URLSearchParams(url.hash.replace('#', ''));
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-      const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
-
-      if (!accessToken) {
-        const errorDesc = hashParams.get('error_description') || url.searchParams.get('error_description');
-        throw new Error(errorDesc || 'No access token in response');
-      }
-
-      console.log('✅ Got access token via launchWebAuthFlow');
-
-      // Fetch user info from Supabase
-      const user = await fetchUserInfo(accessToken);
-      console.log('✅ Got user:', user.email);
-
-      // Save session
       const session = {
         access_token: accessToken,
         refresh_token: refreshToken,
@@ -561,38 +607,21 @@ async function handleGoogleSignIn() {
       };
 
       await chrome.storage.local.set({ session, user });
-      console.log('✅ Session saved');
+
+      console.log('✅ Fast Google login success');
 
       return { success: true, user, session };
-
-    } catch (launchError) {
-      console.warn('⚠️ launchWebAuthFlow failed, using tab method:', launchError.message);
-      
-      // Fallback: Open auth in a new tab
-      // The chrome.tabs.onUpdated listener above will intercept the redirect
-      const tab = await chrome.tabs.create({ 
-        url: authUrl, 
-        active: true 
-      });
-      console.log('🔹 Opened auth tab:', tab.id);
-
-      // Return a promise that resolves when the onUpdated listener catches the redirect
-      return new Promise((resolve) => {
-        // Cancel any previous pending auth
-        if (_pendingAuthResolve) {
-          _pendingAuthResolve({ success: false, error: 'Cancelled by new auth attempt' });
-        }
-        _pendingAuthResolve = resolve;
-        
-        // Timeout after 120 seconds
-        setTimeout(() => {
-          if (_pendingAuthResolve === resolve) {
-            _pendingAuthResolve = null;
-            console.error('❌ Timeout waiting for auth tab redirect');
-            resolve({ success: false, error: 'Timeout waiting for authentication. Please try again.' });
-          }
-        }, 120000);
-      });
+    } catch (jwtErr) {
+      console.warn('⚠️ JWT decode failed, falling back to /user endpoint:', jwtErr);
+      // Fallback: fetch user info from API
+      const user = await fetchUserInfo(accessToken);
+      const session = {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_at: Date.now() + (expiresIn * 1000)
+      };
+      await chrome.storage.local.set({ session, user });
+      return { success: true, user, session };
     }
 
   } catch (err) {
@@ -626,52 +655,31 @@ async function fetchUserInfo(accessToken) {
 async function handleSignOut() {
   try {
     const { session } = await chrome.storage.local.get(['session']);
-    
-    // 1. Revoke Supabase session server-side
+
     if (session?.access_token) {
-      try {
-        await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'apikey': SUPABASE_ANON_KEY
-          }
-        });
-      } catch (e) {
-        console.warn('Supabase logout request failed (non-critical):', e.message);
-      }
+      await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY
+        }
+      }).catch(() => {
+        // Ignore logout API errors
+      });
     }
-    
-    // 2. Clear cached Google auth tokens so next sign-in shows account picker
-    try {
-      if (chrome.identity && chrome.identity.clearAllCachedAuthTokens) {
-        await chrome.identity.clearAllCachedAuthTokens();
-        console.log('✅ Cleared cached auth tokens');
-      }
-    } catch (e) {
-      console.warn('clearAllCachedAuthTokens failed (non-critical):', e.message);
-    }
-    
-    // 3. Also try to remove the cached launchWebAuthFlow session
-    // by launching a non-interactive flow to Google's logout endpoint
-    try {
-      const logoutUrl = 'https://accounts.google.com/logout';
-      await chrome.identity.launchWebAuthFlow({
-        url: logoutUrl,
-        interactive: false
-      }).catch(() => {});
-    } catch (e) {
-      // Expected to fail — non-interactive logout is best-effort
-    }
-    
-    // 4. Clear ALL user data from storage
-    await chrome.storage.local.set({ 
-      session: null, 
-      user: null, 
-      isPremium: false, 
+
+    await chrome.storage.local.clear();
+
+    await chrome.storage.local.set({
+      session: null,
+      user: null,
+      isPremium: false,
       promptLimit: 20,
-      prompts: [], 
+      prompts: [],
       folders: [],
+      libraryPromptsCache: [],
+      offlineQueue: [],
+      sessionExpired: false,
       settings: {
         theme: 'dark',
         hotkeys: {
@@ -680,77 +688,68 @@ async function handleSignOut() {
           slot3: { promptId: null }
         },
         defaultFolder: null
-      },
-      libraryPromptsCache: [],
-      offlineQueue: [],
-      sessionExpired: false
+      }
     });
-    
-    // 5. Cancel any pending alarms that depend on auth
-    try {
-      await chrome.alarms.clear('token-refresh');
-      await chrome.alarms.clear('subscription-check');
-      // Re-create them (they'll be no-ops without a session)
-      chrome.alarms.create('token-refresh', { periodInMinutes: 10 });
-      chrome.alarms.create('subscription-check', { periodInMinutes: 60 });
-    } catch (e) { /* non-critical */ }
-    
-    console.log('✅ Sign-out complete');
+
+    await chrome.alarms.clearAll();
+
+    console.log('✅ Clean extension logout');
+
     return { success: true };
+
   } catch (err) {
-    console.error('Sign-out error:', err);
-    // Force clear even on error
-    try {
-      await chrome.storage.local.set({ 
-        session: null, 
-        user: null, 
-        isPremium: false, 
-        promptLimit: 20,
-        prompts: [], 
-        folders: [],
-        libraryPromptsCache: [],
-        offlineQueue: [],
-        sessionExpired: false
-      });
-    } catch (e) { /* last resort */ }
-    return { success: true };
+    console.error('❌ Logout error:', err);
+    await chrome.storage.local.clear();
+    return { success: false };
   }
 }
+
 
 async function getValidToken() {
   const { session } = await chrome.storage.local.get(['session']);
   if (!session) return null;
 
-  // Check if token is expired (with 5 minute buffer for proactive refresh)
   if (session.expires_at && Date.now() > session.expires_at - 300000) {
     if (!session.refresh_token) return null;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({ refresh_token: session.refresh_token })
-      });
 
-      if (res.ok) {
-        const data = await res.json();
-        const newSession = {
-          access_token: data.access_token,
-          refresh_token: data.refresh_token,
-          expires_at: Date.now() + (data.expires_in || 3600) * 1000
-        };
-        await chrome.storage.local.set({ session: newSession });
-        return newSession.access_token;
-      } else {
-        console.error('Token refresh failed with status:', res.status);
-        // Clear invalid session and notify user
-        await chrome.storage.local.set({ session: null, user: null, sessionExpired: true });
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({
+            refresh_token: session.refresh_token
+          })
+        }
+      );
+
+      if (!res.ok) {
+        await chrome.storage.local.set({
+          session: null,
+          user: null,
+          sessionExpired: true
+        });
         return null;
       }
-    } catch (e) {
-      console.error('Token refresh error:', e);
+
+      const data = await res.json();
+
+      const newSession = {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: Date.now() + (data.expires_in || 3600) * 1000
+      };
+
+      await chrome.storage.local.set({ session: newSession });
+
+      return newSession.access_token;
+
+    } catch (_e) {
+      console.error('Token refresh failed:', _e);
       return null;
     }
   }
@@ -781,8 +780,8 @@ async function checkServerRateLimit(token, endpoint, maxRequests = 60, windowSec
       return data?.allowed !== false; // Default to allowed if response is unexpected
     }
     return true; // Allow if check fails (don't block users on rate limit infra issues)
-  } catch (e) {
-    console.warn('Rate limit check failed (allowing):', e.message);
+  } catch (_e) {
+    console.warn('Rate limit check failed (allowing):', _e.message);
     return true;
   }
 }
@@ -1044,8 +1043,8 @@ async function periodicSubscriptionCheck() {
         }
       }
     }
-  } catch (e) {
-    console.error('Periodic subscription check error:', e);
+  } catch (_e) {
+    console.error('Periodic subscription check error:', _e);
   }
 }
 

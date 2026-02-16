@@ -1,0 +1,5 @@
+{
+    "deno.enable": true,
+    "deno.enablePaths": ["Promptory/supabase/functions"],
+    "deno.unstable": []
+  }
