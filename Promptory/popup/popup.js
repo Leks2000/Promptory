@@ -1621,7 +1621,7 @@ function renderExplore() {
           if (imageUrl) {
             resolveImageUrl(imageUrl).then(resolvedUrl => {
               if (resolvedUrl) {
-                el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center;`;
+                el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: cover; background-position: center;`;
               }
             }).catch(() => {});
           }
@@ -1636,7 +1636,7 @@ function renderExplore() {
         try {
           const resolvedUrl = await resolveImageUrl(imageUrl);
           if (resolvedUrl) {
-            el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: contain; background-repeat:no-repeat; background-position: center;`;
+            el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: cover; background-position: center;`;
           }
         } catch (e) { /* silent */ }
       }
@@ -1823,22 +1823,28 @@ function openSettings() {
         </div></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('theme')}</label><select id="settings-theme"><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>${t('themeDark')}</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>${t('themeLight')}</option><option value="system" ${s.theme === 'system' ? 'selected' : ''}>${t('themeSystem')}</option></select></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;"><button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button></div></div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('supportDeveloper') || 'Support Developer'}</label>
-          <a href="https://donationalerts.com/r/knightcoreking" target="_blank" class="settings-link donation-link">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-            <div class="settings-link-text">
-              <div class="settings-link-title">${t('supportViaDonation') || 'Support via DonationAlerts'}</div>
-              <div class="settings-link-subtitle">${t('helpDevelopment') || 'Help us improve Promptory'}</div>
+        ${CONFIG.LEMONSQUEEZY_CHECKOUT_URL ? `<div class="form-group"><label class="form-label">${t('getPro') || 'Get Pro'}</label>
+          <div class="pro-upgrade-card" style="padding:16px;background:linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(168,85,247,0.1) 100%);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-lg);">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+              <div style="font-size:28px;">✨</div>
+              <div>
+                <div style="font-weight:600;font-size:var(--font-size-sm);color:var(--text-primary);">${t('unlockPremium') || 'Unlock Premium'}</div>
+                <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);">${t('premiumSubtitle') || 'Unlimited prompts, priority sync, pro features'}</div>
+              </div>
             </div>
-          </a>
-        </div><div class="divider"></div>
+            <button class="btn btn-primary ripple" id="settings-upgrade-btn" style="width:100%;justify-content:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              ${state.isPremium ? (t('manageSubscription') || 'Manage Subscription') : (t('upgradeToPro') || 'Upgrade to Pro')}
+            </button>
+          </div>
+        </div><div class="divider"></div>` : ''}
         <div class="form-group"><label class="form-label">${t('community') || 'Community & Links'}</label>
           <div style="display:flex;flex-direction:column;gap:8px;">
-            <a href="https://t.me/Something_Promptory" target="_blank" class="settings-link telegram-link">
+            <a href="https://t.me/user_Alexander" target="_blank" class="settings-link telegram-link">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.198 2.433a2.242 2.242 0 0 0-1.022.215l-16.5 7.5a2.25 2.25 0 0 0 .126 4.133l3.978 1.326 1.518 4.854a1.5 1.5 0 0 0 2.565.535l2.012-2.324 3.845 2.884a2.25 2.25 0 0 0 3.503-1.193l3.75-16.5a2.25 2.25 0 0 0-2.775-2.43z"/></svg>
               <div class="settings-link-text">
                 <div class="settings-link-title">Telegram</div>
-                <div class="settings-link-subtitle">@Something_Promptory</div>
+                <div class="settings-link-subtitle">@user_Alexander</div>
               </div>
             </a>
             <a href="https://t.me/WORLD_ArIn_NEWS" target="_blank" class="settings-link telegram-link">
@@ -1856,6 +1862,15 @@ function openSettings() {
               </div>
             </a>
           </div>
+        </div><div class="divider"></div>
+        <div class="form-group"><label class="form-label">${t('supportDeveloper') || 'Support Developer'}</label>
+          <a href="https://donationalerts.com/r/knightcoreking" target="_blank" class="settings-link donation-link">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <div class="settings-link-text">
+              <div class="settings-link-title">${t('supportViaDonation') || 'Support via DonationAlerts'}</div>
+              <div class="settings-link-subtitle">${t('helpDevelopment') || 'Help us improve Promptory'}</div>
+            </div>
+          </a>
         </div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v${CONFIG.VERSION}<br>${t('aboutDescription')}<div style="margin-top:8px;display:flex;gap:12px;"><a href="${chrome.runtime.getURL('privacy.html')}" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Privacy Policy</a><a href="${chrome.runtime.getURL('terms.html')}" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Terms of Service</a></div></div></div>
       </div>
@@ -1904,6 +1919,15 @@ function openSettings() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `promptvault-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href);
     showToast(t('dataExported'), 'success');
+  });
+  
+  // LemonSqueezy Pro upgrade from settings
+  document.getElementById('settings-upgrade-btn')?.addEventListener('click', () => {
+    if (state.isPremium && CONFIG.LEMONSQUEEZY_CUSTOMER_PORTAL) {
+      window.open(CONFIG.LEMONSQUEEZY_CUSTOMER_PORTAL, '_blank');
+    } else {
+      showUpgradeModal();
+    }
   });
   document.getElementById('settings-import-btn').addEventListener('click', () => {
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.csv';
@@ -2141,11 +2165,12 @@ function initSearch() {
 
 // ==================== UPGRADE MODAL ====================
 function showUpgradeModal() {
+  const hasCheckoutUrl = CONFIG.LEMONSQUEEZY_CHECKOUT_URL && CONFIG.LEMONSQUEEZY_CHECKOUT_URL.length > 0;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'upgrade-modal';
   modal.innerHTML = `
-    <div class="modal" style="max-width:400px;">
+    <div class="modal" style="max-width:420px;">
       <div class="modal-header"><h2 class="modal-title">${t('upgradeToPremium')}</h2><button class="btn btn-icon btn-ghost close-modal-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div class="upgrade-hero">
@@ -2158,21 +2183,51 @@ function showUpgradeModal() {
           <div class="upgrade-feature"><span class="upgrade-feature-icon">⭐</span><span>${t('premiumFeature3')}</span></div>
           <div class="upgrade-feature"><span class="upgrade-feature-icon">🚀</span><span>${t('premiumFeature4')}</span></div>
         </div>
+        ${hasCheckoutUrl ? `
+        <button class="btn btn-primary btn-lg ripple upgrade-buy-btn" id="upgrade-buy-btn" style="width:100%;margin-top:16px;padding:14px;font-size:var(--font-size-md);justify-content:center;gap:8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          ${t('getPro') || 'Get Pro'}
+        </button>` : ''}
         <div class="upgrade-note" style="padding:12px;background:var(--bg-tertiary);border-radius:var(--radius-md);margin-top:16px;">
           <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6;">${t('premiumNote')}</div>
         </div>
+        ${state.isPremium ? '' : `
+        <div style="text-align:center;margin-top:12px;">
+          <button class="btn btn-ghost btn-sm" id="upgrade-contact-btn" style="font-size:var(--font-size-xs);color:var(--text-tertiary);">
+            ${t('contactForPremium') || 'Questions? Contact us'}
+          </button>
+        </div>`}
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost close-modal-btn">${t('cancel')}</button>
-        <button class="btn btn-primary ripple" id="upgrade-contact-btn">${t('contactForPremium')}</button>
+        ${state.isPremium && CONFIG.LEMONSQUEEZY_CUSTOMER_PORTAL ? `<button class="btn btn-secondary" id="upgrade-manage-btn">${t('manageSubscription') || 'Manage Subscription'}</button>` : ''}
       </div>
     </div>`;
   document.body.appendChild(modal);
   setTimeout(() => modal.classList.add('visible'), 10);
   
-  document.getElementById('upgrade-contact-btn').addEventListener('click', () => {
-    // Open Telegram channel for premium upgrade requests
-    window.open('https://t.me/Something_Promptory', '_blank');
+  // LemonSqueezy checkout
+  document.getElementById('upgrade-buy-btn')?.addEventListener('click', () => {
+    let checkoutUrl = CONFIG.LEMONSQUEEZY_CHECKOUT_URL;
+    // Pass user email for pre-fill if signed in
+    if (state.user?.email) {
+      const sep = checkoutUrl.includes('?') ? '&' : '?';
+      checkoutUrl += `${sep}checkout[email]=${encodeURIComponent(state.user.email)}`;
+      if (state.user.id) {
+        checkoutUrl += `&checkout[custom][user_id]=${encodeURIComponent(state.user.id)}`;
+      }
+    }
+    window.open(checkoutUrl, '_blank');
+  });
+  
+  // Manage subscription portal
+  document.getElementById('upgrade-manage-btn')?.addEventListener('click', () => {
+    window.open(CONFIG.LEMONSQUEEZY_CUSTOMER_PORTAL, '_blank');
+  });
+  
+  // Fallback contact
+  document.getElementById('upgrade-contact-btn')?.addEventListener('click', () => {
+    window.open('https://t.me/user_Alexander', '_blank');
     closeModal('upgrade-modal');
   });
   
@@ -2255,7 +2310,6 @@ async function syncAllData() {
         path: 'rpc/sync_user_on_login',
         body: {}
       });
-      console.log('📋 sync_user_on_login response:', JSON.stringify(syncRes));
       
       if (syncRes?.data) {
         const syncData = Array.isArray(syncRes.data) ? syncRes.data[0] : syncRes.data;
@@ -2264,11 +2318,7 @@ async function syncAllData() {
           state.isPremium = syncData.is_premium || false;
           state.promptLimit = syncData.prompt_limit || FREE_PROMPT_LIMIT;
           console.log('✅ Profile synced via RPC. Premium:', state.isPremium, 'Limit:', state.promptLimit);
-        } else {
-          console.warn('⚠️ sync_user_on_login returned:', syncData);
         }
-      } else if (syncRes?.error) {
-        console.warn('⚠️ sync_user_on_login error:', syncRes.error);
       }
     } catch (rpcErr) {
       console.warn('⚠️ sync_user_on_login exception:', rpcErr);
@@ -2276,49 +2326,27 @@ async function syncAllData() {
     
     // Fallback: try direct profile fetch/create if RPC failed
     if (!profileExists) {
-      console.log('📋 Trying fallback profile fetch...');
       try {
         const profileRes = await supabaseMsg({ 
           action: 'supabaseRequest', 
           method: 'GET', 
           path: `profiles?id=eq.${state.user.id}&select=id,is_premium,prompt_limit` 
         });
-        console.log('📋 Profile fallback response:', JSON.stringify(profileRes));
         
         if (profileRes?.data?.length > 0) {
           profileExists = true;
           const profile = profileRes.data[0];
           state.isPremium = profile.is_premium || false;
           state.promptLimit = profile.prompt_limit || FREE_PROMPT_LIMIT;
-          console.log('✅ Profile found via fallback. Premium:', state.isPremium, 'Limit:', state.promptLimit);
         } else {
-          // Try to create profile directly
-          console.log('📋 Creating profile directly...');
           const createRes = await supabaseMsg({
-            action: 'supabaseRequest',
-            method: 'POST',
-            path: 'profiles',
-            body: {
-              id: state.user.id,
-              email: state.user.email,
-              full_name: state.user.name || state.user.email?.split('@')[0] || 'User',
-              avatar_url: state.user.avatar || ''
-            }
+            action: 'supabaseRequest', method: 'POST', path: 'profiles',
+            body: { id: state.user.id, email: state.user.email, full_name: state.user.name || state.user.email?.split('@')[0] || 'User', avatar_url: state.user.avatar || '' }
           });
-          console.log('📋 Profile create response:', JSON.stringify(createRes));
-          if (!createRes?.error) {
-            profileExists = true;
-            console.log('✅ Profile created directly');
-          } else {
-            console.warn('⚠️ Profile create failed:', createRes.error);
-            // Even if insert fails (e.g. duplicate), the profile might exist
-            profileExists = true;
-          }
+          profileExists = true;
         }
       } catch (fallbackErr) {
-        console.warn('⚠️ Profile fallback error:', fallbackErr);
-        // Assume profile exists and try to continue with sync anyway
-        profileExists = true;
+        profileExists = true; // Assume profile exists
       }
     }
     
@@ -2327,44 +2355,40 @@ async function syncAllData() {
     await saveData('promptLimit', state.promptLimit);
     _suppressStorageRender = false;
 
-    // Step 2: Sync folders (bidirectional merge)
+    // Step 2: Sync folders (ADDITIVE bidirectional merge)
     console.log('📁 Syncing folders...');
     const fRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'folders?order=created_at.asc' });
-    console.log('📁 Folders response:', fRes?.data?.length, 'items, error:', fRes?.error || 'none');
     
     if (fRes?.data) {
       const cloudFolders = fRes.data.map(f => ({ 
-        id: f.id, 
-        name: f.name, 
+        id: f.id, name: f.name, 
         createdAt: new Date(f.created_at).getTime(), 
         updatedAt: new Date(f.updated_at).getTime() 
       }));
       
-      // Smart bidirectional merge for folders
+      // ADDITIVE merge: union of cloud + local, newer wins for conflicts
       const cloudFolderMap = new Map(cloudFolders.map(f => [f.id, f]));
-      const localFolders = [...state.folders];
+      const localFolderMap = new Map(state.folders.map(f => [f.id, f]));
       const mergedFolders = new Map();
       
-      // Start with all cloud folders
-      cloudFolders.forEach(f => mergedFolders.set(f.id, f));
+      // Add ALL cloud folders
+      for (const cf of cloudFolders) {
+        mergedFolders.set(cf.id, cf);
+      }
       
-      // Merge local folders
-      for (const lf of localFolders) {
+      // Merge ALL local folders (additive - local-only get uploaded)
+      const uploadBatch = [];
+      for (const lf of state.folders) {
         const cf = cloudFolderMap.get(lf.id);
         if (!cf) {
-          // Local only - upload to cloud
+          // Local only - keep locally AND upload to cloud
           mergedFolders.set(lf.id, lf);
-          await syncFolderToSupabase(lf);
-          console.log('📤 Uploaded local folder:', lf.name);
+          uploadBatch.push(lf);
         } else {
-          // Both exist - take the newer name, preserve earliest creation
-          const localNewer = lf.updatedAt > cf.updatedAt;
-          const merged = {
-            ...(localNewer ? lf : cf),
-            createdAt: Math.min(lf.createdAt || Infinity, cf.createdAt || Infinity)
-          };
-          mergedFolders.set(lf.id, merged);
-          if (localNewer) await syncFolderToSupabase(merged);
+          // Both exist - take the newer one
+          const localNewer = (lf.updatedAt || 0) > (cf.updatedAt || 0);
+          mergedFolders.set(lf.id, localNewer ? lf : cf);
+          if (localNewer) uploadBatch.push(lf);
         }
       }
       
@@ -2372,90 +2396,86 @@ async function syncAllData() {
       _suppressStorageRender = true;
       await saveData('folders', state.folders);
       _suppressStorageRender = false;
+      
+      // Upload local-only / newer folders in parallel (batch of 5)
+      if (uploadBatch.length > 0) {
+        console.log('📤 Uploading', uploadBatch.length, 'folders...');
+        const BATCH = 5;
+        for (let i = 0; i < uploadBatch.length; i += BATCH) {
+          await Promise.all(uploadBatch.slice(i, i + BATCH).map(f => syncFolderToSupabase(f)));
+        }
+      }
       console.log('✅ Merged folders:', state.folders.length);
-    } else if (fRes?.error) {
-      console.warn('⚠️ Failed to fetch folders:', fRes.error);
     }
     
-    // Step 3: Sync prompts (bidirectional merge)
+    // Step 3: Sync prompts (ADDITIVE bidirectional merge - never delete, only add/update)
     console.log('📝 Syncing prompts...');
     const pRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: 'prompts?order=created_at.desc' });
-    console.log('📝 Prompts response:', pRes?.data?.length, 'items, error:', pRes?.error || 'none');
     
     if (pRes?.data) {
       const cloudPrompts = pRes.data.map(p => ({ 
-        id: p.id, 
-        title: p.title, 
-        text: p.text, 
-        description: p.description, 
-        imageUrl: p.image_url || null,
-        folderId: p.folder_id, 
-        platform: p.platform, 
-        tags: p.tags || [], 
-        variables: p.variables || [], 
-        isFavorite: p.is_favorite || false, 
-        useCount: p.use_count || 0, 
+        id: p.id, title: p.title, text: p.text, description: p.description, 
+        imageUrl: p.image_url || null, folderId: p.folder_id, 
+        platform: p.platform, tags: p.tags || [], variables: p.variables || [], 
+        isFavorite: p.is_favorite || false, useCount: p.use_count || 0, 
         createdAt: new Date(p.created_at).getTime(), 
         updatedAt: new Date(p.updated_at).getTime() 
       }));
       
-      // Smart bidirectional merge: field-level conflict resolution
-      // Instead of "newer wins everything", we merge intelligently:
-      // - useCount: always take the MAX (both sides may have usage data)
-      // - isFavorite: take from the newer version
-      // - text/title/tags/etc: take from the newer version
-      // - This prevents losing usage counts or favorites
+      // ADDITIVE merge: union of all prompts from both sources
       const cloudPromptMap = new Map(cloudPrompts.map(p => [p.id, p]));
-      const localPrompts = [...state.prompts];
       const mergedPrompts = new Map();
       
-      // Start with all cloud prompts
-      cloudPrompts.forEach(p => mergedPrompts.set(p.id, p));
+      // Add ALL cloud prompts first
+      for (const cp of cloudPrompts) {
+        mergedPrompts.set(cp.id, cp);
+      }
       
-      // Merge local prompts with cloud
-      for (const lp of localPrompts) {
+      // Merge ALL local prompts (additive - local-only get uploaded)
+      const uploadBatch = [];
+      for (const lp of state.prompts) {
         const cp = cloudPromptMap.get(lp.id);
         if (!cp) {
-          // Local only - upload to cloud
+          // Local only - keep and upload to cloud
           mergedPrompts.set(lp.id, lp);
-          await syncPromptToSupabase(lp);
-          console.log('📤 Uploaded local prompt:', lp.title);
+          uploadBatch.push(lp);
         } else {
-          // Both exist - smart merge
-          const localNewer = lp.updatedAt > cp.updatedAt;
+          // Both exist - smart field-level merge
+          const localNewer = (lp.updatedAt || 0) > (cp.updatedAt || 0);
           const base = localNewer ? lp : cp;
-          const other = localNewer ? cp : lp;
-          
-          // Merge: take content from newer, but preserve max useCount and combine favorites
           const merged = {
             ...base,
             useCount: Math.max(lp.useCount || 0, cp.useCount || 0),
             isFavorite: localNewer ? lp.isFavorite : cp.isFavorite,
-            // Preserve the earlier creation date
             createdAt: Math.min(lp.createdAt || Infinity, cp.createdAt || Infinity)
           };
-          
           mergedPrompts.set(lp.id, merged);
-          
-          // If local is newer, sync the merged result to cloud
-          if (localNewer) {
-            await syncPromptToSupabase(merged);
-          }
+          if (localNewer) uploadBatch.push(merged);
         }
       }
       
-      state.prompts = Array.from(mergedPrompts.values()).sort((a, b) => b.createdAt - a.createdAt);
+      state.prompts = Array.from(mergedPrompts.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       _suppressStorageRender = true;
       await saveData('prompts', state.prompts);
       _suppressStorageRender = false;
+      
+      // Upload local-only / newer prompts in parallel batches (much faster than sequential)
+      if (uploadBatch.length > 0) {
+        console.log('📤 Uploading', uploadBatch.length, 'prompts...');
+        const BATCH = 5;
+        for (let i = 0; i < uploadBatch.length; i += BATCH) {
+          await Promise.all(uploadBatch.slice(i, i + BATCH).map(p => syncPromptToSupabase(p)));
+        }
+      }
       console.log('✅ Merged prompts:', state.prompts.length);
     } else if (pRes?.error) {
       console.warn('⚠️ Failed to fetch prompts:', pRes.error);
-      // If fetch failed but we have local prompts, try uploading them
+      // If fetch failed but we have local prompts, try uploading them in batches
       if (state.prompts.length > 0 && profileExists) {
         console.log('📤 Uploading', state.prompts.length, 'local prompts to cloud...');
-        for (const p of state.prompts) {
-          await syncPromptToSupabase(p);
+        const BATCH = 5;
+        for (let i = 0; i < state.prompts.length; i += BATCH) {
+          await Promise.all(state.prompts.slice(i, i + BATCH).map(p => syncPromptToSupabase(p)));
         }
       }
     }
