@@ -635,10 +635,21 @@ async function handleSignOut() {
         }
       }).catch(() => {});
     }
-    await chrome.storage.local.set({ session: null, user: null, isPremium: false });
+    // Clear session, user, AND all user data (prompts, folders) so next login starts clean
+    await chrome.storage.local.set({ 
+      session: null, user: null, isPremium: false, promptLimit: 20,
+      prompts: [], folders: [],
+      libraryPromptsCache: [],
+      offlineQueue: []
+    });
     return { success: true };
   } catch (err) {
-    await chrome.storage.local.set({ session: null, user: null, isPremium: false });
+    await chrome.storage.local.set({ 
+      session: null, user: null, isPremium: false, promptLimit: 20,
+      prompts: [], folders: [],
+      libraryPromptsCache: [],
+      offlineQueue: []
+    });
     return { success: true };
   }
 }

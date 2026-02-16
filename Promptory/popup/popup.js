@@ -1362,9 +1362,9 @@ async function loadLibraryPrompts(append = false) {
   const offset = _libraryPage * LIBRARY_PAGE_SIZE;
 
   const queries = [
-    `library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url,created_at&order=created_at.desc.nullslast&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`,
-    `library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`,
-    `library_prompts?order=likes.desc&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`
+    `library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url,created_at&is_approved=eq.true&order=created_at.desc.nullslast&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`,
+    `library_prompts?select=id,title,text,description,author,author_id,tags,likes,downloads,category,is_featured,image_url&is_approved=eq.true&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`,
+    `library_prompts?is_approved=eq.true&order=likes.desc&limit=${LIBRARY_PAGE_SIZE}&offset=${offset}`
   ];
 
   let lastError = null;
@@ -1917,10 +1917,22 @@ function openSettings() {
   document.getElementById('settings-signout-btn')?.addEventListener('click', async () => {
     if (!confirm(t('signOutConfirm'))) return;
     await new Promise(resolve => chrome.runtime.sendMessage({ action: 'signOut' }, resolve));
+    // Clear all user data locally so next login starts fresh
     state.user = null; state.session = null; state.isPremium = false;
+    state.prompts = []; state.folders = [];
+    state.settings.hotkeys = { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } };
+    state.libraryPrompts = []; state.userLikes = new Set(); state.userReports = new Set();
+    state.promptLimit = FREE_PROMPT_LIMIT;
+    // Persist the cleared state
+    await saveData('prompts', []);
+    await saveData('folders', []);
+    await saveData('settings', state.settings);
+    await saveData('isPremium', false);
+    await saveData('promptLimit', FREE_PROMPT_LIMIT);
+    await saveData('libraryPromptsCache', []);
     showToast(t('signedOutSuccess'), 'success');
     closeModal('settings-modal');
-    renderExplore();
+    renderPrompts(); renderFolders(); renderFavorites(); renderExplore();
   });
   document.getElementById('settings-export-btn').addEventListener('click', () => {
     const data = { prompts: state.prompts, folders: state.folders, settings: state.settings, exportDate: new Date().toISOString() };
@@ -2069,6 +2081,8 @@ function openSettings() {
       // Re-render UI with new language
       updateStaticTexts();
     }
+    // Sync hotkey settings to Supabase
+    syncHotkeysToSupabase();
     showToast(t('settingsSaved'), 'success');
     closeModal('settings-modal');
   });
@@ -2257,6 +2271,77 @@ function closeModal(id) {
   if (modal) { modal.classList.remove('visible'); setTimeout(() => modal.remove(), 250); }
 }
 
+// ==================== HOTKEY SETTINGS SYNC ====================
+async function syncHotkeysToSupabase() {
+  if (!state.session || !state.user) return;
+  const hotkeys = state.settings.hotkeys || {};
+  const slotNames = { slot1: 1, slot2: 2, slot3: 3 };
+  const keyDefaults = { slot1: 'Alt+1', slot2: 'Alt+2', slot3: 'Alt+3' };
+  
+  for (const [slotId, slotNum] of Object.entries(slotNames)) {
+    const slot = hotkeys[slotId];
+    const promptId = slot?.promptId || null;
+    
+    if (promptId) {
+      // First try to delete existing row for this slot, then insert fresh
+      // This avoids conflict issues with the composite unique constraint
+      try {
+        await supabaseMsg({
+          action: 'supabaseRequest',
+          method: 'DELETE',
+          path: `hotkey_settings?user_id=eq.${state.user.id}&slot_number=eq.${slotNum}`
+        });
+      } catch (e) { /* ignore delete errors */ }
+      try {
+        await supabaseMsg({
+          action: 'supabaseRequest',
+          method: 'POST',
+          path: 'hotkey_settings',
+          body: {
+            user_id: state.user.id,
+            slot_number: slotNum,
+            key_combo: keyDefaults[slotId],
+            prompt_id: promptId,
+            updated_at: new Date().toISOString()
+          }
+        });
+      } catch (e) { console.error('Hotkey sync failed for', slotId, e); }
+    } else {
+      // Delete hotkey setting if no prompt assigned
+      try {
+        await supabaseMsg({
+          action: 'supabaseRequest',
+          method: 'DELETE',
+          path: `hotkey_settings?user_id=eq.${state.user.id}&slot_number=eq.${slotNum}`
+        });
+      } catch (e) { /* silent */ }
+    }
+  }
+}
+
+async function loadHotkeysFromSupabase() {
+  if (!state.session || !state.user) return;
+  try {
+    const res = await supabaseMsg({
+      action: 'supabaseRequest',
+      method: 'GET',
+      path: `hotkey_settings?user_id=eq.${state.user.id}&order=slot_number.asc`
+    });
+    if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+      const slotNames = { 1: 'slot1', 2: 'slot2', 3: 'slot3' };
+      if (!state.settings.hotkeys) state.settings.hotkeys = {};
+      for (const row of res.data) {
+        const slotId = slotNames[row.slot_number];
+        if (slotId) {
+          if (!state.settings.hotkeys[slotId]) state.settings.hotkeys[slotId] = {};
+          state.settings.hotkeys[slotId].promptId = row.prompt_id || null;
+        }
+      }
+      await saveData('settings', state.settings);
+    }
+  } catch (e) { console.warn('Failed to load hotkeys from cloud:', e); }
+}
+
 // ==================== SUPABASE SYNC (with offline queue support) ====================
 async function syncPromptToSupabase(prompt) {
   if (typeof Promptory !== 'undefined' && Promptory.syncPromptToCloud) {
@@ -2269,6 +2354,15 @@ async function syncPromptToSupabase(prompt) {
     // (it may not exist in cloud yet, causing FK violation)
     const validFolderId = prompt.folderId && state.folders.some(f => f.id === prompt.folderId) 
       ? prompt.folderId : null;
+    
+    // If prompt has a folder, ensure that folder is synced to cloud first
+    if (validFolderId) {
+      const folder = state.folders.find(f => f.id === validFolderId);
+      if (folder) {
+        await syncFolderToSupabase(folder);
+      }
+    }
+    
     const body = { 
       id: prompt.id, user_id: state.user.id, folder_id: validFolderId, 
       title: prompt.title, text: prompt.text, description: prompt.description, 
@@ -2278,10 +2372,14 @@ async function syncPromptToSupabase(prompt) {
       updated_at: new Date().toISOString() 
     };
     const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body }); 
-    // If folder FK failed, retry without folder_id
-    if (res?.error && typeof res.error === 'string' && res.error.includes('folder_id')) {
-      body.folder_id = null;
-      await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body });
+    if (res?.error) {
+      console.warn('Prompt sync error:', res.error);
+      // If folder FK failed, retry without folder_id
+      if (typeof res.error === 'string' && (res.error.includes('folder_id') || res.error.includes('foreign key'))) {
+        body.folder_id = null;
+        const retryRes = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body });
+        if (retryRes?.error) console.error('Prompt sync retry also failed:', retryRes.error);
+      }
     }
   } catch (e) { console.error('Sync failed:', e); }
 }
@@ -2299,7 +2397,10 @@ async function syncFolderToSupabase(folder) {
     return Promptory.syncFolderToCloud(folder);
   }
   if (!state.session || !state.user) return;
-  try { await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'folders', body: { id: folder.id, user_id: state.user.id, name: folder.name, updated_at: new Date().toISOString() } }); } catch (e) { /* silent */ }
+  try { 
+    const res = await supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'folders', body: { id: folder.id, user_id: state.user.id, name: folder.name, updated_at: new Date().toISOString() } }); 
+    if (res?.error) console.warn('Folder sync error:', res.error);
+  } catch (e) { console.error('Folder sync failed:', e); }
 }
 
 async function syncFolderDeleteToSupabase(id) {
@@ -2496,7 +2597,13 @@ async function syncAllData() {
       }
     }
     
-    // Step 4: Update UI (single batched render, not multiple)
+    // Step 4: Sync hotkey settings from cloud
+    console.log('🎹 Syncing hotkey settings...');
+    await loadHotkeysFromSupabase();
+    // Also upload local hotkeys to cloud (in case they only exist locally)
+    syncHotkeysToSupabase();
+    
+    // Step 5: Update UI (single batched render, not multiple)
     requestAnimationFrame(() => {
       renderPrompts(); 
       renderFolders(); 
