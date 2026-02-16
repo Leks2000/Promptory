@@ -299,5 +299,14 @@
   "rightToExport": { "message": "Right to export your data" },
   "requestDeletion": { "message": "Request Account Deletion" },
   "deleteAccountConfirm": { "message": "This will permanently delete your account and all associated data from our servers. This action cannot be undone. Continue?" },
-  "accountDeletionRequested": { "message": "Account deletion requested. Your data will be deleted within 30 days." }
+  "accountDeletionRequested": { "message": "Account deletion requested. Your data will be deleted within 30 days." },
+
+  "subscriptionExpired": { "message": "Your Pro subscription has expired. You are now on the Free plan." },
+  "subscriptionActive": { "message": "Pro subscription active" },
+  "movedToFolder": { "message": "Moved to $1", "placeholders": { "1": { "content": "$1" } } },
+  "dragToMove": { "message": "Drag to move between folders" },
+  "imageCompressed": { "message": "Image compressed for upload" },
+  "morePrompts": { "message": "$1 more prompts...", "placeholders": { "1": { "content": "$1" } } },
+  "rateLimited": { "message": "Too many requests. Please wait a moment." },
+  "dataVersionMigrated": { "message": "Data migrated to latest version" }
 }

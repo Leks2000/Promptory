@@ -1,6 +1,6 @@
 # Promptory - Project Roadmap, Monetization & TODO
 
-## Current Status: MVP (v1.1.0)
+## Current Status: v1.8.0
 
 ### What's Done (MVP Core)
 - [x] Chrome Extension (MV3) with popup UI

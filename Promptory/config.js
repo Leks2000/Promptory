@@ -25,7 +25,7 @@ const CONFIG = {
   LIBRARY_PAGE_SIZE: 20,
   
   // App info
-  VERSION: '1.7.0'
+  VERSION: '1.8.0'
 };
 
 // Make available in different contexts (popup, background, options)

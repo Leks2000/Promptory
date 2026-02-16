@@ -1518,3 +1518,73 @@ body {
   color: var(--success);
   flex-shrink: 0;
 }
+
+/* ========== VIRTUAL SCROLL ========== */
+.virtual-scroll-sentinel {
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.virtual-scroll-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: var(--space-2);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+
+/* ========== DRAG AND DROP ========== */
+.prompt-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  border-color: var(--accent);
+}
+
+.folder-section.drag-over .folder-header {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  box-shadow: var(--shadow-glow);
+}
+
+.prompt-card[draggable="true"] {
+  cursor: grab;
+}
+
+.prompt-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* ========== KEYBOARD NAVIGATION ========== */
+.prompt-card:focus-visible,
+.folder-card:focus-visible,
+.explore-card-wrapper:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+.prompt-action-btn:focus-visible,
+.explore-action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Promptory Sync Logic Tests</title>
+  <style>
+    body { font-family: system-ui; padding: 24px; background: #1a1a2e; color: #eee; }
+    .test { padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 14px; }
+    .pass { background: #1b4332; color: #95d5b2; }
+    .fail { background: #5c1010; color: #ff9999; }
+    .info { background: #1a1a3e; color: #a0a0ff; }
+    h1 { font-size: 20px; margin-bottom: 16px; }
+    #results { margin-top: 16px; }
+    #summary { margin-top: 16px; font-weight: bold; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Promptory Sync Logic - Unit Tests</h1>
+  <div id="results"></div>
+  <div id="summary"></div>
+
+  <script>
+    // Test runner
+    const results = [];
+    function test(name, fn) {
+      try {
+        fn();
+        results.push({ name, pass: true });
+      } catch (e) {
+        results.push({ name, pass: false, error: e.message });
+      }
+    }
+    function assert(condition, message) {
+      if (!condition) throw new Error(message || 'Assertion failed');
+    }
+    function assertEqual(a, b, message) {
+      if (JSON.stringify(a) !== JSON.stringify(b)) {
+        throw new Error(message || `Expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+      }
+    }
+
+    // ==================== SYNC MERGE LOGIC TESTS ====================
+
+    // Simulate the additive merge logic from syncAllData
+    function mergePrompts(localPrompts, cloudPrompts) {
+      const cloudPromptMap = new Map(cloudPrompts.map(p => [p.id, p]));
+      const mergedPrompts = new Map();
+      
+      for (const cp of cloudPrompts) {
+        mergedPrompts.set(cp.id, cp);
+      }
+      
+      const uploadBatch = [];
+      for (const lp of localPrompts) {
+        const cp = cloudPromptMap.get(lp.id);
+        if (!cp) {
+          mergedPrompts.set(lp.id, lp);
+          uploadBatch.push(lp);
+        } else {
+          const localNewer = (lp.updatedAt || 0) > (cp.updatedAt || 0);
+          const base = localNewer ? lp : cp;
+          const merged = {
+            ...base,
+            useCount: Math.max(lp.useCount || 0, cp.useCount || 0),
+            isFavorite: localNewer ? lp.isFavorite : cp.isFavorite,
+            createdAt: Math.min(lp.createdAt || Infinity, cp.createdAt || Infinity)
+          };
+          mergedPrompts.set(lp.id, merged);
+          if (localNewer) uploadBatch.push(merged);
+        }
+      }
+      
+      return {
+        merged: Array.from(mergedPrompts.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+        toUpload: uploadBatch
+      };
+    }
+
+    function mergeFolders(localFolders, cloudFolders) {
+      const cloudFolderMap = new Map(cloudFolders.map(f => [f.id, f]));
+      const mergedFolders = new Map();
+      
+      for (const cf of cloudFolders) {
+        mergedFolders.set(cf.id, cf);
+      }
+      
+      const uploadBatch = [];
+      for (const lf of localFolders) {
+        const cf = cloudFolderMap.get(lf.id);
+        if (!cf) {
+          mergedFolders.set(lf.id, lf);
+          uploadBatch.push(lf);
+        } else {
+          const localNewer = (lf.updatedAt || 0) > (cf.updatedAt || 0);
+          mergedFolders.set(lf.id, localNewer ? lf : cf);
+          if (localNewer) uploadBatch.push(lf);
+        }
+      }
+      
+      return {
+        merged: Array.from(mergedFolders.values()),
+        toUpload: uploadBatch
+      };
+    }
+
+    // ==================== TESTS ====================
+
+    test('Empty local + empty cloud = empty result', () => {
+      const { merged } = mergePrompts([], []);
+      assertEqual(merged.length, 0);
+    });
+
+    test('Local only prompts get included', () => {
+      const local = [{ id: 'a', title: 'Local', createdAt: 100, updatedAt: 100, useCount: 1, isFavorite: false }];
+      const { merged, toUpload } = mergePrompts(local, []);
+      assertEqual(merged.length, 1);
+      assertEqual(merged[0].title, 'Local');
+      assertEqual(toUpload.length, 1, 'Should upload local-only prompt');
+    });
+
+    test('Cloud only prompts get included', () => {
+      const cloud = [{ id: 'b', title: 'Cloud', createdAt: 200, updatedAt: 200, useCount: 5, isFavorite: true }];
+      const { merged, toUpload } = mergePrompts([], cloud);
+      assertEqual(merged.length, 1);
+      assertEqual(merged[0].title, 'Cloud');
+      assertEqual(toUpload.length, 0, 'Nothing to upload');
+    });
+
+    test('Conflict: newer local wins for title', () => {
+      const local = [{ id: 'x', title: 'Local V2', createdAt: 100, updatedAt: 300, useCount: 2, isFavorite: true }];
+      const cloud = [{ id: 'x', title: 'Cloud V1', createdAt: 100, updatedAt: 200, useCount: 5, isFavorite: false }];
+      const { merged } = mergePrompts(local, cloud);
+      assertEqual(merged.length, 1);
+      assertEqual(merged[0].title, 'Local V2', 'Local is newer, should win');
+      assertEqual(merged[0].useCount, 5, 'useCount should be MAX of both');
+      assertEqual(merged[0].isFavorite, true, 'Favorite should come from newer (local)');
+    });
+
+    test('Conflict: newer cloud wins for title', () => {
+      const local = [{ id: 'x', title: 'Old local', createdAt: 100, updatedAt: 100, useCount: 10, isFavorite: false }];
+      const cloud = [{ id: 'x', title: 'New cloud', createdAt: 100, updatedAt: 500, useCount: 3, isFavorite: true }];
+      const { merged } = mergePrompts(local, cloud);
+      assertEqual(merged[0].title, 'New cloud', 'Cloud is newer');
+      assertEqual(merged[0].useCount, 10, 'useCount should be MAX');
+      assertEqual(merged[0].isFavorite, true, 'Favorite from newer (cloud)');
+    });
+
+    test('UseCount always takes MAX', () => {
+      const local = [{ id: 'u', useCount: 15, updatedAt: 100, createdAt: 50 }];
+      const cloud = [{ id: 'u', useCount: 3, updatedAt: 200, createdAt: 50 }];
+      const { merged } = mergePrompts(local, cloud);
+      assertEqual(merged[0].useCount, 15);
+    });
+
+    test('CreatedAt takes MIN (earliest)', () => {
+      const local = [{ id: 'c', createdAt: 500, updatedAt: 600, useCount: 0 }];
+      const cloud = [{ id: 'c', createdAt: 100, updatedAt: 200, useCount: 0 }];
+      const { merged } = mergePrompts(local, cloud);
+      assertEqual(merged[0].createdAt, 100, 'Should keep earliest createdAt');
+    });
+
+    test('Multiple prompts additive merge', () => {
+      const local = [
+        { id: 'a', title: 'A', createdAt: 100, updatedAt: 100, useCount: 0 },
+        { id: 'b', title: 'B local', createdAt: 200, updatedAt: 300, useCount: 5 }
+      ];
+      const cloud = [
+        { id: 'b', title: 'B cloud', createdAt: 200, updatedAt: 200, useCount: 2 },
+        { id: 'c', title: 'C', createdAt: 300, updatedAt: 300, useCount: 0 }
+      ];
+      const { merged, toUpload } = mergePrompts(local, cloud);
+      assertEqual(merged.length, 3, 'Should have 3 unique prompts');
+      const ids = merged.map(p => p.id).sort();
+      assertEqual(ids, ['a', 'b', 'c']);
+      assertEqual(toUpload.length, 2, 'Should upload a (local-only) and b (local newer)');
+    });
+
+    test('Folder merge: additive', () => {
+      const local = [{ id: 'f1', name: 'Local Folder', updatedAt: 100 }];
+      const cloud = [{ id: 'f2', name: 'Cloud Folder', updatedAt: 200 }];
+      const { merged } = mergeFolders(local, cloud);
+      assertEqual(merged.length, 2);
+    });
+
+    test('Folder merge: newer local wins', () => {
+      const local = [{ id: 'f1', name: 'Renamed', updatedAt: 300 }];
+      const cloud = [{ id: 'f1', name: 'Original', updatedAt: 100 }];
+      const { merged, toUpload } = mergeFolders(local, cloud);
+      assertEqual(merged.length, 1);
+      assertEqual(merged[0].name, 'Renamed');
+      assertEqual(toUpload.length, 1);
+    });
+
+    test('Rate limiter prevents spam', () => {
+      const _rateLimits = {};
+      function isRateLimited(key, cooldownMs = 2000) {
+        const now = Date.now();
+        if (_rateLimits[key] && now - _rateLimits[key] < cooldownMs) return true;
+        _rateLimits[key] = now;
+        return false;
+      }
+      assert(!isRateLimited('test_key'), 'First call should not be limited');
+      assert(isRateLimited('test_key'), 'Second immediate call should be limited');
+    });
+
+    test('Escape HTML prevents XSS', () => {
+      function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+      const result = escapeHtml('<script>alert("xss")</script>');
+      assert(!result.includes('<script>'), 'Should escape script tags');
+      assert(result.includes('&lt;'), 'Should have escaped angle brackets');
+    });
+
+    test('Truncate works correctly', () => {
+      function truncate(text, max = 120) {
+        if (!text || text.length <= max) return text || '';
+        return text.substring(0, max) + '...';
+      }
+      assertEqual(truncate('short'), 'short');
+      assertEqual(truncate('a'.repeat(200), 10), 'a'.repeat(10) + '...');
+      assertEqual(truncate(''), '');
+      assertEqual(truncate(null), '');
+    });
+
+    test('Data version migration: v0 adds missing fields', () => {
+      const prompts = [
+        { id: 'p1', title: 'Test', text: 'hello' }
+      ];
+      // Simulate v0->v1 migration
+      prompts.forEach(p => {
+        if (!p.imageUrl && p.imageUrl !== null) p.imageUrl = null;
+        if (!p.variables) p.variables = [];
+        if (!p.tags) p.tags = [];
+        if (p.useCount === undefined) p.useCount = 0;
+      });
+      assertEqual(prompts[0].variables, []);
+      assertEqual(prompts[0].tags, []);
+      assertEqual(prompts[0].useCount, 0);
+      assertEqual(prompts[0].imageUrl, null);
+    });
+
+    // ==================== RENDER RESULTS ====================
+    const container = document.getElementById('results');
+    let passCount = 0, failCount = 0;
+    results.forEach(r => {
+      const div = document.createElement('div');
+      div.className = `test ${r.pass ? 'pass' : 'fail'}`;
+      div.textContent = `${r.pass ? 'PASS' : 'FAIL'} ${r.name}${r.error ? ' — ' + r.error : ''}`;
+      container.appendChild(div);
+      r.pass ? passCount++ : failCount++;
+    });
+    const summary = document.getElementById('summary');
+    summary.textContent = `${passCount} passed, ${failCount} failed out of ${results.length} tests`;
+    summary.style.color = failCount === 0 ? '#95d5b2' : '#ff9999';
+  </script>
+</body>
+</html>

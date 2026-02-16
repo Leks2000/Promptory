@@ -658,8 +658,8 @@ async function getValidToken() {
   const { session } = await chrome.storage.local.get(['session']);
   if (!session) return null;
 
-  // Check if token is expired (with 60s buffer)
-  if (session.expires_at && Date.now() > session.expires_at - 60000) {
+  // Check if token is expired (with 5 minute buffer for proactive refresh)
+  if (session.expires_at && Date.now() > session.expires_at - 300000) {
     if (!session.refresh_token) return null;
     try {
       const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
@@ -847,6 +847,82 @@ async function handleSupabaseRequest(message) {
       }
       return { error: err.message };
     }
+  }
+}
+
+// ---------- Proactive Token Refresh ----------
+// Refresh token 5 minutes before expiry, not just 60 seconds
+// Also runs a periodic alarm to catch tokens that expire while popup is closed
+chrome.alarms.create('token-refresh', { periodInMinutes: 10 });
+chrome.alarms.create('subscription-check', { periodInMinutes: 60 }); // Check subscription hourly
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'token-refresh') {
+    const { session } = await chrome.storage.local.get(['session']);
+    if (!session?.refresh_token) return;
+    // Refresh if token expires within 5 minutes
+    if (session.expires_at && Date.now() > session.expires_at - 300000) {
+      console.log('🔄 Proactive token refresh triggered');
+      const newToken = await getValidToken();
+      if (newToken) {
+        console.log('✅ Token proactively refreshed');
+      } else {
+        console.warn('⚠️ Proactive token refresh failed');
+      }
+    }
+  }
+
+  if (alarm.name === 'subscription-check') {
+    await periodicSubscriptionCheck();
+  }
+});
+
+// ---------- Periodic Subscription Status Check ----------
+async function periodicSubscriptionCheck() {
+  const { session, user } = await chrome.storage.local.get(['session', 'user']);
+  if (!session?.access_token || !user?.id) return;
+
+  try {
+    const token = await getValidToken();
+    if (!token) return;
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/sync_user_on_login`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const result = Array.isArray(data) ? data[0] : data;
+      if (result) {
+        const currentPremium = (await chrome.storage.local.get(['isPremium'])).isPremium;
+        const newPremium = result.is_premium || false;
+        const newLimit = result.prompt_limit || 20;
+
+        await chrome.storage.local.set({
+          isPremium: newPremium,
+          promptLimit: newLimit
+        });
+
+        // Notify user if subscription expired
+        if (currentPremium && !newPremium) {
+          console.log('⚠️ Subscription expired detected');
+          chrome.notifications.create('subscription-expired', {
+            type: 'basic',
+            iconUrl: 'assets/icon-128.png',
+            title: 'Promptory',
+            message: 'Your Pro subscription has expired. You are now on the Free plan.'
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Periodic subscription check error:', e);
   }
 }
 
