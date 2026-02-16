@@ -10,8 +10,8 @@ const CONFIG = {
   // API key is stored in Supabase Edge Function env (LEMON_SIGNING_SECRET)
   // These are public-facing IDs and URLs — safe to include in client code
   LEMONSQUEEZY_STORE_ID: 'promptory', // Store slug on LemonSqueezy
-  LEMONSQUEEZY_PRODUCT_ID: '', // Pro subscription product ID (fill after store activation)
-  LEMONSQUEEZY_CHECKOUT_URL: '', // Checkout buy link (fill after creating product)
+  LEMONSQUEEZY_PRODUCT_ID: '833592', // Pro subscription product ID  
+  LEMONSQUEEZY_CHECKOUT_URL: 'https://promptory.lemonsqueezy.com/checkout', // e.g. https://yourstore.lemonsqueezy.com/checkout/buy/xxx
   LEMONSQUEEZY_CUSTOMER_PORTAL: 'https://promptory.lemonsqueezy.com/billing', // Customer portal for managing subscriptions
   
   // Free tier limits
