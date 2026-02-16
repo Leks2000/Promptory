@@ -7,11 +7,12 @@ const CONFIG = {
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvZmdmdmxnY2hxaGVrc3ZsaWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTgzNzEsImV4cCI6MjA4NjA3NDM3MX0.taoCHiYqJT2mSp5odtaM1p52KO5MnGzSOiz4dhmZnb0',
   
   // LemonSqueezy (Pro payments)
-  // Set LEMONSQUEEZY_API_KEY in environment / background config
-  LEMONSQUEEZY_STORE_ID: '', // Your store ID from LemonSqueezy dashboard
-  LEMONSQUEEZY_PRODUCT_ID: '', // Pro subscription product ID  
-  LEMONSQUEEZY_CHECKOUT_URL: '', // e.g. https://yourstore.lemonsqueezy.com/checkout/buy/xxx
-  LEMONSQUEEZY_CUSTOMER_PORTAL: '', // e.g. https://yourstore.lemonsqueezy.com/billing
+  // API key is stored in Supabase Edge Function env (LEMON_SIGNING_SECRET)
+  // These are public-facing IDs and URLs — safe to include in client code
+  LEMONSQUEEZY_STORE_ID: 'promptory', // Store slug on LemonSqueezy
+  LEMONSQUEEZY_PRODUCT_ID: '', // Pro subscription product ID (fill after store activation)
+  LEMONSQUEEZY_CHECKOUT_URL: '', // Checkout buy link (fill after creating product)
+  LEMONSQUEEZY_CUSTOMER_PORTAL: 'https://promptory.lemonsqueezy.com/billing', // Customer portal for managing subscriptions
   
   // Free tier limits
   FREE_PROMPT_LIMIT: 20,
@@ -24,7 +25,7 @@ const CONFIG = {
   LIBRARY_PAGE_SIZE: 20,
   
   // App info
-  VERSION: '1.5.0'
+  VERSION: '1.6.0'
 };
 
 // Make available in different contexts (popup, background, options)
