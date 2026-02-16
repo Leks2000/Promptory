@@ -2505,6 +2505,11 @@ async function syncAllData() {
     });
     
     console.log('✅ Sync complete! Prompts:', state.prompts.length, 'Folders:', state.folders.length, 'Premium:', state.isPremium);
+    
+    // After full sync, try to drain any offline queue items that may have accumulated
+    if (typeof Promptory !== 'undefined' && Promptory.processQueue) {
+      setTimeout(() => Promptory.processQueue(), 500);
+    }
   } catch (e) { 
     console.error('❌ Sync error:', e); 
   }

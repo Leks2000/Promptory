@@ -7,6 +7,8 @@ window.Promptory = window.Promptory || {};
 'use strict';
 
 const QUEUE_STORAGE_KEY = 'offlineQueue';
+const MAX_RETRIES = 3; // Max retry attempts per operation before dropping
+const MAX_AGE_MS = 24 * 60 * 60 * 1000; // Drop operations older than 24h
 
 // Operation queue for offline mode
 let _queue = [];
@@ -53,55 +55,90 @@ P.enqueueOperation = async function(operation) {
   return operation.id;
 };
 
+// Check if an error is permanent (not worth retrying)
+function isPermanentError(errorStr) {
+  if (!errorStr) return false;
+  const s = (typeof errorStr === 'string' ? errorStr : JSON.stringify(errorStr)).toLowerCase();
+  return s.includes('not authenticated') || s.includes('jwt') || s.includes('permission') 
+    || s.includes('rls') || s.includes('row-level security') 
+    || s.includes('401') || s.includes('403') || s.includes('42501')
+    || s.includes('not found') || s.includes('does not exist');
+}
+
 // Process the queue when we go back online
 P.processQueue = async function() {
   if (_isProcessing || _queue.length === 0 || !_isOnline) return;
   if (!P.state.session || !P.state.user) return;
   
   _isProcessing = true;
-  console.log(`🔄 Processing ${_queue.length} offline operations...`);
+  console.log(`Processing ${_queue.length} offline operations...`);
   
-  const processed = [];
+  const toRemove = [];
+  const now = Date.now();
   
   for (const op of [..._queue]) {
+    // Drop expired operations
+    if (op.timestamp && (now - op.timestamp) > MAX_AGE_MS) {
+      console.warn('Dropping expired operation:', op.type, op.data?.id);
+      toRemove.push(op.id);
+      continue;
+    }
+    
+    // Drop operations that exceeded max retries
+    if ((op.retries || 0) >= MAX_RETRIES) {
+      console.warn('Dropping operation after max retries:', op.type, op.data?.id);
+      toRemove.push(op.id);
+      continue;
+    }
+    
     try {
-      let success = false;
+      let result = { success: false, error: null };
       
       switch (op.type) {
         case 'syncPrompt':
-          success = await replaySyncPrompt(op.data);
+          result = await replaySyncPrompt(op.data);
           break;
         case 'deletePrompt':
-          success = await replayDeletePrompt(op.data.id);
+          result = await replayDeletePrompt(op.data.id);
           break;
         case 'syncFolder':
-          success = await replaySyncFolder(op.data);
+          result = await replaySyncFolder(op.data);
           break;
         case 'deleteFolder':
-          success = await replayDeleteFolder(op.data.id);
+          result = await replayDeleteFolder(op.data.id);
           break;
         default:
           console.warn('Unknown offline operation type:', op.type);
-          success = true; // Remove unknown ops
+          result = { success: true };
       }
       
-      if (success) {
-        processed.push(op.id);
+      if (result.success) {
+        toRemove.push(op.id);
+      } else if (isPermanentError(result.error)) {
+        // Permanent error - drop it, retrying won't help
+        console.warn('Dropping operation due to permanent error:', op.type, result.error);
+        toRemove.push(op.id);
+      } else {
+        // Transient error - increment retry counter
+        op.retries = (op.retries || 0) + 1;
       }
     } catch (e) {
       console.warn('Failed to replay operation:', op.type, e);
+      op.retries = (op.retries || 0) + 1;
     }
   }
   
-  // Remove processed operations
-  _queue = _queue.filter(op => !processed.includes(op.id));
+  // Remove processed/dropped operations
+  const prevLen = _queue.length;
+  _queue = _queue.filter(op => !toRemove.includes(op.id));
   await saveQueue();
   
   _isProcessing = false;
   updateOfflineIndicator();
   
-  if (processed.length > 0) {
-    console.log(`✅ Processed ${processed.length} offline operations, ${_queue.length} remaining`);
+  const removedCount = prevLen - _queue.length;
+  if (removedCount > 0) {
+    console.log(`Processed ${removedCount} offline operations, ${_queue.length} remaining`);
     if (_queue.length === 0) {
       P.showToast(P.t('offlineSynced') || 'All changes synced', 'success');
     }
@@ -109,11 +146,16 @@ P.processQueue = async function() {
 };
 
 // ==================== REPLAY FUNCTIONS ====================
+// Return { success: boolean, error: string|null }
 async function replaySyncPrompt(prompt) {
+  // Validate folder_id: only include if the folder exists locally
+  const validFolderId = prompt.folderId && P.state.folders && P.state.folders.some(f => f.id === prompt.folderId)
+    ? prompt.folderId : null;
+  
   const body = {
     id: prompt.id,
     user_id: P.state.user.id,
-    folder_id: prompt.folderId || null,
+    folder_id: validFolderId,
     title: prompt.title,
     text: prompt.text,
     description: prompt.description,
@@ -128,14 +170,29 @@ async function replaySyncPrompt(prompt) {
   const res = await P.supabaseMsg({
     action: 'supabaseRequest', method: 'POST', path: 'prompts', body
   });
-  return !res?.error;
+  if (!res?.error) return { success: true };
+  
+  // FK violation on folder_id — retry without folder
+  const errStr = typeof res.error === 'string' ? res.error : JSON.stringify(res.error);
+  if (errStr.includes('folder_id') || errStr.includes('foreign key') || errStr.includes('23503')) {
+    body.folder_id = null;
+    const retry = await P.supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body });
+    if (!retry?.error) return { success: true };
+    return { success: false, error: typeof retry.error === 'string' ? retry.error : JSON.stringify(retry.error) };
+  }
+  
+  return { success: false, error: errStr };
 }
 
 async function replayDeletePrompt(id) {
   const res = await P.supabaseMsg({
     action: 'supabaseRequest', method: 'DELETE', path: `prompts?id=eq.${id}`
   });
-  return !res?.error;
+  // DELETE returning no error OR 404 (already deleted) = success
+  if (!res?.error) return { success: true };
+  const errStr = typeof res.error === 'string' ? res.error : JSON.stringify(res.error);
+  if (errStr.includes('404') || errStr.includes('not found')) return { success: true };
+  return { success: false, error: errStr };
 }
 
 async function replaySyncFolder(folder) {
@@ -143,14 +200,18 @@ async function replaySyncFolder(folder) {
     action: 'supabaseRequest', method: 'POST', path: 'folders',
     body: { id: folder.id, user_id: P.state.user.id, name: folder.name, updated_at: new Date(folder.updatedAt || Date.now()).toISOString() }
   });
-  return !res?.error;
+  if (!res?.error) return { success: true };
+  return { success: false, error: typeof res.error === 'string' ? res.error : JSON.stringify(res.error) };
 }
 
 async function replayDeleteFolder(id) {
   const res = await P.supabaseMsg({
     action: 'supabaseRequest', method: 'DELETE', path: `folders?id=eq.${id}`
   });
-  return !res?.error;
+  if (!res?.error) return { success: true };
+  const errStr = typeof res.error === 'string' ? res.error : JSON.stringify(res.error);
+  if (errStr.includes('404') || errStr.includes('not found')) return { success: true };
+  return { success: false, error: errStr };
 }
 
 // ==================== NETWORK STATUS ====================
@@ -197,6 +258,19 @@ function onOffline() {
 P.initOffline = async function() {
   await loadQueue();
   
+  // Clean up stale/expired operations on init
+  const now = Date.now();
+  const prevLen = _queue.length;
+  _queue = _queue.filter(op => {
+    if (op.timestamp && (now - op.timestamp) > MAX_AGE_MS) return false;
+    if ((op.retries || 0) >= MAX_RETRIES) return false;
+    return true;
+  });
+  if (_queue.length !== prevLen) {
+    console.log(`Cleaned ${prevLen - _queue.length} stale offline operations`);
+    await saveQueue();
+  }
+  
   window.addEventListener('online', onOnline);
   window.addEventListener('offline', onOffline);
   
@@ -220,10 +294,14 @@ P.syncPromptToCloud = async function(prompt) {
   }
   
   try {
+    // Validate folder_id: only include if the folder exists locally
+    const validFolderId = prompt.folderId && P.state.folders && P.state.folders.some(f => f.id === prompt.folderId)
+      ? prompt.folderId : null;
+    
     const body = {
       id: prompt.id,
       user_id: P.state.user.id,
-      folder_id: prompt.folderId || null,
+      folder_id: validFolderId,
       title: prompt.title,
       text: prompt.text,
       description: prompt.description,
@@ -239,20 +317,29 @@ P.syncPromptToCloud = async function(prompt) {
       action: 'supabaseRequest', method: 'POST', path: 'prompts', body
     });
     if (res?.error) {
-      console.warn('⚠️ Sync error, queuing for retry:', prompt.title);
-      // If the server rejected it for a foreign key issue, retry without folder
-      if (typeof res.error === 'string' && res.error.includes('folder_id')) {
+      const errStr = typeof res.error === 'string' ? res.error : JSON.stringify(res.error);
+      
+      // FK violation on folder_id — retry without folder
+      if (errStr.includes('folder_id') || errStr.includes('foreign key') || errStr.includes('23503')) {
         body.folder_id = null;
         const retry = await P.supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'prompts', body });
         if (retry?.error) {
-          await P.enqueueOperation({ type: 'syncPrompt', data: { ...prompt } });
+          // Only queue if it's a transient error
+          if (!isPermanentError(retry.error)) {
+            await P.enqueueOperation({ type: 'syncPrompt', data: { ...prompt, folderId: null } });
+          } else {
+            console.warn('Permanent sync error, dropping:', errStr);
+          }
         }
-      } else {
+      } else if (!isPermanentError(errStr)) {
+        // Only queue transient errors (network timeouts, 5xx, etc.)
         await P.enqueueOperation({ type: 'syncPrompt', data: { ...prompt } });
+      } else {
+        console.warn('Permanent sync error, not queuing:', errStr);
       }
     }
   } catch (e) {
-    console.warn('❌ Sync failed, queuing:', e);
+    console.warn('Sync failed, queuing:', e);
     await P.enqueueOperation({ type: 'syncPrompt', data: { ...prompt } });
   }
 };
@@ -277,10 +364,13 @@ P.syncFolderToCloud = async function(folder) {
     return;
   }
   try {
-    await P.supabaseMsg({
+    const res = await P.supabaseMsg({
       action: 'supabaseRequest', method: 'POST', path: 'folders',
       body: { id: folder.id, user_id: P.state.user.id, name: folder.name, updated_at: new Date().toISOString() }
     });
+    if (res?.error && !isPermanentError(res.error)) {
+      await P.enqueueOperation({ type: 'syncFolder', data: { ...folder } });
+    }
   } catch (e) {
     await P.enqueueOperation({ type: 'syncFolder', data: { ...folder } });
   }
