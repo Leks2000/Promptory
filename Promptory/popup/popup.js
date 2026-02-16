@@ -49,7 +49,9 @@ const state = {
   userLikes: new Set(),
   userReports: new Set(),
   isPremium: false,
-  promptLimit: FREE_PROMPT_LIMIT
+  promptLimit: FREE_PROMPT_LIMIT,
+  isAdmin: false,
+  pendingReports: []
 };
 
 // ==================== UTILITIES ====================
@@ -1880,6 +1882,35 @@ function openSettings() {
             </div>
           </a>
         </div><div class="divider"></div>
+        ${state.isAdmin ? `
+        <div class="form-group"><label class="form-label">${t('adminModeration')} <span class="admin-badge">ADMIN</span></label>
+          <div id="moderation-panel-container"></div>
+        </div><div class="divider"></div>
+        ` : ''}
+        ${state.user ? `
+        <div class="form-group"><label class="form-label">${t('yourRights')}</label>
+          <div class="gdpr-rights">
+            <div class="gdpr-rights-list">
+              <div class="gdpr-right-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>${t('rightToAccess')}</span>
+              </div>
+              <div class="gdpr-right-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>${t('rightToExport')}</span>
+              </div>
+              <div class="gdpr-right-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>${t('rightToDelete')}</span>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-danger" id="request-deletion-btn" style="width:100%;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              ${t('requestDeletion')}
+            </button>
+          </div>
+        </div><div class="divider"></div>
+        ` : ''}
         <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v${CONFIG.VERSION}<br>${t('aboutDescription')}<div style="margin-top:8px;display:flex;gap:12px;"><a href="${chrome.runtime.getURL('privacy.html')}" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Privacy Policy</a><a href="${chrome.runtime.getURL('terms.html')}" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Terms of Service</a></div></div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-ghost close-modal-btn">${t('cancel')}</button><button class="btn btn-primary" id="settings-save-btn">${t('saveChanges')}</button></div>
@@ -1889,8 +1920,20 @@ function openSettings() {
   requestAnimationFrame(() => {
     modal.classList.add('visible');
     loadShortcutsDisplay(commandNames);
+    // Load moderation panel for admins
+    if (state.isAdmin) {
+      loadPendingReports().then(() => renderModerationPanel());
+    }
   });
   document.getElementById('open-shortcuts-link')?.addEventListener('click', (e) => { e.preventDefault(); chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }); });
+
+  // GDPR: Request account deletion
+  document.getElementById('request-deletion-btn')?.addEventListener('click', async () => {
+    if (!confirm(t('deleteAccountConfirm'))) return;
+    // Open Telegram to request deletion (manual process for now)
+    window.open('https://t.me/user_Alexander?text=' + encodeURIComponent(`Account Deletion Request\nEmail: ${state.user?.email || 'Unknown'}\nUser ID: ${state.user?.id || 'Unknown'}\n\nPlease delete all my data from Promptory.`), '_blank');
+    showToast(t('accountDeletionRequested'), 'success');
+  });
 
   document.getElementById('settings-signin-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('settings-signin-btn');
@@ -1923,6 +1966,7 @@ function openSettings() {
     state.settings.hotkeys = { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } };
     state.libraryPrompts = []; state.userLikes = new Set(); state.userReports = new Set();
     state.promptLimit = FREE_PROMPT_LIMIT;
+    state.isAdmin = false; state.pendingReports = [];
     // Persist the cleared state
     await saveData('prompts', []);
     await saveData('folders', []);
@@ -2124,18 +2168,186 @@ async function checkPremiumStatus() {
         await saveData('isPremium', state.isPremium);
         await saveData('promptLimit', state.promptLimit);
         console.log('✅ Premium status checked:', state.isPremium, 'Limit:', state.promptLimit);
-        return;
       }
     }
-    // Fallback: direct profile query
-    const res = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}&select=is_premium,prompt_limit` });
-    if (res?.data?.[0]) {
-      state.isPremium = res.data[0].is_premium || false;
-      state.promptLimit = res.data[0].prompt_limit || FREE_PROMPT_LIMIT;
-      await saveData('isPremium', state.isPremium);
-      await saveData('promptLimit', state.promptLimit);
+    // Fetch is_admin status separately (not in sync_user_on_login)
+    const profileRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}&select=is_admin` });
+    if (profileRes?.data?.[0]) {
+      state.isAdmin = profileRes.data[0].is_admin || false;
+      console.log('✅ Admin status:', state.isAdmin);
     }
   } catch (e) { /* silent */ }
+}
+
+// ==================== ADMIN MODERATION ====================
+async function loadPendingReports() {
+  if (!state.session || !state.user || !state.isAdmin) return;
+  try {
+    const res = await supabaseMsg({
+      action: 'supabaseRequest',
+      method: 'GET',
+      path: 'prompt_reports?status=eq.pending&select=id,prompt_id,user_id,reason,details,created_at,library_prompts(id,title,text,author,author_id,category,likes,is_approved)&order=created_at.desc&limit=50'
+    });
+    if (res?.data && Array.isArray(res.data)) {
+      state.pendingReports = res.data.filter(r => r.library_prompts); // Only reports with valid prompts
+      console.log('📋 Loaded', state.pendingReports.length, 'pending reports');
+    }
+  } catch (e) {
+    console.error('Failed to load reports:', e);
+  }
+}
+
+async function moderateReport(reportId, action, promptId) {
+  if (!state.session || !state.user || !state.isAdmin) {
+    showToast(t('notAdmin'), 'error');
+    return;
+  }
+  
+  try {
+    if (action === 'dismiss') {
+      // Mark report as dismissed
+      await supabaseMsg({
+        action: 'supabaseRequest',
+        method: 'PATCH',
+        path: `prompt_reports?id=eq.${reportId}`,
+        body: { status: 'dismissed', reviewed_at: new Date().toISOString(), reviewed_by: state.user.id }
+      });
+      showToast(t('reportDismissed'), 'success');
+    } else if (action === 'hide') {
+      // Hide prompt from library and mark report as actioned
+      await supabaseMsg({
+        action: 'supabaseRequest',
+        method: 'PATCH',
+        path: `library_prompts?id=eq.${promptId}`,
+        body: { is_approved: false }
+      });
+      await supabaseMsg({
+        action: 'supabaseRequest',
+        method: 'PATCH',
+        path: `prompt_reports?id=eq.${reportId}`,
+        body: { status: 'actioned', reviewed_at: new Date().toISOString(), reviewed_by: state.user.id }
+      });
+      showToast(t('promptHidden'), 'success');
+    } else if (action === 'delete') {
+      // Delete prompt from library and mark report as actioned
+      await supabaseMsg({
+        action: 'supabaseRequest',
+        method: 'DELETE',
+        path: `library_prompts?id=eq.${promptId}`
+      });
+      await supabaseMsg({
+        action: 'supabaseRequest',
+        method: 'PATCH',
+        path: `prompt_reports?prompt_id=eq.${promptId}`,
+        body: { status: 'actioned', reviewed_at: new Date().toISOString(), reviewed_by: state.user.id }
+      });
+      showToast(t('promptDeletedFromLibrary'), 'success');
+    } else if (action === 'approve') {
+      // Keep prompt visible and dismiss all reports for it
+      await supabaseMsg({
+        action: 'supabaseRequest',
+        method: 'PATCH',
+        path: `prompt_reports?prompt_id=eq.${promptId}`,
+        body: { status: 'dismissed', reviewed_at: new Date().toISOString(), reviewed_by: state.user.id }
+      });
+      showToast(t('reportDismissed'), 'success');
+    }
+    
+    // Refresh reports list
+    await loadPendingReports();
+    renderModerationPanel();
+    // Refresh library if we modified prompts
+    if (action === 'hide' || action === 'delete') {
+      loadLibraryPrompts();
+    }
+  } catch (e) {
+    console.error('Moderation action failed:', e);
+    showToast(t('failedToReport'), 'error');
+  }
+}
+
+function renderModerationPanel() {
+  const container = document.getElementById('moderation-panel-container');
+  if (!container) return;
+  
+  if (!state.isAdmin) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  const reports = state.pendingReports || [];
+  
+  container.innerHTML = `
+    <div class="moderation-panel">
+      <div class="moderation-header">
+        <div class="moderation-header-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          ${t('moderationPanel')}
+          ${reports.length > 0 ? `<span class="moderation-badge">${reports.length}</span>` : ''}
+        </div>
+        <button class="btn btn-sm btn-ghost" id="refresh-reports-btn" title="${t('refreshReports')}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+      </div>
+      <div class="moderation-list" id="moderation-list">
+        ${reports.length === 0 ? `
+          <div class="moderation-empty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <polyline points="9 12 11 14 15 10"/>
+            </svg>
+            <div>${t('noReportsFound')}</div>
+          </div>
+        ` : reports.map(r => {
+          const prompt = r.library_prompts;
+          return `
+            <div class="moderation-item" data-report-id="${r.id}" data-prompt-id="${r.prompt_id}">
+              <div class="moderation-prompt-title">${escapeHtml(truncate(prompt.title, 50))}</div>
+              <div class="moderation-prompt-text">${escapeHtml(truncate(prompt.text, 200))}</div>
+              <div class="moderation-report-info">
+                <span class="moderation-tag reason">${escapeHtml(r.reason)}</span>
+                <span class="moderation-tag author">${t('promptAuthor')}: ${escapeHtml(prompt.author || 'Unknown')}</span>
+                <span class="moderation-tag">${t('promptCategory')}: ${escapeHtml(prompt.category || 'general')}</span>
+                <span class="moderation-tag">${prompt.likes || 0} ${t('likes')}</span>
+              </div>
+              ${r.details ? `<div class="moderation-details">"${escapeHtml(truncate(r.details, 150))}"</div>` : ''}
+              <div class="moderation-actions">
+                <button class="btn btn-sm btn-approve" data-mod-action="approve" data-report-id="${r.id}" data-prompt-id="${r.prompt_id}">${t('approvePrompt')}</button>
+                <button class="btn btn-sm btn-secondary" data-mod-action="dismiss" data-report-id="${r.id}">${t('dismissReport')}</button>
+                <button class="btn btn-sm btn-hide" data-mod-action="hide" data-report-id="${r.id}" data-prompt-id="${r.prompt_id}">${t('hidePrompt')}</button>
+                <button class="btn btn-sm btn-delete" data-mod-action="delete" data-report-id="${r.id}" data-prompt-id="${r.prompt_id}">${t('deleteFromLibrary')}</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  
+  // Event listeners
+  document.getElementById('refresh-reports-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('refresh-reports-btn');
+    btn.classList.add('loading');
+    await loadPendingReports();
+    renderModerationPanel();
+    btn.classList.remove('loading');
+  });
+  
+  container.querySelectorAll('[data-mod-action]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const action = btn.dataset.modAction;
+      const reportId = btn.dataset.reportId;
+      const promptId = btn.dataset.promptId;
+      btn.classList.add('loading');
+      await moderateReport(reportId, action, promptId);
+      btn.classList.remove('loading');
+    });
+  });
 }
 
 // ==================== SEARCH (optimized) ====================
