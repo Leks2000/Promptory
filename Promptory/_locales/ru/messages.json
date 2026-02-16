@@ -299,5 +299,14 @@
   "rightToExport": { "message": "Право на экспорт ваших данных" },
   "requestDeletion": { "message": "Запросить удаление аккаунта" },
   "deleteAccountConfirm": { "message": "Это навсегда удалит ваш аккаунт и все связанные данные с наших серверов. Это действие нельзя отменить. Продолжить?" },
-  "accountDeletionRequested": { "message": "Запрос на удаление отправлен. Ваши данные будут удалены в течение 30 дней." }
+  "accountDeletionRequested": { "message": "Запрос на удаление отправлен. Ваши данные будут удалены в течение 30 дней." },
+
+  "subscriptionExpired": { "message": "Ваша Pro подписка истекла. Вы на бесплатном плане." },
+  "subscriptionActive": { "message": "Pro подписка активна" },
+  "movedToFolder": { "message": "Перемещено в $1", "placeholders": { "1": { "content": "$1" } } },
+  "dragToMove": { "message": "Перетащите для перемещения между папками" },
+  "imageCompressed": { "message": "Изображение сжато для загрузки" },
+  "morePrompts": { "message": "Ещё $1 промптов...", "placeholders": { "1": { "content": "$1" } } },
+  "rateLimited": { "message": "Слишком много запросов. Подождите немного." },
+  "dataVersionMigrated": { "message": "Данные обновлены до последней версии" }
 }

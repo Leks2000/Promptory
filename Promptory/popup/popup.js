@@ -315,9 +315,52 @@ function renderLimitBanner() {
 }
 
 // ==================== DATA LOADING ====================
+// Data version migration system
+const DATA_VERSION = 2; // Increment when schema changes
+
+async function migrateData(currentVersion) {
+  if (currentVersion < 1) {
+    // v0 -> v1: Ensure all prompts have required fields
+    const { prompts } = await new Promise(r => chrome.storage.local.get(['prompts'], r));
+    if (prompts && Array.isArray(prompts)) {
+      let changed = false;
+      prompts.forEach(p => {
+        if (!p.imageUrl && p.imageUrl !== null) { p.imageUrl = null; changed = true; }
+        if (!p.variables) { p.variables = []; changed = true; }
+        if (!p.tags) { p.tags = []; changed = true; }
+        if (p.useCount === undefined) { p.useCount = 0; changed = true; }
+      });
+      if (changed) await new Promise(r => chrome.storage.local.set({ prompts }, r));
+    }
+  }
+  if (currentVersion < 2) {
+    // v1 -> v2: Add platform field to old prompts, ensure createdAt/updatedAt
+    const { prompts } = await new Promise(r => chrome.storage.local.get(['prompts'], r));
+    if (prompts && Array.isArray(prompts)) {
+      let changed = false;
+      const now = Date.now();
+      prompts.forEach(p => {
+        if (!p.platform) { p.platform = 'universal'; changed = true; }
+        if (!p.createdAt) { p.createdAt = now; changed = true; }
+        if (!p.updatedAt) { p.updatedAt = now; changed = true; }
+      });
+      if (changed) await new Promise(r => chrome.storage.local.set({ prompts }, r));
+    }
+  }
+  // Save current version
+  await new Promise(r => chrome.storage.local.set({ dataVersion: DATA_VERSION }, r));
+  console.log(`📦 Data migrated to version ${DATA_VERSION}`);
+}
+
 async function loadData() {
   return new Promise(resolve => {
-    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit', 'language', 'libraryPromptsCache'], result => {
+    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit', 'language', 'libraryPromptsCache', 'dataVersion'], async (result) => {
+      // Run data migrations if needed
+      const storedVersion = result.dataVersion || 0;
+      if (storedVersion < DATA_VERSION) {
+        await migrateData(storedVersion);
+      }
+      
       if (result.prompts) state.prompts = result.prompts;
       if (result.folders) state.folders = result.folders;
       if (result.settings) state.settings = { ...state.settings, ...result.settings };
@@ -373,6 +416,82 @@ async function trackUsage(prompt, action = 'insert', platform = null) {
   } catch (e) { /* silent */ }
 }
 
+// ==================== VIRTUAL SCROLLING (200+ prompts) ====================
+// Lazy-render prompts using IntersectionObserver to avoid DOM overload
+const VIRTUAL_SCROLL_THRESHOLD = 50; // Only virtualize if more than 50 prompts in a folder
+const VIRTUAL_BATCH_SIZE = 20; // Render 20 at a time
+
+class VirtualFolderRenderer {
+  constructor(container, prompts, renderFn) {
+    this.container = container;
+    this.allPrompts = prompts;
+    this.renderFn = renderFn;
+    this.rendered = 0;
+    this.observer = null;
+  }
+
+  init() {
+    if (this.allPrompts.length <= VIRTUAL_SCROLL_THRESHOLD) {
+      // Small list — render all at once
+      this.container.innerHTML = this.allPrompts.map((p, i) => this.renderFn(p, i)).join('');
+      return;
+    }
+
+    // Large list — render first batch + sentinel
+    this.rendered = Math.min(VIRTUAL_BATCH_SIZE, this.allPrompts.length);
+    let html = this.allPrompts.slice(0, this.rendered).map((p, i) => this.renderFn(p, i)).join('');
+    
+    if (this.rendered < this.allPrompts.length) {
+      html += `<div class="virtual-scroll-sentinel" data-remaining="${this.allPrompts.length - this.rendered}">
+        <div class="virtual-scroll-hint">${this.allPrompts.length - this.rendered} more prompts...</div>
+      </div>`;
+    }
+    this.container.innerHTML = html;
+    
+    // Observe sentinel for lazy loading
+    const sentinel = this.container.querySelector('.virtual-scroll-sentinel');
+    if (sentinel) {
+      this.observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) this.loadMore();
+      }, { rootMargin: '100px' });
+      this.observer.observe(sentinel);
+    }
+  }
+
+  loadMore() {
+    if (this.rendered >= this.allPrompts.length) return;
+    
+    const nextBatch = this.allPrompts.slice(this.rendered, this.rendered + VIRTUAL_BATCH_SIZE);
+    const frag = document.createDocumentFragment();
+    const temp = document.createElement('div');
+    temp.innerHTML = nextBatch.map((p, i) => this.renderFn(p, this.rendered + i)).join('');
+    while (temp.firstChild) frag.appendChild(temp.firstChild);
+    
+    this.rendered += nextBatch.length;
+    
+    // Remove old sentinel
+    const oldSentinel = this.container.querySelector('.virtual-scroll-sentinel');
+    if (oldSentinel) {
+      this.container.insertBefore(frag, oldSentinel);
+      if (this.rendered >= this.allPrompts.length) {
+        if (this.observer) this.observer.disconnect();
+        oldSentinel.remove();
+      } else {
+        oldSentinel.dataset.remaining = String(this.allPrompts.length - this.rendered);
+        oldSentinel.querySelector('.virtual-scroll-hint').textContent = 
+          `${this.allPrompts.length - this.rendered} more prompts...`;
+      }
+    }
+  }
+
+  destroy() {
+    if (this.observer) this.observer.disconnect();
+  }
+}
+
+// Track active virtual renderers for cleanup
+let _activeVirtualRenderers = [];
+
 // ==================== PROMPTS (optimized with batched rendering) ====================
 let _renderPromptsRAF = null;
 function renderPrompts() {
@@ -384,6 +503,11 @@ function _renderPromptsImmediate() {
   _renderPromptsRAF = null;
   const list = document.getElementById('prompts-list');
   if (!list) return;
+  
+  // Cleanup previous virtual renderers
+  _activeVirtualRenderers.forEach(vr => vr.destroy());
+  _activeVirtualRenderers = [];
+  
   const prompts = state.prompts;
   const folders = state.folders;
 
@@ -422,17 +546,28 @@ function buildFolderSection(folder, prompts) {
   const section = document.createElement('div');
   section.className = `folder-section ${expanded ? 'expanded' : ''}`;
   section.dataset.folderId = fId;
-  section.innerHTML = `
+  
+  const headerHtml = `
     <div class="folder-header" data-toggle-folder="${fId}">
       <div class="folder-info">
         <span class="folder-arrow"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></span>
         <span class="folder-name">${escapeHtml(folder.name)}</span>
       </div>
       <span class="folder-count">${prompts.length}</span>
-    </div>
-    <div class="folder-content">
-      ${prompts.map((p, i) => renderPromptCard(p, i)).join('')}
     </div>`;
+  
+  section.innerHTML = headerHtml + '<div class="folder-content"></div>';
+  
+  // Use virtual scrolling for large folders
+  const contentEl = section.querySelector('.folder-content');
+  if (expanded && prompts.length > 0) {
+    const vr = new VirtualFolderRenderer(contentEl, prompts, renderPromptCard);
+    vr.init();
+    _activeVirtualRenderers.push(vr);
+  } else if (prompts.length > 0) {
+    contentEl.innerHTML = prompts.map((p, i) => renderPromptCard(p, i)).join('');
+  }
+  
   return section;
 }
 
@@ -442,21 +577,22 @@ function renderPromptCard(prompt, idx) {
     ? `<div class="tags">${prompt.tags.slice(0, 3).map(tg => `<span class="tag">#${escapeHtml(tg)}</span>`).join('')}${prompt.tags.length > 3 ? `<span class="tag">+${prompt.tags.length - 3}</span>` : ''}</div>`
     : '';
   // Card click = copy. Actions: fav, edit, insert, menu. Added glare-card for premium hover effect
+  // Keyboard: tabindex + role for accessibility; draggable for drag-and-drop
   return `
-    <div class="prompt-card glare-card" data-prompt-id="${prompt.id}" ${delay} title="${t('clickToCopy') || 'Click to copy'}">
+    <div class="prompt-card glare-card" data-prompt-id="${prompt.id}" ${delay} title="${t('clickToCopy') || 'Click to copy'}" tabindex="0" role="button" aria-label="${escapeHtml(prompt.title)} - ${t('clickToCopy')}" draggable="true">
       <div class="prompt-card-header">
         <div class="prompt-title">${escapeHtml(truncate(prompt.title, 60))}</div>
         <div class="prompt-actions">
-          <button class="prompt-action-btn ${prompt.isFavorite ? 'active' : ''}" data-action="toggle-fav" data-id="${prompt.id}" title="${prompt.isFavorite ? t('removeFromFavorites') : t('addToFavorites')}">
+          <button class="prompt-action-btn ${prompt.isFavorite ? 'active' : ''}" data-action="toggle-fav" data-id="${prompt.id}" title="${prompt.isFavorite ? t('removeFromFavorites') : t('addToFavorites')}" aria-label="${prompt.isFavorite ? t('removeFromFavorites') : t('addToFavorites')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="${prompt.isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
           </button>
-          <button class="prompt-action-btn" data-action="edit" data-id="${prompt.id}" title="${t('edit')}">
+          <button class="prompt-action-btn" data-action="edit" data-id="${prompt.id}" title="${t('edit')}" aria-label="${t('edit')} ${escapeHtml(prompt.title)}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="prompt-action-btn" data-action="insert" data-id="${prompt.id}" title="${t('insertToPage')}">
+          <button class="prompt-action-btn" data-action="insert" data-id="${prompt.id}" title="${t('insertToPage')}" aria-label="${t('insertToPage')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
           </button>
-          <button class="prompt-action-btn" data-action="menu" data-id="${prompt.id}" title="${t('more')}">
+          <button class="prompt-action-btn" data-action="menu" data-id="${prompt.id}" title="${t('more')}" aria-label="${t('more')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
           </button>
         </div>
@@ -469,6 +605,83 @@ function renderPromptCard(prompt, idx) {
 function attachPromptCardListeners() {
   // Use event delegation on the list instead of individual listeners
   const list = document.getElementById('prompts-list');
+  
+  // Keyboard: Enter to copy prompt
+  list.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      const card = e.target.closest('.prompt-card');
+      if (card && !e.target.closest('.prompt-action-btn')) {
+        e.preventDefault();
+        copyPrompt(card.dataset.promptId);
+      }
+    }
+  };
+  
+  // Drag-and-drop: prompts between folders
+  list.addEventListener('dragstart', (e) => {
+    const card = e.target.closest('.prompt-card');
+    if (!card) return;
+    card.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', card.dataset.promptId);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  
+  list.addEventListener('dragend', (e) => {
+    const card = e.target.closest('.prompt-card');
+    if (card) card.classList.remove('dragging');
+    // Remove all drag-over highlights
+    document.querySelectorAll('.folder-section.drag-over').forEach(s => s.classList.remove('drag-over'));
+  });
+  
+  list.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const folderSection = e.target.closest('.folder-section');
+    // Clear all and highlight current
+    document.querySelectorAll('.folder-section.drag-over').forEach(s => s.classList.remove('drag-over'));
+    if (folderSection) folderSection.classList.add('drag-over');
+  });
+  
+  list.addEventListener('dragleave', (e) => {
+    const folderSection = e.target.closest('.folder-section');
+    if (folderSection && !folderSection.contains(e.relatedTarget)) {
+      folderSection.classList.remove('drag-over');
+    }
+  });
+  
+  list.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.folder-section.drag-over').forEach(s => s.classList.remove('drag-over'));
+    
+    const promptId = e.dataTransfer.getData('text/plain');
+    if (!promptId) return;
+    
+    const folderSection = e.target.closest('.folder-section');
+    if (!folderSection) return;
+    
+    const targetFolderId = folderSection.dataset.folderId;
+    const newFolderId = targetFolderId === 'uncategorized' ? null : targetFolderId;
+    
+    const prompt = state.prompts.find(p => p.id === promptId);
+    if (!prompt) return;
+    
+    // Don't move if already in this folder
+    if ((prompt.folderId || null) === newFolderId) return;
+    
+    prompt.folderId = newFolderId;
+    prompt.updatedAt = Date.now();
+    _suppressStorageRender = true;
+    await saveData('prompts', state.prompts);
+    _suppressStorageRender = false;
+    
+    const folderName = newFolderId 
+      ? (state.folders.find(f => f.id === newFolderId)?.name || t('uncategorized'))
+      : t('uncategorized');
+    showToast(`Moved to ${folderName}`, 'success');
+    renderPrompts();
+    syncPromptToSupabase(prompt);
+  });
+  
   list.onclick = async (e) => {
     // Folder toggle
     const folderHeader = e.target.closest('[data-toggle-folder]');
@@ -1031,13 +1244,15 @@ function handleImageSelect(file) {
     showToast(t('imageTooLarge') || 'Image too large (max 2MB)', 'error');
     return;
   }
-  pendingImageFile = file;
-  const reader = new FileReader();
-  reader.onload = (e) => {
+  
+  // Auto-compress images larger than 500KB
+  const needsCompression = file.size > 500 * 1024;
+  
+  const processImage = (dataUrl) => {
     const preview = document.getElementById('pe-image-preview');
     const zone = document.getElementById('pe-image-zone');
     preview.innerHTML = `
-      <img src="${e.target.result}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.style.display='none';">
+      <img src="${dataUrl}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.style.display='none';">
       <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     `;
     preview.style.display = 'block';
@@ -1052,7 +1267,53 @@ function handleImageSelect(file) {
       zone.style.display = 'flex';
     });
   };
-  reader.readAsDataURL(file);
+  
+  if (needsCompression) {
+    // Compress using canvas
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Scale down if very large
+        let w = img.width, h = img.height;
+        const maxDim = 1200;
+        if (w > maxDim || h > maxDim) {
+          const ratio = Math.min(maxDim / w, maxDim / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        // Try quality levels until under 500KB
+        let quality = 0.8;
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+        while (dataUrl.length > 500 * 1024 * 1.37 && quality > 0.3) { // 1.37 = base64 overhead
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+        // Create compressed file blob for upload
+        canvas.toBlob((blob) => {
+          if (blob) {
+            pendingImageFile = new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' });
+            console.log(`📸 Image compressed: ${(file.size/1024).toFixed(0)}KB → ${(blob.size/1024).toFixed(0)}KB (q=${quality.toFixed(1)})`);
+          } else {
+            pendingImageFile = file;
+          }
+          processImage(dataUrl);
+        }, 'image/jpeg', quality);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    pendingImageFile = file;
+    const reader = new FileReader();
+    reader.onload = (e) => processImage(e.target.result);
+    reader.readAsDataURL(file);
+  }
 }
 
 function updateVarsDisplay() {
