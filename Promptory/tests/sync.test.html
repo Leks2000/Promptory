@@ -243,6 +243,40 @@
       assertEqual(prompts[0].imageUrl, null);
     });
 
+    test('Offline queue deduplication replaces older operations', () => {
+      // Simulate offline queue deduplication logic from offline.js
+      let queue = [];
+      function enqueue(operation) {
+        operation.timestamp = Date.now();
+        operation.id = 'op_' + Math.random().toString(36).slice(2);
+        const existingIdx = queue.findIndex(op =>
+          op.type === operation.type && op.data?.id === operation.data?.id
+        );
+        if (existingIdx >= 0) {
+          queue[existingIdx] = operation;
+        } else {
+          queue.push(operation);
+        }
+      }
+
+      // Add first sync for prompt 'p1'
+      enqueue({ type: 'syncPrompt', data: { id: 'p1', title: 'Version 1' } });
+      assertEqual(queue.length, 1, 'Should have 1 operation');
+
+      // Add second sync for same prompt — should replace, not add
+      enqueue({ type: 'syncPrompt', data: { id: 'p1', title: 'Version 2' } });
+      assertEqual(queue.length, 1, 'Should still have 1 operation (deduplicated)');
+      assertEqual(queue[0].data.title, 'Version 2', 'Should have the newer version');
+
+      // Add sync for different prompt — should add new entry
+      enqueue({ type: 'syncPrompt', data: { id: 'p2', title: 'Other' } });
+      assertEqual(queue.length, 2, 'Should have 2 operations for different prompts');
+
+      // Add a delete for p1 — different type, so should be separate
+      enqueue({ type: 'deletePrompt', data: { id: 'p1' } });
+      assertEqual(queue.length, 3, 'Delete is a different type, should be separate');
+    });
+
     // ==================== RENDER RESULTS ====================
     const container = document.getElementById('results');
     let passCount = 0, failCount = 0;

@@ -395,12 +395,29 @@ function applyTheme(theme) {
 function initTabs() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
       const target = document.getElementById(`${btn.dataset.tab}-tab`);
       if (target) target.classList.add('active');
       if (btn.dataset.tab === 'stats') renderStats();
+    });
+    // Keyboard: Arrow Left/Right to navigate between tabs
+    btn.addEventListener('keydown', (e) => {
+      const tabs = Array.from(document.querySelectorAll('.tab-btn'));
+      const idx = tabs.indexOf(btn);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const nextIdx = e.key === 'ArrowRight' 
+          ? (idx + 1) % tabs.length 
+          : (idx - 1 + tabs.length) % tabs.length;
+        tabs[nextIdx].focus();
+        tabs[nextIdx].click();
+      }
     });
   });
 }
@@ -548,12 +565,12 @@ function buildFolderSection(folder, prompts) {
   section.dataset.folderId = fId;
   
   const headerHtml = `
-    <div class="folder-header" data-toggle-folder="${fId}">
+    <div class="folder-header" data-toggle-folder="${fId}" role="button" tabindex="0" aria-expanded="${expanded}" aria-label="${escapeHtml(folder.name)} folder, ${prompts.length} prompts">
       <div class="folder-info">
-        <span class="folder-arrow"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></span>
+        <span class="folder-arrow" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></span>
         <span class="folder-name">${escapeHtml(folder.name)}</span>
       </div>
-      <span class="folder-count">${prompts.length}</span>
+      <span class="folder-count" aria-label="${prompts.length} prompts">${prompts.length}</span>
     </div>`;
   
   section.innerHTML = headerHtml + '<div class="folder-content"></div>';
@@ -609,6 +626,13 @@ function attachPromptCardListeners() {
   // Keyboard: Enter to copy prompt
   list.onkeydown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
+      // Folder header toggle via keyboard
+      const folderHeader = e.target.closest('[data-toggle-folder]');
+      if (folderHeader) {
+        e.preventDefault();
+        folderHeader.click();
+        return;
+      }
       const card = e.target.closest('.prompt-card');
       if (card && !e.target.closest('.prompt-action-btn')) {
         e.preventDefault();
@@ -691,6 +715,7 @@ function attachPromptCardListeners() {
       if (section) {
         const expanded = section.classList.toggle('expanded');
         localStorage.setItem(`pv-folder-${fId}`, expanded);
+        folderHeader.setAttribute('aria-expanded', String(expanded));
       }
       return;
     }
@@ -2220,24 +2245,60 @@ function openSettings() {
   });
   document.getElementById('settings-signout-btn')?.addEventListener('click', async () => {
     if (!confirm(t('signOutConfirm'))) return;
-    await new Promise(resolve => chrome.runtime.sendMessage({ action: 'signOut' }, resolve));
-    // Clear all user data locally so next login starts fresh
-    state.user = null; state.session = null; state.isPremium = false;
-    state.prompts = []; state.folders = [];
+    const btn = document.getElementById('settings-signout-btn');
+    if (btn) btn.classList.add('loading');
+    
+    try {
+      // Send sign-out to background (handles Supabase logout + token clearing)
+      const result = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'signOut' }, (response) => {
+          resolve(response || { success: true });
+        });
+      });
+      console.log('Sign-out result:', result);
+    } catch (e) {
+      console.warn('Sign-out message error (non-critical):', e);
+    }
+    
+    // Clear all in-memory state regardless of background result
+    state.user = null; 
+    state.session = null; 
+    state.isPremium = false;
+    state.prompts = []; 
+    state.folders = [];
     state.settings.hotkeys = { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } };
-    state.libraryPrompts = []; state.userLikes = new Set(); state.userReports = new Set();
+    state.libraryPrompts = []; 
+    state.userLikes = new Set(); 
+    state.userReports = new Set();
     state.promptLimit = FREE_PROMPT_LIMIT;
-    state.isAdmin = false; state.pendingReports = [];
-    // Persist the cleared state
+    state.isAdmin = false; 
+    state.pendingReports = [];
+    state.searchOriginalPrompts = null;
+    
+    // Persist the cleared state (background already did this, but be safe)
+    _suppressStorageRender = true;
     await saveData('prompts', []);
     await saveData('folders', []);
     await saveData('settings', state.settings);
     await saveData('isPremium', false);
     await saveData('promptLimit', FREE_PROMPT_LIMIT);
     await saveData('libraryPromptsCache', []);
+    await saveData('user', null);
+    await saveData('session', null);
+    _suppressStorageRender = false;
+    
+    if (btn) btn.classList.remove('loading');
     showToast(t('signedOutSuccess'), 'success');
     closeModal('settings-modal');
-    renderPrompts(); renderFolders(); renderFavorites(); renderExplore();
+    
+    // Re-render all UI sections
+    requestAnimationFrame(() => {
+      renderPrompts(); 
+      renderFolders(); 
+      renderFavorites(); 
+      renderExplore();
+      renderLimitBanner();
+    });
   });
   document.getElementById('settings-export-btn').addEventListener('click', () => {
     const data = { prompts: state.prompts, folders: state.folders, settings: state.settings, exportDate: new Date().toISOString() };
