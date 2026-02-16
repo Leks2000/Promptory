@@ -1823,21 +1823,29 @@ function openSettings() {
         </div></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('theme')}</label><select id="settings-theme"><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>${t('themeDark')}</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>${t('themeLight')}</option><option value="system" ${s.theme === 'system' ? 'selected' : ''}>${t('themeSystem')}</option></select></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;"><button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button></div></div><div class="divider"></div>
-        ${CONFIG.LEMONSQUEEZY_CHECKOUT_URL ? `<div class="form-group"><label class="form-label">${t('getPro') || 'Get Pro'}</label>
-          <div class="pro-upgrade-card" style="padding:16px;background:linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(168,85,247,0.1) 100%);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-lg);">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-              <div style="font-size:28px;">✨</div>
-              <div>
-                <div style="font-weight:600;font-size:var(--font-size-sm);color:var(--text-primary);">${t('unlockPremium') || 'Unlock Premium'}</div>
-                <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);">${t('premiumSubtitle') || 'Unlimited prompts, priority sync, pro features'}</div>
+        <div class="form-group"><label class="form-label">${t('proSubscription')}</label>
+          <div class="pro-settings-card">
+            <div class="pro-settings-header">
+              <div class="pro-settings-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </div>
+              <div class="pro-settings-info">
+                <div class="pro-settings-title">${state.isPremium ? t('premiumActive') : t('proSubscription')}</div>
+                <div class="pro-settings-subtitle">${state.isPremium ? t('premiumActiveDesc') : t('proSubtitleShort')}</div>
+              </div>
+              ${state.isPremium ? '<span class="pro-badge-active">PRO</span>' : ''}
             </div>
-            <button class="btn btn-primary ripple" id="settings-upgrade-btn" style="width:100%;justify-content:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-              ${state.isPremium ? (t('manageSubscription') || 'Manage Subscription') : (t('upgradeToPro') || 'Upgrade to Pro')}
+            ${!state.isPremium ? `<div class="pro-settings-features">
+              <div class="pro-feature-mini"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature1')}</span></div>
+              <div class="pro-feature-mini"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature2')}</span></div>
+              <div class="pro-feature-mini"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature3')}</span></div>
+            </div>` : ''}
+            <button class="btn ${state.isPremium ? 'btn-secondary' : 'btn-primary'} ripple" id="settings-upgrade-btn" style="width:100%;justify-content:center;gap:6px;margin-top:12px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${state.isPremium ? '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>' : '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'}</svg>
+              ${state.isPremium ? t('manageSubscription') : t('upgradeToPro')}
             </button>
           </div>
-        </div><div class="divider"></div>` : ''}
+        </div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('community') || 'Community & Links'}</label>
           <div style="display:flex;flex-direction:column;gap:8px;">
             <a href="https://t.me/user_Alexander" target="_blank" class="settings-link telegram-link">
@@ -2173,34 +2181,42 @@ function showUpgradeModal() {
     <div class="modal" style="max-width:420px;">
       <div class="modal-header"><h2 class="modal-title">${t('upgradeToPremium')}</h2><button class="btn btn-icon btn-ghost close-modal-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
-        <div class="upgrade-hero">
-          <div class="upgrade-icon">✨</div>
-          <div class="upgrade-title">${t('unlockPremium')}</div>
+        <div class="upgrade-hero-compact">
+          <div class="upgrade-star-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <div class="upgrade-hero-text">
+            <div class="upgrade-hero-title">${t('unlockPremium')}</div>
+            <div class="upgrade-hero-subtitle">${t('proSubtitleShort')}</div>
+          </div>
         </div>
-        <div class="upgrade-features">
-          <div class="upgrade-feature"><span class="upgrade-feature-icon">♾️</span><span>${t('premiumFeature1')}</span></div>
-          <div class="upgrade-feature"><span class="upgrade-feature-icon">☁️</span><span>${t('premiumFeature2')}</span></div>
-          <div class="upgrade-feature"><span class="upgrade-feature-icon">⭐</span><span>${t('premiumFeature3')}</span></div>
-          <div class="upgrade-feature"><span class="upgrade-feature-icon">🚀</span><span>${t('premiumFeature4')}</span></div>
+        <div class="upgrade-features-list">
+          <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature1')}</span></div>
+          <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature2')}</span></div>
+          <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature3')}</span></div>
+          <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature4')}</span></div>
         </div>
         ${hasCheckoutUrl ? `
-        <button class="btn btn-primary btn-lg ripple upgrade-buy-btn" id="upgrade-buy-btn" style="width:100%;margin-top:16px;padding:14px;font-size:var(--font-size-md);justify-content:center;gap:8px;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-          ${t('getPro') || 'Get Pro'}
-        </button>` : ''}
-        <div class="upgrade-note" style="padding:12px;background:var(--bg-tertiary);border-radius:var(--radius-md);margin-top:16px;">
-          <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6;">${t('premiumNote')}</div>
-        </div>
-        ${state.isPremium ? '' : `
-        <div style="text-align:center;margin-top:12px;">
-          <button class="btn btn-ghost btn-sm" id="upgrade-contact-btn" style="font-size:var(--font-size-xs);color:var(--text-tertiary);">
-            ${t('contactForPremium') || 'Questions? Contact us'}
+        <button class="btn btn-primary btn-lg ripple upgrade-cta-btn" id="upgrade-buy-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          ${t('upgradeToPro')}
+        </button>` : `
+        <div class="upgrade-early-access">
+          <div class="upgrade-ea-badge">${t('earlyAccess')}</div>
+          <div class="upgrade-ea-text">${t('premiumNote')}</div>
+          <button class="btn btn-primary ripple" id="upgrade-contact-btn" style="width:100%;justify-content:center;gap:6px;margin-top:12px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.198 2.433a2.242 2.242 0 0 0-1.022.215l-16.5 7.5a2.25 2.25 0 0 0 .126 4.133l3.978 1.326 1.518 4.854a1.5 1.5 0 0 0 2.565.535l2.012-2.324 3.845 2.884a2.25 2.25 0 0 0 3.503-1.193l3.75-16.5a2.25 2.25 0 0 0-2.775-2.43z"/></svg>
+            ${t('contactForPremium')}
           </button>
         </div>`}
+        ${state.isPremium && CONFIG.LEMONSQUEEZY_CUSTOMER_PORTAL ? `
+        <button class="btn btn-secondary ripple" id="upgrade-manage-btn" style="width:100%;justify-content:center;gap:6px;margin-top:8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          ${t('manageSubscription')}
+        </button>` : ''}
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost close-modal-btn">${t('cancel')}</button>
-        ${state.isPremium && CONFIG.LEMONSQUEEZY_CUSTOMER_PORTAL ? `<button class="btn btn-secondary" id="upgrade-manage-btn">${t('manageSubscription') || 'Manage Subscription'}</button>` : ''}
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -2225,7 +2241,7 @@ function showUpgradeModal() {
     window.open(CONFIG.LEMONSQUEEZY_CUSTOMER_PORTAL, '_blank');
   });
   
-  // Fallback contact
+  // Contact for premium (early access)
   document.getElementById('upgrade-contact-btn')?.addEventListener('click', () => {
     window.open('https://t.me/user_Alexander', '_blank');
     closeModal('upgrade-modal');
@@ -2521,6 +2537,7 @@ function updateStaticTexts() {
 let _initRenderDone = false; // Guard against duplicate renders during init
 
 async function init() {
+  try {
   // Load i18n locales first
   await loadLocale('en');
   await loadLocale('ru');
@@ -2616,6 +2633,26 @@ async function init() {
     // Check premium status (uses sync_user_on_login which was already called in syncAllData)
     // Only do a lightweight check here — don't call sync_user_on_login again
     renderLimitBanner();
+  }
+
+  } catch (err) {
+    // Global error boundary — show fallback UI instead of blank popup
+    console.error('❌ Promptory init error:', err);
+    const mainApp = document.getElementById('main-app');
+    const welcomeScreen = document.getElementById('welcome-screen');
+    if (welcomeScreen) welcomeScreen.style.display = 'none';
+    if (mainApp) {
+      mainApp.style.display = 'flex';
+      mainApp.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;height:100%;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.5" style="margin-bottom:16px;opacity:0.5;">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div style="font-size:var(--font-size-lg);font-weight:var(--font-weight-semibold);color:var(--text-primary);margin-bottom:8px;">Something went wrong</div>
+          <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:20px;line-height:1.6;">Promptory encountered an error during startup.<br>Try closing and reopening the popup.</div>
+          <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);background:var(--bg-secondary);padding:8px 12px;border-radius:var(--radius-md);max-width:100%;overflow:hidden;text-overflow:ellipsis;word-break:break-all;">${typeof err === 'object' ? (err.message || String(err)) : String(err)}</div>
+        </div>`;
+    }
   }
 }
 

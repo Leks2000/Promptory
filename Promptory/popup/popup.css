@@ -853,41 +853,184 @@ body {
 
 
 /* ========== UPGRADE MODAL ========== */
-.upgrade-hero { text-align: center; padding: var(--space-5) 0; }
-.upgrade-icon { font-size: 48px; margin-bottom: var(--space-3); }
-
-.upgrade-title {
-  font-size: var(--font-size-lg); 
-  font-weight: var(--font-weight-semibold); 
-  color: var(--text-primary);
-}
-
-.upgrade-features {
-  display: flex; 
-  flex-direction: column; 
-  gap: var(--space-3); 
-  margin-top: var(--space-4);
-}
-
-.upgrade-feature {
-  display: flex; 
-  align-items: center; 
-  gap: var(--space-3);
-  padding: 10px 14px; 
+.upgrade-hero-compact {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border); 
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+}
+
+.upgrade-star-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-gradient);
   border-radius: var(--radius-md);
-  font-size: var(--font-size-sm); 
+  color: white;
+}
+
+.upgrade-hero-text { flex: 1; }
+
+.upgrade-hero-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.upgrade-hero-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.upgrade-features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.upgrade-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   transition: all var(--transition-fast);
 }
 
-.upgrade-feature:hover {
+.upgrade-feature-item:hover {
   border-color: rgba(var(--accent-rgb), 0.2);
   background: var(--bg-hover);
 }
 
-.upgrade-feature-icon { font-size: 18px; flex-shrink: 0; }
+.upgrade-feature-item svg { flex-shrink: 0; }
+
+.upgrade-cta-btn {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  font-size: var(--font-size-md);
+}
+
+.upgrade-early-access {
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
+  border-radius: var(--radius-lg);
+}
+
+.upgrade-ea-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-full);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.upgrade-ea-text {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+
+/* ========== PRO SETTINGS CARD ========== */
+.pro-settings-card {
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
+}
+
+.pro-settings-card:hover {
+  border-color: rgba(var(--accent-rgb), 0.25);
+}
+
+.pro-settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pro-settings-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-gradient);
+  border-radius: var(--radius-md);
+  color: white;
+}
+
+.pro-settings-info { flex: 1; }
+
+.pro-settings-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.pro-settings-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.pro-badge-active {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  background: var(--accent-gradient);
+  color: white;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  border-radius: var(--radius-full);
+  letter-spacing: 0.5px;
+}
+
+.pro-settings-features {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.pro-feature-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.pro-feature-mini svg {
+  color: var(--success);
+  flex-shrink: 0;
+}
 
 
 /* ========== HOTKEY REBIND ========== */
