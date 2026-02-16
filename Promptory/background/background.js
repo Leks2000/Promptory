@@ -626,30 +626,93 @@ async function fetchUserInfo(accessToken) {
 async function handleSignOut() {
   try {
     const { session } = await chrome.storage.local.get(['session']);
+    
+    // 1. Revoke Supabase session server-side
     if (session?.access_token) {
-      await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': SUPABASE_ANON_KEY
-        }
-      }).catch(() => {});
+      try {
+        await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': SUPABASE_ANON_KEY
+          }
+        });
+      } catch (e) {
+        console.warn('Supabase logout request failed (non-critical):', e.message);
+      }
     }
-    // Clear session, user, AND all user data (prompts, folders) so next login starts clean
+    
+    // 2. Clear cached Google auth tokens so next sign-in shows account picker
+    try {
+      if (chrome.identity && chrome.identity.clearAllCachedAuthTokens) {
+        await chrome.identity.clearAllCachedAuthTokens();
+        console.log('✅ Cleared cached auth tokens');
+      }
+    } catch (e) {
+      console.warn('clearAllCachedAuthTokens failed (non-critical):', e.message);
+    }
+    
+    // 3. Also try to remove the cached launchWebAuthFlow session
+    // by launching a non-interactive flow to Google's logout endpoint
+    try {
+      const logoutUrl = 'https://accounts.google.com/logout';
+      await chrome.identity.launchWebAuthFlow({
+        url: logoutUrl,
+        interactive: false
+      }).catch(() => {});
+    } catch (e) {
+      // Expected to fail — non-interactive logout is best-effort
+    }
+    
+    // 4. Clear ALL user data from storage
     await chrome.storage.local.set({ 
-      session: null, user: null, isPremium: false, promptLimit: 20,
-      prompts: [], folders: [],
+      session: null, 
+      user: null, 
+      isPremium: false, 
+      promptLimit: 20,
+      prompts: [], 
+      folders: [],
+      settings: {
+        theme: 'dark',
+        hotkeys: {
+          slot1: { promptId: null },
+          slot2: { promptId: null },
+          slot3: { promptId: null }
+        },
+        defaultFolder: null
+      },
       libraryPromptsCache: [],
-      offlineQueue: []
+      offlineQueue: [],
+      sessionExpired: false
     });
+    
+    // 5. Cancel any pending alarms that depend on auth
+    try {
+      await chrome.alarms.clear('token-refresh');
+      await chrome.alarms.clear('subscription-check');
+      // Re-create them (they'll be no-ops without a session)
+      chrome.alarms.create('token-refresh', { periodInMinutes: 10 });
+      chrome.alarms.create('subscription-check', { periodInMinutes: 60 });
+    } catch (e) { /* non-critical */ }
+    
+    console.log('✅ Sign-out complete');
     return { success: true };
   } catch (err) {
-    await chrome.storage.local.set({ 
-      session: null, user: null, isPremium: false, promptLimit: 20,
-      prompts: [], folders: [],
-      libraryPromptsCache: [],
-      offlineQueue: []
-    });
+    console.error('Sign-out error:', err);
+    // Force clear even on error
+    try {
+      await chrome.storage.local.set({ 
+        session: null, 
+        user: null, 
+        isPremium: false, 
+        promptLimit: 20,
+        prompts: [], 
+        folders: [],
+        libraryPromptsCache: [],
+        offlineQueue: [],
+        sessionExpired: false
+      });
+    } catch (e) { /* last resort */ }
     return { success: true };
   }
 }
@@ -695,11 +758,71 @@ async function getValidToken() {
   return session.access_token;
 }
 
+// ---------- Server-side Rate Limiting ----------
+// Check rate limit via Supabase RPC before critical write operations
+async function checkServerRateLimit(token, endpoint, maxRequests = 60, windowSeconds = 60) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/check_rate_limit`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        p_user_id: null, // Will use auth.uid() server-side via SECURITY DEFINER
+        p_endpoint: endpoint,
+        p_max_requests: maxRequests,
+        p_window_seconds: windowSeconds
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data?.allowed !== false; // Default to allowed if response is unexpected
+    }
+    return true; // Allow if check fails (don't block users on rate limit infra issues)
+  } catch (e) {
+    console.warn('Rate limit check failed (allowing):', e.message);
+    return true;
+  }
+}
+
+// Rate limit presets: { endpoint: [maxRequests, windowSeconds] }
+const RATE_LIMIT_PRESETS = {
+  'library_write': [10, 60],     // Share to library: 10/min
+  'report_submit': [3, 60],       // Report: 3/min
+  'like_toggle': [30, 60],        // Like: 30/min
+  'prompt_sync': [120, 60],       // Prompt sync: 120/min
+  'storage_upload': [10, 60]      // Image upload: 10/min
+};
+
+// Determine rate limit endpoint from request path
+function getRateLimitEndpoint(method, path) {
+  if (method === 'POST' && path.includes('rpc/share_prompt_to_library')) return 'library_write';
+  if (method === 'POST' && path.startsWith('prompt_reports')) return 'report_submit';
+  if (method === 'POST' && path.includes('rpc/toggle_library_like')) return 'like_toggle';
+  if (method === 'POST' && path.startsWith('storage/')) return 'storage_upload';
+  return null; // No rate limit for this endpoint
+}
+
 async function handleSupabaseRequest(message) {
   const token = await getValidToken();
   if (!token) return { error: 'Not authenticated' };
 
   const { method, path, body, isFile, fileData, contentType: fileContentType } = message;
+  
+  // Server-side rate limit check for write operations
+  const rateLimitEndpoint = getRateLimitEndpoint(method, path);
+  if (rateLimitEndpoint) {
+    const preset = RATE_LIMIT_PRESETS[rateLimitEndpoint];
+    if (preset) {
+      const allowed = await checkServerRateLimit(token, rateLimitEndpoint, preset[0], preset[1]);
+      if (!allowed) {
+        console.warn(`Rate limited: ${rateLimitEndpoint}`);
+        return { error: 'Rate limited. Please wait a moment and try again.' };
+      }
+    }
+  }
   
   // Handle file uploads to Storage
   if (isFile && path.startsWith('storage/v1/object/')) {
