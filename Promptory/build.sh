@@ -26,16 +26,20 @@ zip -r "$OUTPUT" . \
   -x "STRUCTURE.txt" \
   -x "EXAMPLES.md" \
   -x "PROJECT_ROADMAP.md" \
+  -x "README.md" \
+  -x "LICENSE" \
   -x "assets/create-icons.html" \
   -x "assets/icon-source*.png" \
   -x "i18n.js" \
   -x "build.sh" \
   -x ".DS_Store" \
-  -x "*.map"
+  -x "*.map" \
+  -x ".git/*" \
+  -x ".gitignore"
 
 echo ""
 echo "Built: $OUTPUT"
 echo "Size: $(du -h "$OUTPUT" | cut -f1)"
 echo ""
 echo "Contents:"
-unzip -l "$OUTPUT" | tail -5
+unzip -l "$OUTPUT"
