@@ -5,6 +5,7 @@ importScripts('../config.js');
 
 const SUPABASE_URL = CONFIG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
+const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT || 25;
 // Redirect URL is computed dynamically from chrome.identity
 const REDIRECT_URL = chrome.identity.getRedirectURL();
 
@@ -28,7 +29,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       session: null,
       hasLaunched: false,
       isPremium: false,
-      promptLimit: 20,
+      promptLimit: FREE_PROMPT_LIMIT,
       language: null
     });
 
@@ -245,7 +246,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.action === 'signInWithGoogle') {
-    handleGoogleSignIn().then(sendResponse);
+    handleGoogleSignIn({ loginHint: message.loginHint }).then(sendResponse);
     return true;
   }
 
@@ -545,16 +546,23 @@ function base64urlDecode(str) {
   return new TextDecoder().decode(bytes);
 }
 
-async function handleGoogleSignIn() {
+async function handleGoogleSignIn(options = {}) {
   try {
     const callbackUrl = REDIRECT_URL;
 
-    const authUrl =
+    let authUrl =
       `${SUPABASE_URL}/auth/v1/authorize` +
       `?provider=google` +
       `&redirect_to=${encodeURIComponent(callbackUrl)}` +
-      `&prompt=select_account` +
       `&access_type=offline`;
+
+    // If we have a known email, add login_hint to skip account picker (faster)
+    if (options.loginHint) {
+      authUrl += `&login_hint=${encodeURIComponent(options.loginHint)}`;
+    } else {
+      // No saved email — show account picker
+      authUrl += `&prompt=select_account`;
+    }
 
     const responseUrl = await chrome.identity.launchWebAuthFlow({
       url: authUrl,
@@ -674,7 +682,7 @@ async function handleSignOut() {
       session: null,
       user: null,
       isPremium: false,
-      promptLimit: 20,
+      promptLimit: FREE_PROMPT_LIMIT,
       prompts: [],
       folders: [],
       libraryPromptsCache: [],
@@ -1024,7 +1032,7 @@ async function periodicSubscriptionCheck() {
       if (result) {
         const currentPremium = (await chrome.storage.local.get(['isPremium'])).isPremium;
         const newPremium = result.is_premium || false;
-        const newLimit = result.prompt_limit || 20;
+        const newLimit = result.prompt_limit || FREE_PROMPT_LIMIT;
 
         await chrome.storage.local.set({
           isPremium: newPremium,

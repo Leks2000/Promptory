@@ -1315,8 +1315,8 @@ function openFolderEditor(folderId = null) {
   const isEdit = !!folder;
   
   // Free tier folder limit (only for new folders, not editing)
-  if (!isEdit && !state.isPremium && state.folders.length >= (CONFIG.FREE_FOLDER_LIMIT || 3)) {
-    showToast(t('folderLimitReached') || `Free plan: max ${CONFIG.FREE_FOLDER_LIMIT || 3} folders. Upgrade to Premium for unlimited.`, 'error');
+  if (!isEdit && !state.isPremium && state.folders.length >= (CONFIG.FREE_FOLDER_LIMIT || 5)) {
+    showToast(t('folderLimitReached') || `Free plan: max ${CONFIG.FREE_FOLDER_LIMIT || 5} folders. Upgrade to Premium for unlimited.`, 'error');
     return;
   }
   
@@ -2003,7 +2003,9 @@ function openSettings() {
   document.getElementById('settings-signin-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('settings-signin-btn');
     btn.classList.add('loading');
-    const result = await new Promise(resolve => chrome.runtime.sendMessage({ action: 'signInWithGoogle' }, resolve));
+    // Pass saved email as login_hint to skip Google account picker (faster re-login)
+    const savedEmail = state.user?.email || '';
+    const result = await new Promise(resolve => chrome.runtime.sendMessage({ action: 'signInWithGoogle', loginHint: savedEmail }, resolve));
     btn.classList.remove('loading');
     
     if (result?.success) {
@@ -2014,23 +2016,24 @@ function openSettings() {
       await saveData('user', state.user);
       await saveData('session', state.session);
       
-      // ✅ IMMEDIATELY close modal and show success (FAST UX)
+      // IMMEDIATELY close modal and show success (FAST UX)
       closeModal('settings-modal');
       showToast(t('signedInSuccess'), 'success');
       renderExplore();
       
-      // ⚡ Run heavy sync operations in background (non-blocking)
-      setTimeout(async () => {
-        console.log('🔄 Background sync started...');
-        try {
-          await syncAllData();
-          await loadLibraryPrompts();
-          await checkPremiumStatus();
-          console.log('✅ Background sync complete');
-        } catch (e) {
-          console.error('❌ Background sync error:', e);
-        }
-      }, 100);
+      // Run heavy sync operations in parallel (non-blocking)
+      setTimeout(() => {
+        console.log('Background sync started...');
+        Promise.allSettled([
+          syncAllData(),
+          loadLibraryPrompts(),
+          checkPremiumStatus()
+        ]).then(results => {
+          const failed = results.filter(r => r.status === 'rejected');
+          if (failed.length) console.warn('Some sync tasks failed:', failed);
+          else console.log('Background sync complete');
+        });
+      }, 50);
     } else {
       showToast(t('signInFailed') + ': ' + (result?.error || ''), 'error');
     }
@@ -2096,7 +2099,7 @@ function openSettings() {
   document.getElementById('settings-export-btn').addEventListener('click', () => {
     const data = { prompts: state.prompts, folders: state.folders, settings: state.settings, exportDate: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `promptvault-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `promptory-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href);
     showToast(t('dataExported'), 'success');
   });
   
@@ -2475,89 +2478,170 @@ async function loadAdminDashboard(daysBack = 30) {
   container.innerHTML = `<div class="admin-dashboard-loading"><div class="skeleton skeleton-stat-card"></div><div class="skeleton skeleton-chart"></div></div>`;
   
   try {
-    const res = await supabaseMsg({
+    // Try get_admin_stats first (full global admin stats)
+    let res = await supabaseMsg({
       action: 'supabaseRequest',
       method: 'POST',
       path: 'rpc/get_admin_stats',
       body: { days_back: daysBack }
     });
     
+    let isAdminStats = true;
+    let data = null;
+    
+    // If get_admin_stats not found (PGRST202), fallback to get_usage_stats (per-user)
     if (res?.error) {
-      container.innerHTML = `<div style="color:var(--error);font-size:var(--font-size-sm);padding:12px;">${t('adminDashboardError')}: ${escapeHtml(parseSupabaseError(res.error))}</div>`;
-      return;
+      const errStr = parseSupabaseError(res.error);
+      const isMissing = errStr.includes('PGRST202') || errStr.includes('Could not find') || errStr.includes('schema cache');
+      
+      if (isMissing) {
+        console.warn('get_admin_stats not found, falling back to get_usage_stats');
+        isAdminStats = false;
+        res = await supabaseMsg({
+          action: 'supabaseRequest',
+          method: 'POST',
+          path: 'rpc/get_usage_stats',
+          body: { days_back: daysBack }
+        });
+        
+        if (res?.error) {
+          container.innerHTML = `<div style="color:var(--error);font-size:var(--font-size-sm);padding:12px;">${t('adminDashboardError')}: ${escapeHtml(parseSupabaseError(res.error))}</div>`;
+          return;
+        }
+      } else {
+        container.innerHTML = `<div style="color:var(--error);font-size:var(--font-size-sm);padding:12px;">${t('adminDashboardError')}: ${escapeHtml(errStr)}</div>`;
+        return;
+      }
     }
     
-    const data = res?.data;
+    data = res?.data;
     if (!data || data.error) {
       container.innerHTML = `<div style="color:var(--error);font-size:var(--font-size-sm);padding:12px;">${data?.error || t('adminDashboardError')}</div>`;
       return;
     }
     
-    // Build dashboard HTML
-    const dailyUsage = data.daily_usage || [];
-    const maxDaily = Math.max(...dailyUsage.map(d => d.count), 1);
-    const topPrompts = data.top_prompts_global || [];
-    const platformStats = data.platform_stats || [];
-    const maxPlatform = Math.max(...platformStats.map(p => p.count), 1);
-    const newUsers = data.new_users_daily || [];
-    const topLibrary = data.top_library_prompts || [];
+    // Migration notice if using fallback
+    const migrationNotice = !isAdminStats ? `
+      <div class="admin-dash-notice" style="background:var(--warning-bg, rgba(255,193,7,0.12));border:1px solid var(--warning, #ffc107);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:var(--font-size-xs);color:var(--text-secondary);">
+        <strong>&#9888; ${t('adminMigrationNeeded')}</strong><br>
+        ${t('adminMigrationHint')}
+      </div>` : '';
     
-    container.innerHTML = `
-      <div class="admin-dashboard">
-        <div class="admin-dash-period">
-          <select id="admin-dash-period-select" style="font-size:var(--font-size-xs);padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);">
-            <option value="7" ${daysBack === 7 ? 'selected' : ''}>7 ${t('days')}</option>
-            <option value="30" ${daysBack === 30 ? 'selected' : ''}>30 ${t('days')}</option>
-            <option value="90" ${daysBack === 90 ? 'selected' : ''}>90 ${t('days')}</option>
-          </select>
+    // Build dashboard HTML — adapt to whichever RPC returned data
+    if (isAdminStats) {
+      // Full admin stats from get_admin_stats
+      const dailyUsage = data.daily_usage || [];
+      const maxDaily = Math.max(...dailyUsage.map(d => d.count), 1);
+      const topPrompts = data.top_prompts_global || [];
+      const platformStats = data.platform_stats || [];
+      const maxPlatform = Math.max(...platformStats.map(p => p.count), 1);
+      const topLibrary = data.top_library_prompts || [];
+      
+      container.innerHTML = `
+        <div class="admin-dashboard">
+          <div class="admin-dash-period">
+            <select id="admin-dash-period-select" style="font-size:var(--font-size-xs);padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);">
+              <option value="7" ${daysBack === 7 ? 'selected' : ''}>7 ${t('days')}</option>
+              <option value="30" ${daysBack === 30 ? 'selected' : ''}>30 ${t('days')}</option>
+              <option value="90" ${daysBack === 90 ? 'selected' : ''}>90 ${t('days')}</option>
+            </select>
+          </div>
+          
+          <div class="admin-dash-overview">
+            <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_users || 0}</div><div class="admin-dash-stat-label">${t('adminTotalUsers')}</div></div>
+            <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.premium_users || 0}</div><div class="admin-dash-stat-label">${t('adminPremiumUsers')}</div></div>
+            <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.unique_active_users || 0}</div><div class="admin-dash-stat-label">${t('adminActiveUsers')}</div></div>
+            <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_uses || 0}</div><div class="admin-dash-stat-label">${t('adminTotalInserts')}</div></div>
+          </div>
+          
+          <div class="admin-dash-overview">
+            <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_prompts || 0}</div><div class="admin-dash-stat-label">${t('adminUserPrompts')}</div></div>
+            <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_library_approved || 0}/${data.total_library_prompts || 0}</div><div class="admin-dash-stat-label">${t('adminLibraryPrompts')}</div></div>
+            <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_reports_pending || 0}</div><div class="admin-dash-stat-label">${t('adminPendingReports')}</div></div>
+          </div>
+          
+          ${dailyUsage.length > 0 ? `
+          <div class="admin-dash-section">
+            <div class="admin-dash-section-title">${t('adminDailyUsage')}</div>
+            <div class="usage-chart">${dailyUsage.slice(0, 14).reverse().map(d => {
+              const pct = Math.max((d.count / maxDaily) * 80, 2);
+              const dateStr = new Date(d.date).toLocaleDateString(P.getLang() === 'ru' ? 'ru' : 'en', { month: 'short', day: 'numeric' });
+              return `<div class="chart-bar-wrap"><div class="chart-bar" style="height:${pct}px;" title="${d.count} uses / ${d.unique_users} users"></div><div class="chart-bar-label">${dateStr}</div></div>`;
+            }).join('')}</div>
+          </div>` : ''}
+          
+          ${topPrompts.length > 0 ? `
+          <div class="admin-dash-section">
+            <div class="admin-dash-section-title">${t('adminTopPrompts')}</div>
+            ${topPrompts.slice(0, 5).map((p, i) => `
+              <div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 30))}</span><span class="top-prompt-uses">${p.uses} (${p.unique_users} ${t('adminUsers')})</span></div>
+            `).join('')}
+          </div>` : ''}
+          
+          ${platformStats.length > 0 ? `
+          <div class="admin-dash-section">
+            <div class="admin-dash-section-title">${t('usageByPlatform')}</div>
+            <div class="platform-stats">${platformStats.map(p => `<div class="platform-stat-row"><span class="platform-stat-name">${escapeHtml(p.platform)}</span><div class="platform-stat-bar-bg"><div class="platform-stat-bar" style="width:${(p.count / maxPlatform) * 100}%;"></div></div><span class="platform-stat-count">${p.count}</span></div>`).join('')}</div>
+          </div>` : ''}
+          
+          ${topLibrary.length > 0 ? `
+          <div class="admin-dash-section">
+            <div class="admin-dash-section-title">${t('adminTopLibrary')}</div>
+            ${topLibrary.slice(0, 5).map((p, i) => `
+              <div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 25))}</span><span class="top-prompt-uses">${p.likes || 0} likes</span></div>
+            `).join('')}
+          </div>` : ''}
         </div>
-        
-        <div class="admin-dash-overview">
-          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_users || 0}</div><div class="admin-dash-stat-label">${t('adminTotalUsers')}</div></div>
-          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.premium_users || 0}</div><div class="admin-dash-stat-label">${t('adminPremiumUsers')}</div></div>
-          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.unique_active_users || 0}</div><div class="admin-dash-stat-label">${t('adminActiveUsers')}</div></div>
-          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_uses || 0}</div><div class="admin-dash-stat-label">${t('adminTotalInserts')}</div></div>
+      `;
+    } else {
+      // Fallback: get_usage_stats (per-user stats only)
+      const dailyStats = data.daily_stats || [];
+      const maxDaily = Math.max(...dailyStats.map(d => d.count), 1);
+      const topPrompts = data.top_prompts || [];
+      const platformStats = data.by_platform || [];
+      const maxPlatform = Math.max(...platformStats.map(p => p.count), 1);
+      
+      container.innerHTML = `
+        <div class="admin-dashboard">
+          ${migrationNotice}
+          <div class="admin-dash-period">
+            <select id="admin-dash-period-select" style="font-size:var(--font-size-xs);padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);">
+              <option value="7" ${daysBack === 7 ? 'selected' : ''}>7 ${t('days')}</option>
+              <option value="30" ${daysBack === 30 ? 'selected' : ''}>30 ${t('days')}</option>
+              <option value="90" ${daysBack === 90 ? 'selected' : ''}>90 ${t('days')}</option>
+            </select>
+          </div>
+          
+          <div class="admin-dash-overview">
+            <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_uses || 0}</div><div class="admin-dash-stat-label">${t('adminTotalInserts')}</div></div>
+          </div>
+          
+          ${dailyStats.length > 0 ? `
+          <div class="admin-dash-section">
+            <div class="admin-dash-section-title">${t('adminDailyUsage')}</div>
+            <div class="usage-chart">${dailyStats.slice(0, 14).reverse().map(d => {
+              const pct = Math.max((d.count / maxDaily) * 80, 2);
+              const dateStr = new Date(d.date).toLocaleDateString(P.getLang() === 'ru' ? 'ru' : 'en', { month: 'short', day: 'numeric' });
+              return `<div class="chart-bar-wrap"><div class="chart-bar" style="height:${pct}px;" title="${d.count} uses"></div><div class="chart-bar-label">${dateStr}</div></div>`;
+            }).join('')}</div>
+          </div>` : ''}
+          
+          ${topPrompts.length > 0 ? `
+          <div class="admin-dash-section">
+            <div class="admin-dash-section-title">${t('adminTopPrompts')}</div>
+            ${topPrompts.slice(0, 5).map((p, i) => `
+              <div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 30))}</span><span class="top-prompt-uses">${p.uses}</span></div>
+            `).join('')}
+          </div>` : ''}
+          
+          ${platformStats.length > 0 ? `
+          <div class="admin-dash-section">
+            <div class="admin-dash-section-title">${t('usageByPlatform')}</div>
+            <div class="platform-stats">${platformStats.map(p => `<div class="platform-stat-row"><span class="platform-stat-name">${escapeHtml(p.platform)}</span><div class="platform-stat-bar-bg"><div class="platform-stat-bar" style="width:${(p.count / maxPlatform) * 100}%;"></div></div><span class="platform-stat-count">${p.count}</span></div>`).join('')}</div>
+          </div>` : ''}
         </div>
-        
-        <div class="admin-dash-overview">
-          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_prompts || 0}</div><div class="admin-dash-stat-label">${t('adminUserPrompts')}</div></div>
-          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_library_approved || 0}/${data.total_library_prompts || 0}</div><div class="admin-dash-stat-label">${t('adminLibraryPrompts')}</div></div>
-          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_reports_pending || 0}</div><div class="admin-dash-stat-label">${t('adminPendingReports')}</div></div>
-        </div>
-        
-        ${dailyUsage.length > 0 ? `
-        <div class="admin-dash-section">
-          <div class="admin-dash-section-title">${t('adminDailyUsage')}</div>
-          <div class="usage-chart">${dailyUsage.slice(0, 14).reverse().map(d => {
-            const pct = Math.max((d.count / maxDaily) * 80, 2);
-            const dateStr = new Date(d.date).toLocaleDateString(P.getLang() === 'ru' ? 'ru' : 'en', { month: 'short', day: 'numeric' });
-            return `<div class="chart-bar-wrap"><div class="chart-bar" style="height:${pct}px;" title="${d.count} uses / ${d.unique_users} users"></div><div class="chart-bar-label">${dateStr}</div></div>`;
-          }).join('')}</div>
-        </div>` : ''}
-        
-        ${topPrompts.length > 0 ? `
-        <div class="admin-dash-section">
-          <div class="admin-dash-section-title">${t('adminTopPrompts')}</div>
-          ${topPrompts.slice(0, 5).map((p, i) => `
-            <div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 30))}</span><span class="top-prompt-uses">${p.uses} (${p.unique_users} ${t('adminUsers')})</span></div>
-          `).join('')}
-        </div>` : ''}
-        
-        ${platformStats.length > 0 ? `
-        <div class="admin-dash-section">
-          <div class="admin-dash-section-title">${t('usageByPlatform')}</div>
-          <div class="platform-stats">${platformStats.map(p => `<div class="platform-stat-row"><span class="platform-stat-name">${escapeHtml(p.platform)}</span><div class="platform-stat-bar-bg"><div class="platform-stat-bar" style="width:${(p.count / maxPlatform) * 100}%;"></div></div><span class="platform-stat-count">${p.count}</span></div>`).join('')}</div>
-        </div>` : ''}
-        
-        ${topLibrary.length > 0 ? `
-        <div class="admin-dash-section">
-          <div class="admin-dash-section-title">${t('adminTopLibrary')}</div>
-          ${topLibrary.slice(0, 5).map((p, i) => `
-            <div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 25))}</span><span class="top-prompt-uses">${p.likes || 0} likes</span></div>
-          `).join('')}
-        </div>` : ''}
-      </div>
-    `;
+      `;
+    }
     
     // Period selector listener
     document.getElementById('admin-dash-period-select')?.addEventListener('change', (e) => {
@@ -2618,10 +2702,10 @@ function initSearch() {
 }
 
 function generateUniqueCheckoutUrl(baseUrl, userEmail, userId) {
-  const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-  
+  // LemonSqueezy checkout URL format:
+  // Base URL should be like: https://store.lemonsqueezy.com/buy/<variant_id>
+  // Or: https://store.lemonsqueezy.com/checkout/buy/<variant_id>
   const params = new URLSearchParams();
-  params.set('checkout', uniqueId); // Forces new session
   
   if (userEmail) {
     params.set('checkout[email]', userEmail);

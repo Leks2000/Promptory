@@ -11,12 +11,12 @@ const CONFIG = {
   // These are public-facing IDs and URLs — safe to include in client code
   LEMONSQUEEZY_STORE_ID: 'promptory', // Store slug on LemonSqueezy
   LEMONSQUEEZY_PRODUCT_ID: '833592', // Pro subscription product ID  
-  LEMONSQUEEZY_CHECKOUT_URL: 'https://promptory.lemonsqueezy.com/checkout', // e.g. https://yourstore.lemonsqueezy.com/checkout/buy/xxx
+  LEMONSQUEEZY_CHECKOUT_URL: 'https://promptory.lemonsqueezy.com/buy/', // IMPORTANT: Set to your LemonSqueezy variant buy URL (e.g., https://store.lemonsqueezy.com/buy/abc123)
   LEMONSQUEEZY_CUSTOMER_PORTAL: 'https://promptory.lemonsqueezy.com/billing', // Customer portal for managing subscriptions
   
   // Free tier limits
-  FREE_PROMPT_LIMIT: 20,
-  FREE_FOLDER_LIMIT: 3,
+  FREE_PROMPT_LIMIT: 25,
+  FREE_FOLDER_LIMIT: 5,
   
   // Performance caps
   MAX_ANIM_ITEMS: 8,

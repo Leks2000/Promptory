@@ -1,6 +1,15 @@
 -- Promptory Admin Analytics Dashboard
 -- RPC function: get_admin_stats
 -- Returns global usage statistics (only for is_admin=true users)
+--
+-- IMPORTANT: You MUST run this SQL in Supabase SQL Editor for the Admin Dashboard to work.
+-- Without this migration, the dashboard will fallback to showing personal stats only.
+-- After running this, reload the extension and click "Load Dashboard" in Settings.
+--
+-- Prerequisites: profiles table must have is_admin column (set via supabase-admin-moderation.sql)
+
+-- Drop old version if exists (safe re-run)
+DROP FUNCTION IF EXISTS get_admin_stats(INTEGER);
 
 CREATE OR REPLACE FUNCTION get_admin_stats(days_back INTEGER DEFAULT 30)
 RETURNS JSON AS $$

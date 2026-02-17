@@ -147,7 +147,7 @@
   "freePlan": { "message": "Бесплатный план" },
   "promptsUsed": { "message": "$1 / $2 промптов использовано", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
   "upgradeInfo": { "message": "Перейдите на Premium для неограниченных промптов, приоритетного доступа и других возможностей." },
-  "folderLimitReached": { "message": "Бесплатный план: максимум 3 папки. Перейдите на Premium для неограниченных папок." },
+  "folderLimitReached": { "message": "Бесплатный план: максимум 5 папок. Перейдите на Premium для неограниченных папок." },
 
   "account": { "message": "Аккаунт" },
   "signedIn": { "message": "Вы вошли" },
@@ -325,5 +325,7 @@
   "adminDailyUsage": { "message": "Использование по дням" },
   "adminTopPrompts": { "message": "Топ промптов (глобально)" },
   "adminUsers": { "message": "пользователей" },
-  "adminTopLibrary": { "message": "Топ библиотечных промптов" }
+  "adminTopLibrary": { "message": "Топ библиотечных промптов" },
+  "adminMigrationNeeded": { "message": "Требуется SQL миграция" },
+  "adminMigrationHint": { "message": "Запустите supabase-admin-analytics.sql в Supabase SQL Editor для полной админ-статистики (все пользователи, премиум, библиотека). Сейчас показана только ваша личная статистика." }
 }
