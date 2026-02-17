@@ -16,6 +16,7 @@
   position: absolute;
   width: 100%;
   pointer-events: none;
+  overflow: hidden;
 }
 
 .tab-content.active {
@@ -24,6 +25,7 @@
   visibility: visible;
   position: relative;
   pointer-events: auto;
+  overflow: visible;
   transition: opacity 220ms var(--ease-out-expo),
               transform 220ms var(--ease-out-expo),
               visibility 0ms 0ms; /* show immediately */

@@ -320,7 +320,7 @@ function _renderPromptsImmediate() {
   const frag = document.createDocumentFragment();
   folders.forEach(f => {
     const fp = grouped[f.id] || [];
-    if (fp.length > 0) frag.appendChild(buildFolderSection(f, fp));
+    frag.appendChild(buildFolderSection(f, fp));
   });
   if (uncategorized.length > 0) {
     frag.appendChild(buildFolderSection({ id: null, name: t('uncategorized') }, uncategorized));
@@ -358,6 +358,8 @@ function buildFolderSection(folder, prompts) {
     _activeVirtualRenderers.push(vr);
   } else if (prompts.length > 0) {
     contentEl.innerHTML = prompts.map((p, i) => renderPromptCard(p, i)).join('');
+  } else if (expanded) {
+    contentEl.innerHTML = `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:var(--space-3) var(--space-2);text-align:center;">${t('noPromptsInFolder') || 'No prompts in this folder'}</div>`;
   }
   
   return section;
@@ -566,6 +568,13 @@ function attachPromptCardListeners() {
         const expanded = section.classList.toggle('expanded');
         localStorage.setItem(`pv-folder-${fId}`, expanded);
         folderHeader.setAttribute('aria-expanded', String(expanded));
+        // Show empty hint when expanding an empty folder
+        if (expanded) {
+          const contentEl = section.querySelector('.folder-content');
+          if (contentEl && contentEl.children.length === 0) {
+            contentEl.innerHTML = `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:var(--space-3) var(--space-2);text-align:center;">${t('noPromptsInFolder') || 'No prompts in this folder'}</div>`;
+          }
+        }
       }
       return;
     }

@@ -327,5 +327,6 @@
   "adminUsers": { "message": "пользователей" },
   "adminTopLibrary": { "message": "Топ библиотечных промптов" },
   "adminMigrationNeeded": { "message": "Требуется SQL миграция" },
-  "adminMigrationHint": { "message": "Запустите supabase-admin-analytics.sql в Supabase SQL Editor для полной админ-статистики (все пользователи, премиум, библиотека). Сейчас показана только ваша личная статистика." }
+  "adminMigrationHint": { "message": "Запустите supabase-admin-analytics.sql в Supabase SQL Editor для полной админ-статистики (все пользователи, премиум, библиотека). Сейчас показана только ваша личная статистика." },
+  "noPromptsInFolder": { "message": "В этой папке пока нет промптов" }
 }
