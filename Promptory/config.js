@@ -31,6 +31,3 @@ const CONFIG = {
 
 // Make available in different contexts (popup, background, options)
 if (typeof globalThis !== 'undefined') globalThis.CONFIG = CONFIG;
-
-// ES module export for service worker (MV3)
-export { CONFIG };

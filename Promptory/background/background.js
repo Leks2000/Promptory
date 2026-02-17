@@ -1,7 +1,7 @@
-// Promptory Background Service Worker (ES Module)
+// Promptory Background Service Worker
 
-// Import shared config
-import { CONFIG } from '../config.js';
+// Load shared config (config.js sets globalThis.CONFIG)
+importScripts('../config.js');
 
 const SUPABASE_URL = CONFIG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
