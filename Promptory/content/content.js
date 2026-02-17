@@ -1,4 +1,4 @@
-// PromptVault Content Script - Prompt insertion + Search overlay
+// Promptory Content Script - Prompt insertion + Search overlay
 // Performance-optimized with debounced search and truncated previews
 
 const PLATFORM_SELECTORS = {
@@ -124,8 +124,30 @@ function insertIntoContentEditable(element, text) {
   range.selectNodeContents(element);
   selection.removeAllRanges();
   selection.addRange(range);
-  // Use execCommand for React-based editors compatibility
-  document.execCommand('insertText', false, text);
+  // Try execCommand first for React-based editors compatibility
+  // Falls back to InputEvent + manual insertion if execCommand is unavailable
+  let inserted = false;
+  try {
+    inserted = document.execCommand('insertText', false, text);
+  } catch (_e) {
+    inserted = false;
+  }
+  if (!inserted) {
+    // Fallback: delete selected content and insert text node
+    selection.deleteFromDocument();
+    const textNode = document.createTextNode(text);
+    const sel = window.getSelection();
+    if (sel.rangeCount) {
+      const r = sel.getRangeAt(0);
+      r.insertNode(textNode);
+      r.setStartAfter(textNode);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } else {
+      element.textContent = text;
+    }
+  }
   // Dispatch events to notify frameworks
   element.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, data: text }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -430,4 +452,4 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-console.log('PromptVault content script loaded on', hostname);
+console.log('Promptory content script loaded on', hostname);

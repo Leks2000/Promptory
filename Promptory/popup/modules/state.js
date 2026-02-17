@@ -31,13 +31,52 @@ P.state = {
   libraryLoading: false
 };
 
-// Flag to suppress storage listener re-renders during our own saves
-P._suppressStorageRender = false;
+// ==================== DATA MIGRATIONS ====================
+const DATA_VERSION = 2; // Increment when schema changes
+
+async function migrateData(currentVersion) {
+  if (currentVersion < 1) {
+    // v0 -> v1: Ensure all prompts have required fields
+    const { prompts } = await new Promise(r => chrome.storage.local.get(['prompts'], r));
+    if (prompts && Array.isArray(prompts)) {
+      let changed = false;
+      prompts.forEach(p => {
+        if (!p.imageUrl && p.imageUrl !== null) { p.imageUrl = null; changed = true; }
+        if (!p.variables) { p.variables = []; changed = true; }
+        if (!p.tags) { p.tags = []; changed = true; }
+        if (p.useCount === undefined) { p.useCount = 0; changed = true; }
+      });
+      if (changed) await new Promise(r => chrome.storage.local.set({ prompts }, r));
+    }
+  }
+  if (currentVersion < 2) {
+    // v1 -> v2: Add platform field to old prompts, ensure createdAt/updatedAt
+    const { prompts } = await new Promise(r => chrome.storage.local.get(['prompts'], r));
+    if (prompts && Array.isArray(prompts)) {
+      let changed = false;
+      const now = Date.now();
+      prompts.forEach(p => {
+        if (!p.platform) { p.platform = 'universal'; changed = true; }
+        if (!p.createdAt) { p.createdAt = now; changed = true; }
+        if (!p.updatedAt) { p.updatedAt = now; changed = true; }
+      });
+      if (changed) await new Promise(r => chrome.storage.local.set({ prompts }, r));
+    }
+  }
+  await new Promise(r => chrome.storage.local.set({ dataVersion: DATA_VERSION }, r));
+  console.log(`\uD83D\uDCE6 Data migrated to version ${DATA_VERSION}`);
+}
 
 // ==================== DATA LOADING ====================
 P.loadData = async function() {
   return new Promise(resolve => {
-    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit', 'language', 'libraryPromptsCache'], result => {
+    chrome.storage.local.get(['prompts', 'folders', 'settings', 'user', 'session', 'hasLaunched', 'isPremium', 'promptLimit', 'language', 'libraryPromptsCache', 'dataVersion'], async (result) => {
+      // Run data migrations if needed
+      const storedVersion = result.dataVersion || 0;
+      if (storedVersion < DATA_VERSION) {
+        await migrateData(storedVersion);
+      }
+      
       if (result.prompts) P.state.prompts = result.prompts;
       if (result.folders) P.state.folders = result.folders;
       if (result.settings) P.state.settings = { ...P.state.settings, ...result.settings };
