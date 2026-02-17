@@ -1,10 +1,15 @@
-// PromptVault -> Promptory Popup - Main Controller
+// Promptory Popup - Main Controller
 // Performance-optimized, i18n-enabled, 3 hotkey slots
+// Uses Promptory.* modules (utils.js, state.js, offline.js) as single source of truth
 
 (function() {
 'use strict';
 
-// ==================== CONSTANTS (from shared config.js) ====================
+// ==================== MODULE ALIASES (single source of truth: popup/modules/*) ====================
+const P = window.Promptory;
+const state = P.state; // Shared state object — modules and popup.js reference the SAME object
+
+// Config constants
 const SUPABASE_URL = CONFIG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
 const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT;
@@ -12,172 +17,29 @@ const MAX_ANIM_ITEMS = CONFIG.MAX_ANIM_ITEMS;
 const SETTINGS_PROMPT_SELECT_LIMIT = CONFIG.SETTINGS_PROMPT_SELECT_LIMIT;
 const LIBRARY_PAGE_SIZE = CONFIG.LIBRARY_PAGE_SIZE;
 
-// ==================== I18N ====================
-const LOCALES = {};
-let _lang = 'en';
+// Utility aliases — all defined once in modules/utils.js
+const t = P.t.bind(P);
+const loadLocale = P.loadLocale.bind(P);
+const escapeHtml = P.escapeHtml;
+const showToast = P.showToast;
+const saveData = P.saveData;
+const formatDate = P.formatDate;
+const truncate = P.truncate;
+const debounce = P.debounce;
+const isRateLimited = P.isRateLimited;
+const supabaseMsg = P.supabaseMsg;
+const supabaseMsgWithRetry = P.supabaseMsgWithRetry;
+const parseSupabaseError = P.parseSupabaseError;
+const isAuthError = P.isAuthError;
+const closeModal = P.closeModal;
 
-async function loadLocale(lang) {
-  if (LOCALES[lang]) return;
-  try {
-    const url = chrome.runtime.getURL(`_locales/${lang}/messages.json`);
-    const res = await fetch(url);
-    LOCALES[lang] = await res.json();
-  } catch (e) { console.warn('Locale load failed:', lang, e); }
-}
-
-function t(key, ...subs) {
-  const locale = LOCALES[_lang] || LOCALES['en'] || {};
-  const fallback = LOCALES['en'] || {};
-  const entry = locale[key] || fallback[key];
-  if (!entry) return key;
-  let msg = entry.message;
-  subs.forEach((s, i) => { msg = msg.replace(`$${i + 1}`, String(s)); });
-  return msg;
-}
-
-// ==================== STATE ====================
-const state = {
-  prompts: [],
-  folders: [],
-  settings: { theme: 'dark', hotkeys: { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } }, defaultFolder: null },
-  user: null,
-  session: null,
-  isFirstLaunch: false,
-  libraryPrompts: [],
-  libraryError: null,
-  searchOriginalPrompts: null,
-  userLikes: new Set(),
-  userReports: new Set(),
-  isPremium: false,
-  promptLimit: FREE_PROMPT_LIMIT,
-  isAdmin: false,
-  pendingReports: []
-};
-
-// ==================== UTILITIES ====================
-// Simple client-side rate limiter to prevent spam clicks on likes/reports
-const _rateLimits = {};
-function isRateLimited(key, cooldownMs = 2000) {
-  const now = Date.now();
-  if (_rateLimits[key] && now - _rateLimits[key] < cooldownMs) return true;
-  _rateLimits[key] = now;
-  return false;
-}
-
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function showToast(message, type = 'default') {
-  const toast = document.getElementById('toast');
-  toast.textContent = message;
-  toast.className = 'toast visible';
-  if (type === 'success') toast.classList.add('success');
-  else if (type === 'error') toast.classList.add('error');
-  setTimeout(() => {
-    toast.classList.remove('visible');
-    setTimeout(() => { toast.className = 'toast'; }, 250);
-  }, 2500);
-}
-
-function saveData(key, value) {
-  return new Promise(resolve => chrome.storage.local.set({ [key]: value }, resolve));
-}
-
-function formatDate(ts) {
-  if (!ts) return '';
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  const hrs = Math.floor(mins / 60);
-  const days = Math.floor(hrs / 24);
-  if (days > 7) return new Date(ts).toLocaleDateString();
-  if (days > 0) return `${days}d`;
-  if (hrs > 0) return `${hrs}h`;
-  if (mins > 0) return `${mins}m`;
-  return 'now';
-}
-
-function supabaseMsg(params) {
-  return new Promise(resolve => chrome.runtime.sendMessage(params, resolve));
-}
-
-// Retry wrapper with exponential backoff for critical Supabase operations
-async function supabaseMsgWithRetry(params, { maxRetries = 2, baseDelay = 1000 } = {}) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const res = await supabaseMsg(params);
-      // Don't retry on auth/permission errors - they won't resolve themselves
-      if (res?.error) {
-        const errStr = parseSupabaseError(res.error).toLowerCase();
-        if (errStr.includes('not authenticated') || errStr.includes('jwt') || errStr.includes('permission') || errStr.includes('rls') || errStr.includes('duplicate') || errStr.includes('23505')) {
-          return res;
-        }
-        // Retry on server/network errors
-        if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)));
-          continue;
-        }
-      }
-      return res;
-    } catch (e) {
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)));
-        continue;
-      }
-      return { error: e.message || 'Network error' };
-    }
-  }
-}
-
-function parseSupabaseError(error) {
-  if (!error) return '';
-  if (typeof error === 'string') return error;
-  try { return JSON.stringify(error); } catch { return String(error); }
-}
-
-function isAuthError(error) {
-  const msg = parseSupabaseError(error).toLowerCase();
-  return msg.includes('not authenticated') || msg.includes('jwt') || msg.includes('token') || msg.includes('401');
-}
-
-// Truncate text for performance (avoid rendering huge strings)
-function truncate(text, max = 120) {
-  if (!text || text.length <= max) return text || '';
-  return text.substring(0, max) + '...';
-}
-
-let _settingsPromptPoolCache = { key: '', items: [] };
-
-function getSettingsPromptPool() {
-  const cacheKey = `${state.prompts.length}:${state.prompts[0]?.updatedAt || 0}`;
-  if (_settingsPromptPoolCache.key === cacheKey) return _settingsPromptPoolCache.items;
-
-  const sorted = [...state.prompts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  const items = sorted.slice(0, SETTINGS_PROMPT_SELECT_LIMIT);
-  _settingsPromptPoolCache = { key: cacheKey, items };
-  return items;
-}
-
-function getSettingsPromptOptions(selectedPromptId) {
-  const selectedId = selectedPromptId || null;
-  const limited = [...getSettingsPromptPool()];
-
-  if (selectedId && !limited.some(p => p.id === selectedId)) {
-    const selectedPrompt = state.prompts.find(p => p.id === selectedId);
-    if (selectedPrompt) limited.unshift(selectedPrompt);
-  }
-
-  return limited.map(p => `<option value="${p.id}" ${selectedId === p.id ? 'selected' : ''}>${escapeHtml(truncate(p.title, 25))}</option>`).join('');
-}
-
-// Debounce utility
-function debounce(fn, ms) {
-  let timer;
-  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
-}
+// State aliases — all defined once in modules/state.js
+const getSettingsPromptPool = P.getSettingsPromptPool.bind(P);
+const getSettingsPromptOptions = P.getSettingsPromptOptions.bind(P);
+const getEffectiveLimit = P.getEffectiveLimit.bind(P);
+const canCreatePrompt = P.canCreatePrompt.bind(P);
+const getPromptsRemaining = P.getPromptsRemaining.bind(P);
+const applyTheme = P.applyTheme.bind(P);
 
 // CSV line parser (handles quoted fields with commas/newlines)
 function parseCSVLine(line) {
@@ -275,21 +137,6 @@ async function loadImageIntoElement(imgEl, url) {
   }
 }
 
-// ==================== FREE TIER LIMIT ====================
-function getEffectiveLimit() {
-  return (state.promptLimit > 0 && state.promptLimit <= 1000) ? state.promptLimit : FREE_PROMPT_LIMIT;
-}
-
-function canCreatePrompt() {
-  if (state.isPremium) return true;
-  return state.prompts.length < getEffectiveLimit();
-}
-
-function getPromptsRemaining() {
-  if (state.isPremium) return Infinity;
-  return Math.max(0, getEffectiveLimit() - state.prompts.length);
-}
-
 function renderLimitBanner() {
   const existing = document.getElementById('limit-banner');
   if (existing) existing.remove();
@@ -374,21 +221,11 @@ async function loadData() {
         chrome.storage.local.set({ hasLaunched: true });
       }
       // Language
-      if (result.language) _lang = result.language;
-      else if (chrome.i18n.getUILanguage().startsWith('ru')) _lang = 'ru';
+      if (result.language) P.setLang(result.language);
+      else if (chrome.i18n.getUILanguage().startsWith('ru')) P.setLang('ru');
       resolve();
     });
   });
-}
-
-// ==================== THEME ====================
-function applyTheme(theme) {
-  if (theme === 'system') {
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-  } else {
-    document.documentElement.setAttribute('data-theme', theme);
-  }
 }
 
 // ==================== TABS ====================
@@ -826,24 +663,8 @@ function updateFolderNameInPlace(folderId, newName) {
 // Flag to suppress storage listener re-renders during our own saves
 let _suppressStorageRender = false;
 
-// ==================== COPY PROMPT (single unified copy function) ====================
-// This is THE copy function used everywhere - card click, button click, context menu, explore
-async function copyPromptText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    // Fallback for older browsers
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try { document.execCommand('copy'); document.body.removeChild(textarea); return true; }
-    catch { document.body.removeChild(textarea); return false; }
-  }
-}
+// copyPromptText is aliased from P.copyPromptText (modules/utils.js)
+const copyPromptText = P.copyPromptText;
 
 async function copyPrompt(id) {
   const p = state.prompts.find(x => x.id === id);
@@ -1554,6 +1375,13 @@ function _renderFoldersImmediate() {
 function openFolderEditor(folderId = null) {
   const folder = folderId ? state.folders.find(f => f.id === folderId) : null;
   const isEdit = !!folder;
+  
+  // Free tier folder limit (only for new folders, not editing)
+  if (!isEdit && !state.isPremium && state.folders.length >= (CONFIG.FREE_FOLDER_LIMIT || 3)) {
+    showToast(t('folderLimitReached') || `Free plan: max ${CONFIG.FREE_FOLDER_LIMIT || 3} folders. Upgrade to Premium for unlimited.`, 'error');
+    return;
+  }
+  
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'folder-editor-modal';
@@ -1663,17 +1491,18 @@ async function loadLibraryPrompts(append = false) {
       const res = await supabaseMsgWithRetry({ action: 'supabaseRequest', method: 'GET', path });
 
       if (res?.data && Array.isArray(res.data)) {
+        const sanitize = P.sanitizeLibraryText;
         const newItems = res.data.map(p => ({
           id: p.id,
-          title: p.title,
-          text: p.text,
-          description: p.description,
-          author: p.author,
+          title: sanitize(p.title),
+          text: sanitize(p.text),
+          description: sanitize(p.description),
+          author: sanitize(p.author),
           authorId: p.author_id,
-          tags: p.tags || [],
+          tags: (p.tags || []).map(t => sanitize(t)),
           likes: p.likes || 0,
           downloads: p.downloads || 0,
-          category: p.category || 'general',
+          category: sanitize(p.category || 'general'),
           isFeatured: p.is_featured,
           imageUrl: p.image_url || null
         }));
@@ -2056,7 +1885,7 @@ function renderStats() {
   for (let i = 6; i >= 0; i--) {
     const dayStart = now - (i + 1) * dayMs;
     const dayEnd = now - i * dayMs;
-    const dayLabel = new Date(dayEnd).toLocaleDateString(_lang === 'ru' ? 'ru' : 'en', { weekday: 'short' });
+    const dayLabel = new Date(dayEnd).toLocaleDateString(P.getLang() === 'ru' ? 'ru' : 'en', { weekday: 'short' });
     const count = state.prompts.reduce((s, p) => { if (p.updatedAt && p.updatedAt >= dayStart && p.updatedAt < dayEnd && (p.useCount || 0) > 0) return s + 1; return s; }, 0);
     dailyUses.push({ label: dayLabel, count });
   }
@@ -2099,7 +1928,7 @@ function openSettings() {
           ${user ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--bg-secondary);border-radius:var(--radius-md);border:1px solid var(--border);"><div><div style="font-weight:500;">${escapeHtml(user.email || user.name || t('signedIn'))}</div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:2px;">${t('cloudSyncActive')}${state.isPremium ? ' | Premium' : ` | ${t('free')} (${state.prompts.length}/${getEffectiveLimit()})`}</div></div><button class="btn btn-secondary btn-sm" id="settings-signout-btn">${t('signOut')}</button></div>` :
             `<button class="btn btn-primary" id="settings-signin-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13.8 12H3"/></svg>${t('signInWithGoogle')}</button><span class="form-hint">${t('signInHint')}</span>`}
         </div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('language')}</label><select id="settings-lang"><option value="en" ${_lang === 'en' ? 'selected' : ''}>${t('langEnglish')}</option><option value="ru" ${_lang === 'ru' ? 'selected' : ''}>${t('langRussian')}</option></select></div><div class="divider"></div>
+        <div class="form-group"><label class="form-label">${t('language')}</label><select id="settings-lang"><option value="en" ${P.getLang() === 'en' ? 'selected' : ''}>${t('langEnglish')}</option><option value="ru" ${P.getLang() === 'ru' ? 'selected' : ''}>${t('langRussian')}</option></select></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('keyboardShortcuts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('shortcutsHint')} <a href="#" id="open-shortcuts-link" style="color:var(--accent);">${t('chromeShortcuts')}</a></span><div class="hotkey-rebind-section" id="shortcuts-display"></div></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('quickInsertPrompts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('quickInsertHint')}</span><span class="form-hint" style="margin-bottom:8px;display:block;">${state.prompts.length > SETTINGS_PROMPT_SELECT_LIMIT ? `Showing recent ${SETTINGS_PROMPT_SELECT_LIMIT} prompts for faster settings` : ''}</span><div class="hotkey-section">
           ${[1, 2, 3].map(n => {
@@ -2172,6 +2001,14 @@ function openSettings() {
         <div class="form-group"><label class="form-label">${t('adminModeration')} <span class="admin-badge">ADMIN</span></label>
           <div id="moderation-panel-container"></div>
         </div><div class="divider"></div>
+        <div class="form-group"><label class="form-label">${t('adminDashboard')} <span class="admin-badge">ADMIN</span></label>
+          <div id="admin-dashboard-container">
+            <button class="btn btn-secondary btn-sm" id="load-admin-dashboard-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+              ${t('loadDashboard')}
+            </button>
+          </div>
+        </div><div class="divider"></div>
         ` : ''}
         ${state.user ? `
         <div class="form-group"><label class="form-label">${t('yourRights')}</label>
@@ -2210,6 +2047,10 @@ function openSettings() {
     if (state.isAdmin) {
       loadPendingReports().then(() => renderModerationPanel());
     }
+    // Admin dashboard button
+    document.getElementById('load-admin-dashboard-btn')?.addEventListener('click', () => {
+      loadAdminDashboard(30);
+    });
   });
   document.getElementById('open-shortcuts-link')?.addEventListener('click', (e) => { e.preventDefault(); chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }); });
 
@@ -2455,9 +2296,9 @@ function openSettings() {
     });
     await saveData('settings', state.settings);
     applyTheme(state.settings.theme);
-    if (newLang !== _lang) {
-      _lang = newLang;
-      await saveData('language', _lang);
+    if (newLang !== P.getLang()) {
+      P.setLang(newLang);
+      await saveData('language', newLang);
       // Re-render UI with new language
       updateStaticTexts();
     }
@@ -2686,6 +2527,111 @@ function renderModerationPanel() {
   });
 }
 
+// ==================== ADMIN ANALYTICS DASHBOARD ====================
+async function loadAdminDashboard(daysBack = 30) {
+  if (!state.session || !state.user || !state.isAdmin) return;
+  
+  const container = document.getElementById('admin-dashboard-container');
+  if (!container) return;
+  
+  container.innerHTML = `<div class="admin-dashboard-loading"><div class="skeleton skeleton-stat-card"></div><div class="skeleton skeleton-chart"></div></div>`;
+  
+  try {
+    const res = await supabaseMsg({
+      action: 'supabaseRequest',
+      method: 'POST',
+      path: 'rpc/get_admin_stats',
+      body: { days_back: daysBack }
+    });
+    
+    if (res?.error) {
+      container.innerHTML = `<div style="color:var(--error);font-size:var(--font-size-sm);padding:12px;">${t('adminDashboardError')}: ${escapeHtml(parseSupabaseError(res.error))}</div>`;
+      return;
+    }
+    
+    const data = res?.data;
+    if (!data || data.error) {
+      container.innerHTML = `<div style="color:var(--error);font-size:var(--font-size-sm);padding:12px;">${data?.error || t('adminDashboardError')}</div>`;
+      return;
+    }
+    
+    // Build dashboard HTML
+    const dailyUsage = data.daily_usage || [];
+    const maxDaily = Math.max(...dailyUsage.map(d => d.count), 1);
+    const topPrompts = data.top_prompts_global || [];
+    const platformStats = data.platform_stats || [];
+    const maxPlatform = Math.max(...platformStats.map(p => p.count), 1);
+    const newUsers = data.new_users_daily || [];
+    const topLibrary = data.top_library_prompts || [];
+    
+    container.innerHTML = `
+      <div class="admin-dashboard">
+        <div class="admin-dash-period">
+          <select id="admin-dash-period-select" style="font-size:var(--font-size-xs);padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);">
+            <option value="7" ${daysBack === 7 ? 'selected' : ''}>7 ${t('days')}</option>
+            <option value="30" ${daysBack === 30 ? 'selected' : ''}>30 ${t('days')}</option>
+            <option value="90" ${daysBack === 90 ? 'selected' : ''}>90 ${t('days')}</option>
+          </select>
+        </div>
+        
+        <div class="admin-dash-overview">
+          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_users || 0}</div><div class="admin-dash-stat-label">${t('adminTotalUsers')}</div></div>
+          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.premium_users || 0}</div><div class="admin-dash-stat-label">${t('adminPremiumUsers')}</div></div>
+          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.unique_active_users || 0}</div><div class="admin-dash-stat-label">${t('adminActiveUsers')}</div></div>
+          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_uses || 0}</div><div class="admin-dash-stat-label">${t('adminTotalInserts')}</div></div>
+        </div>
+        
+        <div class="admin-dash-overview">
+          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_prompts || 0}</div><div class="admin-dash-stat-label">${t('adminUserPrompts')}</div></div>
+          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_library_approved || 0}/${data.total_library_prompts || 0}</div><div class="admin-dash-stat-label">${t('adminLibraryPrompts')}</div></div>
+          <div class="admin-dash-stat"><div class="admin-dash-stat-value">${data.total_reports_pending || 0}</div><div class="admin-dash-stat-label">${t('adminPendingReports')}</div></div>
+        </div>
+        
+        ${dailyUsage.length > 0 ? `
+        <div class="admin-dash-section">
+          <div class="admin-dash-section-title">${t('adminDailyUsage')}</div>
+          <div class="usage-chart">${dailyUsage.slice(0, 14).reverse().map(d => {
+            const pct = Math.max((d.count / maxDaily) * 80, 2);
+            const dateStr = new Date(d.date).toLocaleDateString(P.getLang() === 'ru' ? 'ru' : 'en', { month: 'short', day: 'numeric' });
+            return `<div class="chart-bar-wrap"><div class="chart-bar" style="height:${pct}px;" title="${d.count} uses / ${d.unique_users} users"></div><div class="chart-bar-label">${dateStr}</div></div>`;
+          }).join('')}</div>
+        </div>` : ''}
+        
+        ${topPrompts.length > 0 ? `
+        <div class="admin-dash-section">
+          <div class="admin-dash-section-title">${t('adminTopPrompts')}</div>
+          ${topPrompts.slice(0, 5).map((p, i) => `
+            <div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 30))}</span><span class="top-prompt-uses">${p.uses} (${p.unique_users} ${t('adminUsers')})</span></div>
+          `).join('')}
+        </div>` : ''}
+        
+        ${platformStats.length > 0 ? `
+        <div class="admin-dash-section">
+          <div class="admin-dash-section-title">${t('usageByPlatform')}</div>
+          <div class="platform-stats">${platformStats.map(p => `<div class="platform-stat-row"><span class="platform-stat-name">${escapeHtml(p.platform)}</span><div class="platform-stat-bar-bg"><div class="platform-stat-bar" style="width:${(p.count / maxPlatform) * 100}%;"></div></div><span class="platform-stat-count">${p.count}</span></div>`).join('')}</div>
+        </div>` : ''}
+        
+        ${topLibrary.length > 0 ? `
+        <div class="admin-dash-section">
+          <div class="admin-dash-section-title">${t('adminTopLibrary')}</div>
+          ${topLibrary.slice(0, 5).map((p, i) => `
+            <div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 25))}</span><span class="top-prompt-uses">${p.likes || 0} likes</span></div>
+          `).join('')}
+        </div>` : ''}
+      </div>
+    `;
+    
+    // Period selector listener
+    document.getElementById('admin-dash-period-select')?.addEventListener('change', (e) => {
+      loadAdminDashboard(parseInt(e.target.value));
+    });
+    
+  } catch (e) {
+    console.error('Admin dashboard error:', e);
+    container.innerHTML = `<div style="color:var(--error);font-size:var(--font-size-sm);padding:12px;">${t('adminDashboardError')}</div>`;
+  }
+}
+
 // ==================== SEARCH (optimized) ====================
 function initSearch() {
   const input = document.getElementById('search-input');
@@ -2829,11 +2775,7 @@ document.getElementById('upgrade-buy-btn')?.addEventListener('click', () => {
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('upgrade-modal'); });
 }
 
-// ==================== MODAL UTILS ====================
-function closeModal(id) {
-  const modal = document.getElementById(id);
-  if (modal) { modal.classList.remove('visible'); setTimeout(() => modal.remove(), 250); }
-}
+// closeModal is aliased from P.closeModal (modules/utils.js)
 
 // ==================== HOTKEY SETTINGS SYNC ====================
 async function syncHotkeysToSupabase() {
@@ -2908,8 +2850,8 @@ async function loadHotkeysFromSupabase() {
 
 // ==================== SUPABASE SYNC (with offline queue support) ====================
 async function syncPromptToSupabase(prompt) {
-  if (typeof Promptory !== 'undefined' && Promptory.syncPromptToCloud) {
-    return Promptory.syncPromptToCloud(prompt);
+  if (P.syncPromptToCloud) {
+    return P.syncPromptToCloud(prompt);
   }
   // Fallback: direct sync (if modules not loaded)
   if (!state.session || !state.user) return;
@@ -2949,16 +2891,16 @@ async function syncPromptToSupabase(prompt) {
 }
 
 async function syncPromptDeleteToSupabase(id) {
-  if (typeof Promptory !== 'undefined' && Promptory.syncPromptDeleteToCloud) {
-    return Promptory.syncPromptDeleteToCloud(id);
+  if (P.syncPromptDeleteToCloud) {
+    return P.syncPromptDeleteToCloud(id);
   }
   if (!state.session || !state.user) return;
   try { await supabaseMsg({ action: 'supabaseRequest', method: 'DELETE', path: `prompts?id=eq.${id}` }); } catch (e) { /* silent */ }
 }
 
 async function syncFolderToSupabase(folder) {
-  if (typeof Promptory !== 'undefined' && Promptory.syncFolderToCloud) {
-    return Promptory.syncFolderToCloud(folder);
+  if (P.syncFolderToCloud) {
+    return P.syncFolderToCloud(folder);
   }
   if (!state.session || !state.user) return;
   try { 
@@ -2968,8 +2910,8 @@ async function syncFolderToSupabase(folder) {
 }
 
 async function syncFolderDeleteToSupabase(id) {
-  if (typeof Promptory !== 'undefined' && Promptory.syncFolderDeleteToCloud) {
-    return Promptory.syncFolderDeleteToCloud(id);
+  if (P.syncFolderDeleteToCloud) {
+    return P.syncFolderDeleteToCloud(id);
   }
   if (!state.session || !state.user) return;
   try { await supabaseMsg({ action: 'supabaseRequest', method: 'DELETE', path: `folders?id=eq.${id}` }); } catch (e) { /* silent */ }
@@ -3178,8 +3120,8 @@ async function syncAllData() {
     console.log('✅ Sync complete! Prompts:', state.prompts.length, 'Folders:', state.folders.length, 'Premium:', state.isPremium);
     
     // After full sync, try to drain any offline queue items that may have accumulated
-    if (typeof Promptory !== 'undefined' && Promptory.processQueue) {
-      setTimeout(() => Promptory.processQueue(), 500);
+    if (P.processQueue) {
+      setTimeout(() => P.processQueue(), 500);
     }
   } catch (e) { 
     console.error('❌ Sync error:', e); 
@@ -3222,10 +3164,9 @@ async function init() {
   applyTheme(state.settings.theme);
   
   // Initialize offline queue module
-  if (typeof Promptory !== 'undefined' && Promptory.initOffline) {
-    // Share state with offline module
-    Promptory.state = state;
-    await Promptory.initOffline();
+  if (P.initOffline) {
+    // state is already P.state — single source of truth, no need to assign
+    await P.initOffline();
   }
 
   const welcomeScreen = document.getElementById('welcome-screen');

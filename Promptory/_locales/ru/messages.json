@@ -147,6 +147,7 @@
   "freePlan": { "message": "Бесплатный план" },
   "promptsUsed": { "message": "$1 / $2 промптов использовано", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
   "upgradeInfo": { "message": "Перейдите на Premium для неограниченных промптов, приоритетного доступа и других возможностей." },
+  "folderLimitReached": { "message": "Бесплатный план: максимум 3 папки. Перейдите на Premium для неограниченных папок." },
 
   "account": { "message": "Аккаунт" },
   "signedIn": { "message": "Вы вошли" },
@@ -308,5 +309,21 @@
   "imageCompressed": { "message": "Изображение сжато для загрузки" },
   "morePrompts": { "message": "Ещё $1 промптов...", "placeholders": { "1": { "content": "$1" } } },
   "rateLimited": { "message": "Слишком много запросов. Подождите немного." },
-  "dataVersionMigrated": { "message": "Данные обновлены до последней версии" }
+  "dataVersionMigrated": { "message": "Данные обновлены до последней версии" },
+
+  "adminDashboard": { "message": "Панель аналитики" },
+  "loadDashboard": { "message": "Загрузить панель" },
+  "adminDashboardError": { "message": "Ошибка загрузки панели" },
+  "days": { "message": "дней" },
+  "adminTotalUsers": { "message": "Всего пользователей" },
+  "adminPremiumUsers": { "message": "Premium" },
+  "adminActiveUsers": { "message": "Активных" },
+  "adminTotalInserts": { "message": "Всего вставок" },
+  "adminUserPrompts": { "message": "Промптов" },
+  "adminLibraryPrompts": { "message": "Библиотека (одобр./всего)" },
+  "adminPendingReports": { "message": "Жалобы на рассмотрении" },
+  "adminDailyUsage": { "message": "Использование по дням" },
+  "adminTopPrompts": { "message": "Топ промптов (глобально)" },
+  "adminUsers": { "message": "пользователей" },
+  "adminTopLibrary": { "message": "Топ библиотечных промптов" }
 }

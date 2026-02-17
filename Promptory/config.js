@@ -16,6 +16,7 @@ const CONFIG = {
   
   // Free tier limits
   FREE_PROMPT_LIMIT: 20,
+  FREE_FOLDER_LIMIT: 3,
   
   // Performance caps
   MAX_ANIM_ITEMS: 8,
@@ -30,3 +31,6 @@ const CONFIG = {
 
 // Make available in different contexts (popup, background, options)
 if (typeof globalThis !== 'undefined') globalThis.CONFIG = CONFIG;
+
+// ES module export for service worker (MV3)
+export { CONFIG };

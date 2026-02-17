@@ -23,6 +23,8 @@ P.state = {
   userReports: new Set(),
   isPremium: false,
   promptLimit: FREE_PROMPT_LIMIT,
+  isAdmin: false,
+  pendingReports: [],
   // Library pagination state
   libraryPage: 0,
   libraryHasMore: true,

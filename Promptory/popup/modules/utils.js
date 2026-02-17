@@ -151,4 +151,17 @@ P.closeModal = function(id) {
   if (modal) { modal.classList.remove('visible'); setTimeout(() => modal.remove(), 250); }
 };
 
+// ==================== SANITIZATION (for untrusted library content) ====================
+// Extra layer of protection for community-submitted prompts beyond escapeHtml
+P.sanitizeLibraryText = function(text) {
+  if (!text) return '';
+  // Remove null bytes, control characters (except newline/tab), and zero-width chars
+  let sanitized = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  // Remove zero-width characters used for homograph attacks
+  sanitized = sanitized.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, '');
+  // Limit length to prevent DOM bloat
+  if (sanitized.length > 10000) sanitized = sanitized.substring(0, 10000) + '...';
+  return sanitized;
+};
+
 })(window.Promptory);

@@ -147,6 +147,7 @@
   "freePlan": { "message": "Free Plan" },
   "promptsUsed": { "message": "$1 / $2 prompts used", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
   "upgradeInfo": { "message": "Upgrade to Premium for unlimited prompts, priority library access, and more." },
+  "folderLimitReached": { "message": "Free plan: max 3 folders. Upgrade to Premium for unlimited folders." },
 
   "account": { "message": "Account" },
   "signedIn": { "message": "Signed In" },
@@ -308,5 +309,21 @@
   "imageCompressed": { "message": "Image compressed for upload" },
   "morePrompts": { "message": "$1 more prompts...", "placeholders": { "1": { "content": "$1" } } },
   "rateLimited": { "message": "Too many requests. Please wait a moment." },
-  "dataVersionMigrated": { "message": "Data migrated to latest version" }
+  "dataVersionMigrated": { "message": "Data migrated to latest version" },
+
+  "adminDashboard": { "message": "Analytics Dashboard" },
+  "loadDashboard": { "message": "Load Dashboard" },
+  "adminDashboardError": { "message": "Failed to load dashboard" },
+  "days": { "message": "days" },
+  "adminTotalUsers": { "message": "Total Users" },
+  "adminPremiumUsers": { "message": "Premium" },
+  "adminActiveUsers": { "message": "Active Users" },
+  "adminTotalInserts": { "message": "Total Inserts" },
+  "adminUserPrompts": { "message": "User Prompts" },
+  "adminLibraryPrompts": { "message": "Library (approved/total)" },
+  "adminPendingReports": { "message": "Pending Reports" },
+  "adminDailyUsage": { "message": "Daily Usage" },
+  "adminTopPrompts": { "message": "Top Prompts (Global)" },
+  "adminUsers": { "message": "users" },
+  "adminTopLibrary": { "message": "Top Library Prompts" }
 }
