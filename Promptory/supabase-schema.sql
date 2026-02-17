@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   avatar_url TEXT,
   is_admin BOOLEAN DEFAULT false,
   is_premium BOOLEAN DEFAULT false,
-  prompt_limit INTEGER DEFAULT 20,
+  prompt_limit INTEGER DEFAULT 25,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS public.prompt_reports (
 -- Add is_premium and prompt_limit to profiles if not present
 DO $$ BEGIN
   ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT false;
-  ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS prompt_limit INTEGER DEFAULT 20;
+  ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS prompt_limit INTEGER DEFAULT 25;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
