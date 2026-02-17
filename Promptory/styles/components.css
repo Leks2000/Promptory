@@ -503,22 +503,61 @@ textarea {
 
 
 /* ========== SCROLLBAR ========== */
+/* Hide scrollbars by default */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 0;
+  height: 0;
 }
 
-::-webkit-scrollbar-track {
+/* Show thin scrollbar only on .content (main scrollable area) when hovered */
+.content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.content::-webkit-scrollbar-track {
   background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
+.content::-webkit-scrollbar-thumb {
+  background: transparent;
   border-radius: var(--radius-full);
+  transition: background 0.2s;
 }
 
-::-webkit-scrollbar-thumb:hover {
+.content:hover::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+}
+
+.content::-webkit-scrollbar-thumb:hover {
   background: var(--border-hover);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: none;
+}
+
+.content {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.content:hover {
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+
+/* Modal body scrollbar */
+.modal-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
 }
 
 
