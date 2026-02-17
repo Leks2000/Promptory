@@ -177,7 +177,8 @@ body {
 .content { 
   flex: 1; 
   overflow-y: auto; 
-  padding: var(--space-4); 
+  padding: var(--space-4);
+  position: relative; /* needed for absolute-positioned inactive tabs */
 }
 
 .tab-header { 
