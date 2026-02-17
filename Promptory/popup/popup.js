@@ -363,15 +363,22 @@ function buildFolderSection(folder, prompts) {
   return section;
 }
 
+// Track which cards have already been rendered (to skip entrance animation on re-render)
+const _renderedCardIds = new Set();
+let _isFirstRender = true;
+
 function renderPromptCard(prompt, idx) {
-  const delay = idx < MAX_ANIM_ITEMS ? `style="animation-delay:${idx * 35}ms"` : 'style="animation:none;opacity:1;transform:none;"';
+  const isNew = _isFirstRender || !_renderedCardIds.has(prompt.id);
+  const enterClass = isNew && idx < MAX_ANIM_ITEMS ? ' card-entering' : '';
+  const delay = isNew && idx < MAX_ANIM_ITEMS ? `style="animation-delay:${idx * 35}ms"` : '';
+  _renderedCardIds.add(prompt.id);
   const tagsHtml = prompt.tags?.length
     ? `<div class="tags">${prompt.tags.slice(0, 3).map(tg => `<span class="tag">#${escapeHtml(tg)}</span>`).join('')}${prompt.tags.length > 3 ? `<span class="tag">+${prompt.tags.length - 3}</span>` : ''}</div>`
     : '';
   // Card click = copy. Actions: fav, edit, insert, menu. Added glare-card for premium hover effect
   // Keyboard: tabindex + role for accessibility; draggable for drag-and-drop
   return `
-    <div class="prompt-card glare-card" data-prompt-id="${prompt.id}" ${delay} title="${t('clickToCopy') || 'Click to copy'}" tabindex="0" role="button" aria-label="${escapeHtml(prompt.title)} - ${t('clickToCopy')}" draggable="true">
+    <div class="prompt-card glare-card${enterClass}" data-prompt-id="${prompt.id}" ${delay} title="${t('clickToCopy') || 'Click to copy'}" tabindex="0" role="button" aria-label="${escapeHtml(prompt.title)} - ${t('clickToCopy')}" draggable="true">
       <div class="prompt-card-header">
         <div class="prompt-title">${escapeHtml(truncate(prompt.title, 60))}</div>
         <div class="prompt-actions">
@@ -392,6 +399,71 @@ function renderPromptCard(prompt, idx) {
       ${tagsHtml}
       <div class="prompt-meta"><span class="prompt-stat">${t('usedTimes', prompt.useCount || 0)}</span></div>
     </div>`;
+}
+
+// Move a prompt card between folder sections in the DOM (no full re-render)
+function _movePromptCardInDOM(promptId, targetSection, targetFolderId) {
+  const card = document.querySelector(`.prompt-card[data-prompt-id="${promptId}"]`);
+  if (!card) { renderPrompts(); return; }
+  
+  const sourceSectionEl = card.closest('.folder-section');
+  const targetContent = targetSection.querySelector('.folder-content');
+  if (!targetContent) { renderPrompts(); return; }
+  
+  // Animate card exit from old position
+  card.classList.add('card-exiting');
+  card.addEventListener('animationend', function onExit() {
+    card.removeEventListener('animationend', onExit);
+    card.classList.remove('card-exiting');
+    
+    // Move card to target folder content
+    targetContent.appendChild(card);
+    
+    // Briefly animate entering
+    card.classList.add('card-entering');
+    card.style.animationDelay = '0ms';
+    card.addEventListener('animationend', function onEnter() {
+      card.removeEventListener('animationend', onEnter);
+      card.classList.remove('card-entering');
+      card.style.animationDelay = '';
+    }, { once: true });
+    
+    // Update source folder section: update count, hide if empty
+    if (sourceSectionEl) {
+      const sourceContent = sourceSectionEl.querySelector('.folder-content');
+      const sourceCount = sourceSectionEl.querySelector('.folder-count');
+      const remaining = sourceContent ? sourceContent.querySelectorAll('.prompt-card').length : 0;
+      if (sourceCount) sourceCount.textContent = remaining;
+      // Remove empty folder section (except uncategorized which may still have 0)
+      if (remaining === 0) {
+        sourceSectionEl.remove();
+      }
+    }
+    
+    // Update target folder count
+    const targetCount = targetSection.querySelector('.folder-count');
+    if (targetCount) {
+      const count = targetContent.querySelectorAll('.prompt-card').length;
+      targetCount.textContent = count;
+    }
+    
+    // Ensure target section is expanded
+    targetSection.classList.add('expanded');
+    localStorage.setItem(`pv-folder-${targetFolderId === 'uncategorized' ? 'uncategorized' : targetFolderId}`, 'true');
+  }, { once: true });
+}
+
+// Update folder card counts on the Folders tab without re-rendering
+function _updateFolderCounts() {
+  const folderCards = document.querySelectorAll('#folders-list .folder-card[data-folder-id]');
+  folderCards.forEach(card => {
+    const folderId = card.dataset.folderId;
+    const count = state.prompts.filter(p => p.folderId === folderId).length;
+    const countEl = card.querySelector('.folder-card-count');
+    if (countEl) {
+      countEl.textContent = `${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}`;
+    }
+  });
 }
 
 function attachPromptCardListeners() {
@@ -477,7 +549,10 @@ function attachPromptCardListeners() {
       ? (state.folders.find(f => f.id === newFolderId)?.name || t('uncategorized'))
       : t('uncategorized');
     showToast(`Moved to ${folderName}`, 'success');
-    renderPrompts();
+    // Smart DOM update: move card between folder sections instead of full re-render
+    _movePromptCardInDOM(promptId, folderSection, targetFolderId);
+    // Also update folder counts on the Folders tab
+    _updateFolderCounts();
     syncPromptToSupabase(prompt);
   });
   
@@ -1249,8 +1324,10 @@ function _renderFoldersImmediate() {
   }
   list.innerHTML = folders.map((f, i) => {
     const count = state.prompts.filter(p => p.folderId === f.id).length;
-    const delay = i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : 'style="animation:none;opacity:1;"';
-    return `<div class="folder-card" data-folder-id="${f.id}" data-folder-click="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn" data-edit-folder="${f.id}" title="${t('edit')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="prompt-action-btn" data-delete-folder="${f.id}" title="${t('delete')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div>`;
+    const enterClass = _isFirstRender || !_renderedCardIds.has('folder-' + f.id) ? ' card-entering' : '';
+    const delay = enterClass && i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : '';
+    _renderedCardIds.add('folder-' + f.id);
+    return `<div class="folder-card${enterClass}" data-folder-id="${f.id}" data-folder-click="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn" data-edit-folder="${f.id}" title="${t('edit')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="prompt-action-btn" data-delete-folder="${f.id}" title="${t('delete')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div>`;
   }).join('');
 
   // Click on folder card to navigate to prompts in that folder
@@ -1374,8 +1451,10 @@ function _renderFavoritesImmediate() {
   }
   let html = `<div class="favorites-header"><span class="favorites-header-title">${t('favorites')}</span><span class="favorites-count">${favorites.length}</span></div>`;
   html += favorites.map((p, i) => {
-    const delay = i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : 'style="animation:none;opacity:1;"';
-    return `<div class="prompt-card favorite-card" data-prompt-id="${p.id}" ${delay}><div class="prompt-card-header"><div class="prompt-title">${escapeHtml(truncate(p.title, 50))}</div><div class="prompt-actions"><button class="prompt-action-btn" data-fav-copy="${p.id}" title="${t('copy')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button class="prompt-action-btn" data-fav-insert="${p.id}" title="${t('insertToPage')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></button><button class="prompt-action-btn active" data-fav-remove="${p.id}" title="${t('removeFromFavorites')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button></div></div><div class="prompt-meta"><span class="prompt-stat">${t('usedTimes', p.useCount || 0)}</span><span class="prompt-stat">${formatDate(p.updatedAt)}</span></div></div>`;
+    const enterClass = _isFirstRender || !_renderedCardIds.has('fav-' + p.id) ? ' card-entering' : '';
+    const delay = enterClass && i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : '';
+    _renderedCardIds.add('fav-' + p.id);
+    return `<div class="prompt-card favorite-card${enterClass}" data-prompt-id="${p.id}" ${delay}><div class="prompt-card-header"><div class="prompt-title">${escapeHtml(truncate(p.title, 50))}</div><div class="prompt-actions"><button class="prompt-action-btn" data-fav-copy="${p.id}" title="${t('copy')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button class="prompt-action-btn" data-fav-insert="${p.id}" title="${t('insertToPage')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></button><button class="prompt-action-btn active" data-fav-remove="${p.id}" title="${t('removeFromFavorites')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button></div></div><div class="prompt-meta"><span class="prompt-stat">${t('usedTimes', p.useCount || 0)}</span><span class="prompt-stat">${formatDate(p.updatedAt)}</span></div></div>`;
   }).join('');
   list.innerHTML = html;
   document.querySelectorAll('[data-fav-copy]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); copyPrompt(btn.dataset.favCopy); }));
@@ -1548,7 +1627,10 @@ function renderExplore() {
     const isFlipped = flippedCards.has(p.id);
     const isLiked = state.userLikes.has(p.id);
     const isReported = state.userReports.has(p.id);
-    const delay = i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 60}ms"` : 'style="animation:none;opacity:1;transform:none;"';
+    const isNew = _isFirstRender || !_renderedCardIds.has('explore-' + p.id);
+    const enterClass = isNew ? ' card-entering' : '';
+    const delay = isNew && i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 50}ms"` : '';
+    _renderedCardIds.add('explore-' + p.id);
     const categoryInfo = CATEGORY_COLORS[p.category] || CATEGORY_COLORS['general'];
     
     // Thumbnail: use image_url if available, otherwise category gradient (no emoji)
@@ -1560,7 +1642,7 @@ function renderExplore() {
       : `background: ${categoryInfo.bg};`;
     const thumbnailContent = '';
     
-    return `<div class="explore-card-wrapper" data-explore-id="${p.id}" ${delay}>
+    return `<div class="explore-card-wrapper${enterClass}" data-explore-id="${p.id}" ${delay}>
       <div class="explore-card ${isFlipped ? 'flipped' : ''}">
         <div class="explore-card-front">
           <div class="explore-card-thumbnail${hasStorageImage ? ' needs-image-load' : ''}" ${hasStorageImage ? `data-image-url="${escapeHtml(p.imageUrl)}"` : ''} style="${thumbnailStyle}">
@@ -3218,7 +3300,16 @@ async function init() {
   // Update static text from i18n — this also does the FIRST render of all tabs
   updateStaticTexts();
   _initRenderDone = true;
+  // Mark first render complete: subsequent renders won't replay entrance animations
+  setTimeout(() => { _isFirstRender = false; }, 600);
   // No extra renderPrompts/renderFolders/etc here — updateStaticTexts already did them
+
+  // Clean up entrance animation classes after they complete (prevents re-animation on layout changes)
+  document.addEventListener('animationend', (e) => {
+    if (e.target.classList.contains('card-entering')) {
+      e.target.classList.remove('card-entering');
+    }
+  });
 
   document.getElementById('new-prompt-btn').addEventListener('click', () => openPromptEditor());
   document.getElementById('new-folder-btn').addEventListener('click', () => openFolderEditor());

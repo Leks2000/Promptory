@@ -5,42 +5,58 @@
    ============================================ */
 
 /* ========== TAB TRANSITIONS ========== */
+/* Tabs use visibility+position instead of display:none to prevent animation replay */
 .tab-content {
   opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 280ms var(--ease-out-expo),
-              transform 280ms var(--ease-out-expo);
-  display: none;
+  transform: translateY(8px);
+  transition: opacity 220ms var(--ease-out-expo),
+              transform 220ms var(--ease-out-expo),
+              visibility 0ms 220ms; /* delay hiding until fade completes */
+  visibility: hidden;
+  position: absolute;
+  width: 100%;
+  pointer-events: none;
 }
 
 .tab-content.active {
   opacity: 1;
   transform: translateY(0);
-  display: block;
+  visibility: visible;
+  position: relative;
+  pointer-events: auto;
+  transition: opacity 220ms var(--ease-out-expo),
+              transform 220ms var(--ease-out-expo),
+              visibility 0ms 0ms; /* show immediately */
 }
 
 /* ========== CARD ENTRANCE - staggered reveal ========== */
+/* Cards start visible; entrance animation only plays on first render via .card-entering class */
 .prompt-card,
 .folder-card {
-  opacity: 0;
-  transform: translateY(12px) scale(0.98);
-  animation: cardReveal 400ms var(--ease-out-expo) forwards;
+  opacity: 1;
+  transform: none;
 }
 
-/* Staggered delays - up to 8 items */
-.prompt-card:nth-child(1), .folder-card:nth-child(1) { animation-delay: 0ms; }
-.prompt-card:nth-child(2), .folder-card:nth-child(2) { animation-delay: 40ms; }
-.prompt-card:nth-child(3), .folder-card:nth-child(3) { animation-delay: 70ms; }
-.prompt-card:nth-child(4), .folder-card:nth-child(4) { animation-delay: 100ms; }
-.prompt-card:nth-child(5), .folder-card:nth-child(5) { animation-delay: 130ms; }
-.prompt-card:nth-child(6), .folder-card:nth-child(6) { animation-delay: 155ms; }
-.prompt-card:nth-child(7), .folder-card:nth-child(7) { animation-delay: 175ms; }
-.prompt-card:nth-child(8), .folder-card:nth-child(8) { animation-delay: 195ms; }
+/* Entrance animation only when explicitly added (first render / new items) */
+.prompt-card.card-entering,
+.folder-card.card-entering {
+  animation: cardReveal 350ms var(--ease-out-expo) forwards;
+}
+
+/* Staggered delays via inline style or nth-child for entering cards */
+.card-entering:nth-child(1) { animation-delay: 0ms; }
+.card-entering:nth-child(2) { animation-delay: 35ms; }
+.card-entering:nth-child(3) { animation-delay: 60ms; }
+.card-entering:nth-child(4) { animation-delay: 85ms; }
+.card-entering:nth-child(5) { animation-delay: 105ms; }
+.card-entering:nth-child(6) { animation-delay: 125ms; }
+.card-entering:nth-child(7) { animation-delay: 140ms; }
+.card-entering:nth-child(8) { animation-delay: 155ms; }
 
 @keyframes cardReveal {
   0% {
     opacity: 0;
-    transform: translateY(12px) scale(0.98);
+    transform: translateY(10px) scale(0.98);
   }
   100% {
     opacity: 1;
@@ -104,23 +120,27 @@
   perspective: 1200px;
   height: 210px;
   contain: layout style;
-  opacity: 0;
-  transform: translateY(16px) scale(0.96);
-  animation: exploreReveal 500ms var(--ease-out-expo) forwards;
+  opacity: 1;
+  transform: none;
 }
 
-/* Staggered explore cards */
-.explore-card-wrapper:nth-child(1) { animation-delay: 0ms; }
-.explore-card-wrapper:nth-child(2) { animation-delay: 60ms; }
-.explore-card-wrapper:nth-child(3) { animation-delay: 110ms; }
-.explore-card-wrapper:nth-child(4) { animation-delay: 155ms; }
-.explore-card-wrapper:nth-child(5) { animation-delay: 195ms; }
-.explore-card-wrapper:nth-child(6) { animation-delay: 230ms; }
+/* Entrance animation only on first render */
+.explore-card-wrapper.card-entering {
+  animation: exploreReveal 400ms var(--ease-out-expo) forwards;
+}
+
+/* Staggered explore cards (entering only) */
+.explore-card-wrapper.card-entering:nth-child(1) { animation-delay: 0ms; }
+.explore-card-wrapper.card-entering:nth-child(2) { animation-delay: 50ms; }
+.explore-card-wrapper.card-entering:nth-child(3) { animation-delay: 90ms; }
+.explore-card-wrapper.card-entering:nth-child(4) { animation-delay: 125ms; }
+.explore-card-wrapper.card-entering:nth-child(5) { animation-delay: 155ms; }
+.explore-card-wrapper.card-entering:nth-child(6) { animation-delay: 180ms; }
 
 @keyframes exploreReveal {
   0% {
     opacity: 0;
-    transform: translateY(16px) scale(0.96);
+    transform: translateY(12px) scale(0.97);
   }
   100% {
     opacity: 1;
@@ -333,9 +353,13 @@ button:active {
 }
 
 /* ========== TAG POP-IN (spring) ========== */
+/* Tags start visible; animate only on first render via .tag-entering */
 .tag {
-  opacity: 0;
-  transform: scale(0.7) translateY(4px);
+  opacity: 1;
+  transform: none;
+}
+
+.tag.tag-entering {
   animation: tagSpring 350ms var(--transition-spring) forwards;
 }
 
@@ -1164,8 +1188,35 @@ textarea:focus {
 .prompt-card,
 .folder-card,
 .explore-card-wrapper {
-  will-change: transform, opacity;
   contain: layout style paint;
+}
+
+/* Only use will-change during entrance animation for better GPU compositing */
+.prompt-card.card-entering,
+.folder-card.card-entering,
+.explore-card-wrapper.card-entering {
+  will-change: transform, opacity;
+}
+
+/* ========== SMOOTH MOVE TRANSITION (for drag-drop reorder) ========== */
+.prompt-card.card-moving {
+  transition: transform 250ms var(--ease-out-expo), opacity 200ms ease;
+}
+
+/* ========== CARD EXIT ANIMATION ========== */
+.prompt-card.card-exiting {
+  animation: cardExit 200ms var(--ease-out-expo) forwards;
+}
+
+@keyframes cardExit {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
 }
 
 /* Reduce animation on low-power mode */
