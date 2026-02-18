@@ -1,21 +1,20 @@
-// Promptory Onboarding Tutorial Module v10
-// COMPLETE REWRITE — Game-style spotlight overlay tutorial
-// Flow: Create prompt → Settings → Quick Insert → Select slot → Save → Use hotkey → Library teaser
-// Features: clip-path cutout overlay, pulsing border, smooth scroll, dynamic hotkey detection
+// Promptory Onboarding Tutorial Module v11
+// REWRITE — 4-panel overlay approach (no clip-path z-index issues)
+// Flow: Create prompt -> Settings -> Quick Insert -> Select slot -> Save -> Use hotkey -> Library teaser
+// KEY FIX: Uses 4 overlay panels (top/right/bottom/left) around the target instead of
+// a single overlay with clip-path. This ensures the highlighted element is NEVER dimmed
+// and is always clickable, regardless of its position in the DOM stacking context.
 
 (function() {
 'use strict';
 
-const DEBUG = true;
+const DEBUG = false;
 function log(...args) {
-  if (DEBUG) console.log('[Tutorial v10]', ...args);
+  if (DEBUG) console.log('[Tutorial v11]', ...args);
 }
 
 // ==================== STEP DEFINITIONS ====================
-// Steps are built dynamically based on user's actual hotkey config
-function buildSteps(assignedSlotKey) {
-  // assignedSlotKey is the key user chose a prompt for, e.g. 'slot1' → Alt+1
-  // We detect which hotkey the user ends up using
+function buildSteps() {
   return [
     // === STEP 1: Create a prompt ===
     {
@@ -43,7 +42,7 @@ function buildSteps(assignedSlotKey) {
       action: 'click',
       autoFill: true,
       waitForModal: true,
-      tooltipPosition: 'bottom',
+      tooltipPosition: 'top',
       icon: 'save',
       badge: null
     },
@@ -58,12 +57,12 @@ function buildSteps(assignedSlotKey) {
       target: '#settings-btn',
       action: 'click',
       waitForPrompt: true,
-      tooltipPosition: 'left',
+      tooltipPosition: 'bottom',
       icon: 'settings',
       badge: { en: 'SETTINGS', ru: 'НАСТРОЙКИ' },
       switchTab: 'prompts'
     },
-    // === STEP 4: Focus on Quick Insert section (scroll to it) ===
+    // === STEP 4: Focus on Quick Insert section ===
     {
       id: 4,
       title: { en: 'Quick Insert Hotkeys', ru: 'Горячие клавиши' },
@@ -109,7 +108,7 @@ function buildSteps(assignedSlotKey) {
       icon: 'save',
       badge: { en: 'SAVE', ru: 'СОХРАНЕНИЕ' }
     },
-    // === STEP 7: Show the hotkey to use (dynamic based on which slot user chose) ===
+    // === STEP 7: Show the hotkey to use ===
     {
       id: 7,
       title: { en: 'Try Your Hotkey!', ru: 'Попробуйте горячую клавишу!' },
@@ -123,9 +122,9 @@ function buildSteps(assignedSlotKey) {
       icon: 'hotkey',
       badge: { en: 'MAIN FEATURE', ru: 'ГЛАВНАЯ ФУНКЦИЯ' },
       isPrimary: true,
-      dynamic: true // description is computed at render time
+      dynamic: true
     },
-    // === STEP 8: Library teaser (login required) ===
+    // === STEP 8: Library teaser ===
     {
       id: 8,
       title: { en: 'Explore the Library', ru: 'Откройте Библиотеку' },
@@ -179,14 +178,15 @@ const ICONS = {
 class OnboardingTutorial {
   constructor() {
     this.currentStep = 0;
-    this.overlay = null;
+    this.panels = []; // 4 overlay panels (top, right, bottom, left)
+    this.fullOverlay = null; // Full overlay for info/final steps
     this.tooltip = null;
     this.spotlight = null;
     this.onComplete = null;
     this._cleanup = null;
     this._resizeObserver = null;
     this.steps = null;
-    this.assignedHotkey = 'Alt+1'; // Default; updated if user picks different slot
+    this.assignedHotkey = 'Alt+1';
     this.assignedSlot = 'slot1';
   }
 
@@ -196,32 +196,43 @@ class OnboardingTutorial {
     this.currentStep = 0;
     this.steps = buildSteps();
 
-    log('=== STARTING TUTORIAL v10 (9 steps) ===');
+    log('=== STARTING TUTORIAL v11 (9 steps) ===');
 
-    // Create overlay container (full screen, handles darkening)
-    this.overlay = document.createElement('div');
-    this.overlay.className = 'tut-overlay';
-    this.overlay.id = 'tut-overlay';
-    document.body.appendChild(this.overlay);
+    // Create 4 overlay panels
+    const panelNames = ['top', 'right', 'bottom', 'left'];
+    this.panels = panelNames.map(name => {
+      const panel = document.createElement('div');
+      panel.className = 'tut-overlay-panel';
+      panel.id = `tut-panel-${name}`;
+      panel.dataset.panel = name;
+      document.body.appendChild(panel);
+      return panel;
+    });
 
-    // Create spotlight ring (pulsing border around target)
+    // Create full overlay (hidden by default, for info/final steps)
+    this.fullOverlay = document.createElement('div');
+    this.fullOverlay.className = 'tut-overlay-full';
+    this.fullOverlay.id = 'tut-overlay-full';
+    document.body.appendChild(this.fullOverlay);
+
+    // Create spotlight ring
     this.spotlight = document.createElement('div');
     this.spotlight.className = 'tut-spotlight';
     this.spotlight.id = 'tut-spotlight';
     document.body.appendChild(this.spotlight);
 
-    // Create tooltip container
+    // Create tooltip
     this.tooltip = document.createElement('div');
     this.tooltip.className = 'tut-tooltip';
     this.tooltip.id = 'tut-tooltip';
     document.body.appendChild(this.tooltip);
 
-    // Fade in overlay
+    // Fade in panels
     await this._raf();
-    this.overlay.classList.add('tut-visible');
+    this.panels.forEach(p => p.classList.add('tut-visible'));
     await this._wait(300);
 
-    // Handle resize to reposition
+    // Handle resize
     this._resizeObserver = new ResizeObserver(() => this._repositionCurrent());
     this._resizeObserver.observe(document.body);
 
@@ -272,7 +283,6 @@ class OnboardingTutorial {
     if (step.target) {
       target = document.querySelector(step.target);
 
-      // Wait for element if needed
       if (!target && (step.waitForPrompt || step.waitForModal)) {
         log(`Waiting for target: ${step.target}`);
         const waitSelector = step.waitForPrompt ? '.prompt-card:first-child' : step.target;
@@ -297,16 +307,10 @@ class OnboardingTutorial {
 
     // Scroll save button into view
     if (step.scrollToBottom && target) {
-      const modalBody = target.closest('.modal-body');
-      if (modalBody) {
-        const targetRect = target.getBoundingClientRect();
-        const modalRect = modalBody.getBoundingClientRect();
-        // Scroll footer area into view
-        const footer = target.closest('.modal')?.querySelector('.modal-footer');
-        if (footer) {
-          footer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          await this._wait(500);
-        }
+      const footer = target.closest('.modal')?.querySelector('.modal-footer');
+      if (footer) {
+        footer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await this._wait(500);
       }
     }
 
@@ -318,13 +322,14 @@ class OnboardingTutorial {
     if (target) {
       this._highlightTarget(target, step);
       this._positionTooltip(target, step.tooltipPosition);
+      // Ensure panels are visible, full overlay is hidden
+      this._showPanels();
     } else {
       // Center tooltip for info/final steps
       this._hideSpotlight();
+      this._hidePanels();
+      this._showFullOverlay();
       this._centerTooltip();
-      // Darken everything
-      this.overlay.style.clipPath = 'none';
-      this.overlay.classList.add('tut-full-dim');
     }
 
     // Show tooltip with animation
@@ -341,13 +346,12 @@ class OnboardingTutorial {
       setTimeout(() => {
         log('Auto-opening dropdown');
         target.focus();
-        // Small flash to draw attention
         target.classList.add('tut-dropdown-flash');
         setTimeout(() => target.classList.remove('tut-dropdown-flash'), 600);
       }, 500);
     }
 
-    // Setup interaction for this step
+    // Setup interaction
     this._setupInteraction(step, target);
   }
 
@@ -358,19 +362,16 @@ class OnboardingTutorial {
     const icon = ICONS[step.icon] || '';
     const isPrimary = step.isPrimary;
 
-    // Process dynamic descriptions (replace {hotkey})
     let description = step.description[lang] || step.description.en;
     if (step.dynamic) {
       description = description.replace(/\{hotkey\}/g, this.assignedHotkey);
     }
     description = description.replace(/\n/g, '<br>');
 
-    // Feature badge
     const badgeHtml = step.badge
       ? `<div class="tut-badge${isPrimary ? ' tut-badge-primary' : ''}">${step.badge[lang] || step.badge.en}</div>`
       : '';
 
-    // Build hotkey visual for step 7
     let hotkeyVisualHtml = '';
     if (step.id === 7) {
       const keys = this.assignedHotkey.split('+');
@@ -402,42 +403,71 @@ class OnboardingTutorial {
     `;
   }
 
-  // ==================== HIGHLIGHT TARGET ====================
+  // ==================== HIGHLIGHT TARGET (4-panel approach) ====================
   _highlightTarget(element, step) {
     const rect = element.getBoundingClientRect();
     const pad = 6;
 
-    // Ensure the target element (and its ancestors) can render above the overlay.
-    // Walk up the DOM and force any ancestor with a stacking context that would
-    // trap our z-index to also sit above the overlay layer.
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Hole dimensions (the area NOT covered by panels)
+    const holeLeft = Math.max(0, rect.left - pad);
+    const holeTop = Math.max(0, rect.top - pad);
+    const holeRight = Math.min(vw, rect.right + pad);
+    const holeBottom = Math.min(vh, rect.bottom + pad);
+
+    // Position the 4 panels around the hole
+    // Top panel: full width, from top of screen to top of hole
+    const [panelTop, panelRight, panelBottom, panelLeft] = this.panels;
+
+    panelTop.style.left = '0';
+    panelTop.style.top = '0';
+    panelTop.style.width = `${vw}px`;
+    panelTop.style.height = `${holeTop}px`;
+
+    // Right panel: from right of hole to right of screen, from top of hole to bottom of hole
+    panelRight.style.left = `${holeRight}px`;
+    panelRight.style.top = `${holeTop}px`;
+    panelRight.style.width = `${vw - holeRight}px`;
+    panelRight.style.height = `${holeBottom - holeTop}px`;
+
+    // Bottom panel: full width, from bottom of hole to bottom of screen
+    panelBottom.style.left = '0';
+    panelBottom.style.top = `${holeBottom}px`;
+    panelBottom.style.width = `${vw}px`;
+    panelBottom.style.height = `${vh - holeBottom}px`;
+
+    // Left panel: from left of screen to left of hole, from top of hole to bottom of hole
+    panelLeft.style.left = '0';
+    panelLeft.style.top = `${holeTop}px`;
+    panelLeft.style.width = `${holeLeft}px`;
+    panelLeft.style.height = `${holeBottom - holeTop}px`;
+
+    // The target element itself is not covered by any panel — it's in the "hole".
+    // Raise it above the panels so it's fully interactive.
     element.classList.add('tut-target-active');
     this._ensureAncestorStacking(element);
 
-    // Position spotlight ring
+    // Position spotlight ring around the hole
     this.spotlight.style.display = 'block';
-    this.spotlight.style.left = `${rect.left - pad}px`;
-    this.spotlight.style.top = `${rect.top - pad}px`;
-    this.spotlight.style.width = `${rect.width + pad * 2}px`;
-    this.spotlight.style.height = `${rect.height + pad * 2}px`;
+    this.spotlight.style.left = `${holeLeft}px`;
+    this.spotlight.style.top = `${holeTop}px`;
+    this.spotlight.style.width = `${holeRight - holeLeft}px`;
+    this.spotlight.style.height = `${holeBottom - holeTop}px`;
     this.spotlight.style.borderRadius = step.borderRadius || '8px';
-
-    // Update overlay clip-path to create "hole"
-    this.overlay.classList.remove('tut-full-dim');
-    this._updateOverlayHole(rect, pad);
   }
 
-  // Walk up ancestors and temporarily raise any positioned/stacking containers
-  // so the target element can paint above the z-index:9998 overlay.
+  // Raise positioned ancestors so the target's z-index can escape stacking contexts
   _ensureAncestorStacking(element) {
     let el = element.parentElement;
     while (el && el !== document.body && el !== document.documentElement) {
       const style = getComputedStyle(el);
-      // If ancestor creates a stacking context (has z-index set, or transform, etc.)
-      // we need to raise it above the overlay so the child's z-index works.
       const pos = style.position;
+      // Only raise ancestors that actually create a stacking context
       if (pos === 'relative' || pos === 'absolute' || pos === 'fixed' || pos === 'sticky') {
         const currentZ = parseInt(style.zIndex, 10);
-        if (isNaN(currentZ) || currentZ < 10001) {
+        if (isNaN(currentZ) || currentZ < 9999) {
           el.classList.add('tut-ancestor-raised');
         }
       }
@@ -445,21 +475,31 @@ class OnboardingTutorial {
     }
   }
 
-  _updateOverlayHole(rect, pad) {
-    const l = rect.left - pad;
-    const t = rect.top - pad;
-    const r = rect.right + pad;
-    const b = rect.bottom + pad;
+  _showPanels() {
+    this.panels.forEach(p => {
+      p.classList.add('tut-visible');
+      p.style.display = '';
+    });
+    if (this.fullOverlay) {
+      this.fullOverlay.classList.remove('tut-visible');
+      this.fullOverlay.style.display = 'none';
+    }
+  }
 
-    // Cross-browser clip-path polygon with hole (non-zero winding)
-    // Outer rect clockwise, inner rect counter-clockwise
-    this.overlay.style.clipPath = `polygon(
-      0% 0%, 100% 0%, 100% ${t}px,
-      ${r}px ${t}px, ${r}px ${b}px,
-      100% ${b}px, 100% 100%, 0% 100%,
-      0% ${b}px, ${l}px ${b}px,
-      ${l}px ${t}px, 0% ${t}px
-    )`;
+  _hidePanels() {
+    this.panels.forEach(p => {
+      p.style.display = 'none';
+    });
+  }
+
+  _showFullOverlay() {
+    if (this.fullOverlay) {
+      this.fullOverlay.style.display = '';
+      // Delay to allow display change before opacity transition
+      requestAnimationFrame(() => {
+        this.fullOverlay.classList.add('tut-visible');
+      });
+    }
   }
 
   _hideSpotlight() {
@@ -468,45 +508,70 @@ class OnboardingTutorial {
 
   // ==================== POSITION TOOLTIP ====================
   _positionTooltip(element, preferred = 'bottom') {
+    // Need to measure tooltip first
+    this.tooltip.style.visibility = 'hidden';
+    this.tooltip.style.display = 'block';
     const tooltipRect = this.tooltip.getBoundingClientRect();
+    this.tooltip.style.visibility = '';
+
     const elRect = element.getBoundingClientRect();
     const vw = window.innerWidth || 400;
     const vh = window.innerHeight || 600;
-    const gap = 14;
+    const gap = 16; // Increased gap to prevent overlap
     const margin = 8;
 
     let top, left;
 
-    // Calculate based on preferred position
     switch (preferred) {
       case 'top':
         top = elRect.top - tooltipRect.height - gap;
         left = elRect.left + elRect.width / 2 - tooltipRect.width / 2;
+        // If tooltip would go above viewport, flip to bottom
+        if (top < margin) {
+          top = elRect.bottom + gap;
+        }
         break;
       case 'right':
         top = elRect.top + elRect.height / 2 - tooltipRect.height / 2;
         left = elRect.right + gap;
+        if (left + tooltipRect.width > vw - margin) {
+          left = elRect.left - tooltipRect.width - gap;
+        }
         break;
       case 'left':
         top = elRect.top + elRect.height / 2 - tooltipRect.height / 2;
         left = elRect.left - tooltipRect.width - gap;
+        if (left < margin) {
+          left = elRect.right + gap;
+        }
         break;
       default: // bottom
         top = elRect.bottom + gap;
         left = elRect.left + elRect.width / 2 - tooltipRect.width / 2;
+        // If tooltip would go below viewport, flip to top
+        if (top + tooltipRect.height > vh - margin) {
+          top = elRect.top - tooltipRect.height - gap;
+        }
     }
 
-    // Boundary checks — flip if out of view
-    if (top < margin && preferred === 'top') {
-      top = elRect.bottom + gap;
-    }
-    if (top + tooltipRect.height > vh - margin && preferred === 'bottom') {
-      top = elRect.top - tooltipRect.height - gap;
-    }
-
-    // Clamp
+    // Clamp to viewport
     left = Math.max(margin, Math.min(left, vw - tooltipRect.width - margin));
     top = Math.max(margin, Math.min(top, vh - tooltipRect.height - margin));
+
+    // Final overlap check: if tooltip still overlaps target, push it away
+    const tooltipBottom = top + tooltipRect.height;
+    const tooltipRight = left + tooltipRect.width;
+    if (top < elRect.bottom && tooltipBottom > elRect.top &&
+        left < elRect.right && tooltipRight > elRect.left) {
+      // Overlap detected — push tooltip below or above with extra gap
+      if (elRect.bottom + gap + tooltipRect.height <= vh - margin) {
+        top = elRect.bottom + gap;
+      } else if (elRect.top - gap - tooltipRect.height >= margin) {
+        top = elRect.top - tooltipRect.height - gap;
+      }
+      // If still overlapping horizontally, push to the right
+      left = Math.max(margin, Math.min(elRect.right + gap, vw - tooltipRect.width - margin));
+    }
 
     this.tooltip.style.position = 'fixed';
     this.tooltip.style.top = `${top}px`;
@@ -550,9 +615,8 @@ class OnboardingTutorial {
 
     if (!target) return;
 
-    // Make target interactive — it's already raised by tut-target-active class
-    // Just ensure pointer-events are explicitly enabled
-    target.style.pointerEvents = 'auto';
+    // The target is in the "hole" between panels — it's already fully clickable.
+    // We just need to listen for the interaction event.
 
     if (step.action === 'click') {
       const handler = () => {
@@ -564,17 +628,14 @@ class OnboardingTutorial {
       this._cleanup = () => target.removeEventListener('click', handler);
     }
     else if (step.action === 'change') {
-      // For <select> — listen for change event
       const handler = (e) => {
         target.removeEventListener('change', handler);
         log('Selection changed, value:', target.value);
 
-        // Detect which slot the user picked and what prompt
-        const slotId = target.dataset.hotkeySlot; // e.g. 'slot1'
+        const slotId = target.dataset.hotkeySlot;
         if (slotId) {
           const slotNum = slotId.replace('slot', '');
           this.assignedSlot = slotId;
-          // Try to detect the actual Chrome shortcut for this slot
           this._detectHotkey(slotNum).then(hotkey => {
             this.assignedHotkey = hotkey;
             log(`Detected hotkey for ${slotId}: ${hotkey}`);
@@ -592,24 +653,18 @@ class OnboardingTutorial {
       allSlots.forEach(sel => {
         if (sel === target) return;
         const h = (e) => {
-          // User picked a different slot
           allSlots.forEach(s => s.removeEventListener('change', h));
           target.removeEventListener('change', handler);
-          const slotId = sel.dataset.hotkeySlot;
-          const slotNum = slotId.replace('slot', '');
-          this.assignedSlot = slotId;
-          this._detectHotkey(slotNum).then(hotkey => {
+          const sid = sel.dataset.hotkeySlot;
+          const sn = sid.replace('slot', '');
+          this.assignedSlot = sid;
+          this._detectHotkey(sn).then(hotkey => {
             this.assignedHotkey = hotkey;
-            log(`User chose different slot ${slotId}: ${hotkey}`);
           });
           setTimeout(() => this._nextStep(), 500);
         };
         sel.addEventListener('change', h);
         otherHandlers.push({ el: sel, handler: h });
-        // Make other slots clickable too
-        sel.style.zIndex = '10001';
-        sel.style.position = sel.style.position || 'relative';
-        sel.style.pointerEvents = 'auto';
       });
 
       const prevCleanup = this._cleanup;
@@ -652,7 +707,6 @@ class OnboardingTutorial {
     const modalBody = target.closest('.modal-body');
     if (!modalBody) return;
 
-    // Scroll target into center of modal
     const targetRect = target.getBoundingClientRect();
     const modalRect = modalBody.getBoundingClientRect();
     const scrollTop = modalBody.scrollTop + (targetRect.top - modalRect.top) - modalRect.height / 3;
@@ -709,20 +763,11 @@ class OnboardingTutorial {
     // Remove active state from all targets
     document.querySelectorAll('.tut-target-active').forEach(el => {
       el.classList.remove('tut-target-active');
-      el.style.zIndex = '';
-      el.style.cursor = '';
-      el.style.pointerEvents = '';
     });
 
     // Remove ancestor stacking overrides
     document.querySelectorAll('.tut-ancestor-raised').forEach(el => {
       el.classList.remove('tut-ancestor-raised');
-    });
-
-    // Reset other slot z-indices
-    document.querySelectorAll('[data-hotkey-slot]').forEach(el => {
-      el.style.zIndex = '';
-      el.style.pointerEvents = '';
     });
   }
 
@@ -737,26 +782,23 @@ class OnboardingTutorial {
     }
 
     // Fade out
-    if (this.overlay) {
-      this.overlay.classList.remove('tut-visible');
-      this.overlay.classList.remove('tut-full-dim');
-      this.overlay.style.clipPath = 'none';
-    }
-    if (this.tooltip) {
-      this.tooltip.classList.remove('tut-visible');
-    }
-    if (this.spotlight) {
-      this.spotlight.style.display = 'none';
-    }
+    this.panels.forEach(p => p.classList.remove('tut-visible'));
+    if (this.fullOverlay) this.fullOverlay.classList.remove('tut-visible');
+    if (this.tooltip) this.tooltip.classList.remove('tut-visible');
+    if (this.spotlight) this.spotlight.style.display = 'none';
 
     // Remove elements after fade
     setTimeout(() => {
-      this.overlay?.remove();
+      this.panels.forEach(p => p.remove());
+      this.fullOverlay?.remove();
       this.tooltip?.remove();
       this.spotlight?.remove();
-      // Final cleanup of any ancestor stacking overrides
+      // Final cleanup
       document.querySelectorAll('.tut-ancestor-raised').forEach(el => {
         el.classList.remove('tut-ancestor-raised');
+      });
+      document.querySelectorAll('.tut-target-active').forEach(el => {
+        el.classList.remove('tut-target-active');
       });
     }, 400);
 
@@ -772,7 +814,6 @@ class OnboardingTutorial {
   // ==================== UTILITIES ====================
   _getLang() {
     try {
-      // Use Promptory's lang if available
       if (window.Promptory && window.Promptory.getLang) {
         return window.Promptory.getLang();
       }
