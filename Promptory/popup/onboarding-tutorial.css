@@ -1,7 +1,8 @@
 /* ============================================
-   Promptory Onboarding Tutorial v11
+   Promptory Onboarding Tutorial v12
    4-panel overlay (no clip-path stacking issues)
    Spotlight ring + tooltip + proper click-through
+   16-step flow with favorites, folders, search
    ============================================ */
 
 /* ========== OVERLAY — 4 panels around the spotlight hole ========== */
@@ -82,7 +83,7 @@
   border: 2px solid var(--accent, #6366f1);
   border-radius: 14px;
   padding: 18px 20px;
-  max-width: 300px;
+  max-width: 320px;
   width: 92%;
   z-index: 10002; /* Above everything including spotlight */
   pointer-events: auto;
@@ -220,7 +221,7 @@
   text-align: left;
 }
 
-/* ========== HOTKEY VISUAL (step 7) ========== */
+/* ========== HOTKEY VISUAL (step 13) ========== */
 .tut-hotkey-visual {
   display: flex;
   align-items: center;
@@ -349,6 +350,24 @@
   z-index: 9999 !important;
 }
 
+/* Modal overlays that appear DURING the tutorial (e.g. prompt editor, 
+   folder editor) must sit above the 4-panel overlay but below the tooltip.
+   The tut-ancestor-raised class handles this, but modals also need
+   their modal-overlay wrapper raised. */
+.modal-overlay.tut-ancestor-raised {
+  z-index: 10001 !important;
+}
+
+/* Ensure the modal inside a raised modal-overlay is also above overlay */
+.tut-ancestor-raised > .modal {
+  z-index: 10001 !important;
+}
+
+/* Tab buttons targeted by tutorial need to be above the panels */
+.tabs .tab-btn.tut-target-active {
+  z-index: 10000 !important;
+}
+
 /* Dropdown flash animation */
 .tut-dropdown-flash {
   animation: tut-flash 0.6s ease;
@@ -404,4 +423,109 @@
 
 [data-theme="light"] .tut-progress {
   background: #e5e7eb;
+}
+
+/* ========== FINAL STEP — structured list layout ========== */
+.tut-final-content {
+  text-align: left;
+}
+
+.tut-final-content .tut-title {
+  text-align: center;
+}
+
+.tut-final-subtitle {
+  font-size: 11px;
+  color: var(--text-tertiary, #888);
+  text-align: center;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.tut-final-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tut-final-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg-tertiary, #2a2a3e);
+  transition: background 0.15s;
+}
+
+.tut-final-item:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.tut-final-item-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent, #6366f1);
+}
+
+.tut-final-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tut-final-item-text {
+  font-size: 12px;
+  color: var(--text-primary, #fff);
+  line-height: 1.4;
+}
+
+.tut-inline-key {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--bg-tertiary, #2a2a3e);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Monaco', 'Fira Code', monospace;
+  color: var(--accent, #6366f1);
+  vertical-align: baseline;
+}
+
+.tut-final-tip {
+  font-size: 11px;
+  color: var(--text-secondary, #aaa);
+  text-align: center;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+/* Light theme overrides for final step */
+[data-theme="light"] .tut-final-item {
+  background: #f3f4f6;
+}
+
+[data-theme="light"] .tut-final-item:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+[data-theme="light"] .tut-inline-key {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+[data-theme="light"] .tut-final-tip {
+  background: rgba(99, 102, 241, 0.06);
+  border-color: rgba(99, 102, 241, 0.12);
 }

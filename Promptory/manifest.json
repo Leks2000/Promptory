@@ -64,8 +64,8 @@
   "commands": {
     "open-search": {
       "suggested_key": {
-        "default": "Ctrl+Shift+P",
-        "mac": "MacCtrl+Shift+P"
+        "default": "Alt+S",
+        "mac": "Alt+S"
       },
       "description": "Open prompt search overlay"
     },

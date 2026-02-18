@@ -62,7 +62,7 @@
 
 **When it's used:**
 - User opens extension popup on an AI platform page
-- User triggers search overlay (Ctrl+Shift+P)
+- User triggers search overlay (Alt+S)
 - User clicks "Insert to page" button
 
 **CWS Policy Compliance:** Content scripts are injected only into domains explicitly listed in `host_permissions`. No code is injected into unrelated websites.

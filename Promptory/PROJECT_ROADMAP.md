@@ -11,7 +11,7 @@
 - [x] Variable substitution ({name}, {topic}, etc.)
 - [x] Quick Insert to AI platforms (ChatGPT, Claude, Gemini, etc.)
 - [x] 3 hotkey slots (Alt+1/2/3)
-- [x] Search overlay (Ctrl+Shift+P)
+- [x] Search overlay (Alt+S)
 - [x] Context menu "Save selection as Prompt"
 - [x] Dark/Light/System themes
 - [x] i18n (English + Russian)

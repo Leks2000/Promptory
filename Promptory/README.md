@@ -18,7 +18,7 @@
 - **Cloud Sync**: Bidirectional additive-merge sync via Supabase (premium)
 - **Export / Import**: Backup and restore prompts as JSON or CSV
 - **{Variables}**: Dynamic prompts with `{variable_name}` substitution dialog
-- **Hotkeys**: Alt+1/2/3 quick-insert slots + Ctrl+Shift+P search overlay
+- **Hotkeys**: Alt+1/2/3 quick-insert slots + Alt+S search overlay
 - **Context Menu**: Right-click "Save selection as Prompt"
 - **Offline Queue**: Operations queued when offline, replayed on reconnect (24h TTL)
 - **Image Attachments**: Upload images to Supabase Storage (auto-compressed to 500KB)
@@ -67,7 +67,7 @@ Coming soon!
 
 ## Quick Start
 
-1. **Click the extension icon** or press `Ctrl+Shift+P` to open search overlay
+1. **Click the extension icon** or press `Alt+S` to open search overlay
 
 2. **Create your first prompt**:
    - Click "New" button
@@ -138,7 +138,7 @@ Promptory/
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Shift+P` | Open prompt search overlay on any AI page |
+| `Alt+S` | Open prompt search overlay on any AI page |
 | `Alt+1` | Quick insert prompt from Slot 1 |
 | `Alt+2` | Quick insert prompt from Slot 2 |
 | `Alt+3` | Quick insert prompt from Slot 3 |

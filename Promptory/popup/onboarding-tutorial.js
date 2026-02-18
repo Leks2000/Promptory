@@ -1,6 +1,8 @@
-// Promptory Onboarding Tutorial Module v11
+// Promptory Onboarding Tutorial Module v12
 // REWRITE — 4-panel overlay approach (no clip-path z-index issues)
-// Flow: Create prompt -> Settings -> Quick Insert -> Select slot -> Save -> Use hotkey -> Library teaser
+// Flow: Create prompt -> Save -> Add to Favorites -> Create Folder -> Edit (Add to Folder)
+//       -> Settings -> Quick Insert -> Select slot -> Save settings -> Use hotkey
+//       -> Search mention -> Library teaser -> Final
 // KEY FIX: Uses 4 overlay panels (top/right/bottom/left) around the target instead of
 // a single overlay with clip-path. This ensures the highlighted element is NEVER dimmed
 // and is always clickable, regardless of its position in the DOM stacking context.
@@ -10,7 +12,7 @@
 
 const DEBUG = false;
 function log(...args) {
-  if (DEBUG) console.log('[Tutorial v11]', ...args);
+  if (DEBUG) console.log('[Tutorial v12]', ...args);
 }
 
 // ==================== STEP DEFINITIONS ====================
@@ -46,9 +48,101 @@ function buildSteps() {
       icon: 'save',
       badge: null
     },
-    // === STEP 3: Open Settings ===
+    // === STEP 3: Add to Favorites ===
     {
       id: 3,
+      title: { en: 'Add to Favorites', ru: 'Добавьте в Избранное' },
+      description: {
+        en: 'Click the star icon to add this prompt to your Favorites for quick access.',
+        ru: 'Нажмите на звёздочку, чтобы добавить промпт в Избранное для быстрого доступа.'
+      },
+      target: '.prompt-card:first-child [data-action="toggle-fav"]',
+      action: 'click',
+      waitForPrompt: true,
+      tooltipPosition: 'left',
+      icon: 'favorite',
+      badge: { en: 'FAVORITES', ru: 'ИЗБРАННОЕ' },
+      switchTab: 'prompts'
+    },
+    // === STEP 4: Go to Folders tab ===
+    {
+      id: 4,
+      title: { en: 'Create a Folder', ru: 'Создайте папку' },
+      description: {
+        en: 'Organize your prompts into folders! Switch to the Folders tab first.',
+        ru: 'Организуйте промпты по папкам! Сначала перейдите во вкладку Папки.'
+      },
+      target: '[data-tab="folders"]',
+      action: 'click',
+      tooltipPosition: 'bottom',
+      icon: 'folder',
+      badge: { en: 'ORGANIZE', ru: 'ОРГАНИЗАЦИЯ' }
+    },
+    // === STEP 5: Click New Folder button ===
+    {
+      id: 5,
+      title: { en: 'New Folder', ru: 'Новая папка' },
+      description: {
+        en: 'Click "New Folder" to create a folder for your prompts.',
+        ru: 'Нажмите "New Folder", чтобы создать папку для промптов.'
+      },
+      target: '#new-folder-btn',
+      action: 'click',
+      waitForTab: 'folders',
+      tooltipPosition: 'bottom',
+      icon: 'create',
+      badge: null
+    },
+    // === STEP 6: Auto-fill folder name and save ===
+    {
+      id: 6,
+      title: { en: 'Name Your Folder', ru: 'Назовите папку' },
+      description: {
+        en: 'We filled in a name. Click "Create" to save the folder.',
+        ru: 'Мы заполнили название. Нажмите "Create", чтобы сохранить папку.'
+      },
+      target: '#fe-save-btn',
+      action: 'click',
+      autoFillFolder: true,
+      waitForModal: true,
+      tooltipPosition: 'top',
+      icon: 'save',
+      badge: null
+    },
+    // === STEP 7: Edit prompt — add to folder ===
+    {
+      id: 7,
+      title: { en: 'Move Prompt to Folder', ru: 'Переместите промпт в папку' },
+      description: {
+        en: 'Now let\'s move your prompt into the folder. Click the edit button on your prompt.',
+        ru: 'Теперь переместим промпт в папку. Нажмите кнопку редактирования на промпте.'
+      },
+      target: '.prompt-card:first-child [data-action="edit"]',
+      action: 'click',
+      switchTab: 'prompts',
+      tooltipPosition: 'left',
+      icon: 'edit',
+      badge: { en: 'EDIT', ru: 'РЕДАКТИРОВАНИЕ' }
+    },
+    // === STEP 8: Select folder in editor and save ===
+    {
+      id: 8,
+      title: { en: 'Select Folder & Save', ru: 'Выберите папку и сохраните' },
+      description: {
+        en: 'Select your folder from the dropdown, then click "Save Changes" to move the prompt.',
+        ru: 'Выберите папку из списка, затем нажмите "Сохранить", чтобы переместить промпт.'
+      },
+      target: '#pe-save-btn',
+      action: 'click',
+      autoSelectFolder: true,
+      waitForModal: true,
+      tooltipPosition: 'top',
+      icon: 'save',
+      badge: { en: 'SAVE', ru: 'СОХРАНЕНИЕ' }
+    },
+    // === STEP 9: Open Settings ===
+    {
+      id: 9,
       title: { en: 'Open Settings', ru: 'Откройте Настройки' },
       description: {
         en: 'Now let\'s set up Quick Insert — your main power feature! Click the Settings button.',
@@ -62,9 +156,9 @@ function buildSteps() {
       badge: { en: 'SETTINGS', ru: 'НАСТРОЙКИ' },
       switchTab: 'prompts'
     },
-    // === STEP 4: Focus on Quick Insert section ===
+    // === STEP 10: Focus on Quick Insert section ===
     {
-      id: 4,
+      id: 10,
       title: { en: 'Quick Insert Hotkeys', ru: 'Горячие клавиши' },
       description: {
         en: 'This is the Quick Insert section. You can assign any prompt to Alt+1, Alt+2 or Alt+3 for instant insertion into any AI chat!',
@@ -78,9 +172,9 @@ function buildSteps() {
       icon: 'hotkey',
       badge: { en: 'QUICK INSERT', ru: 'БЫСТРАЯ ВСТАВКА' }
     },
-    // === STEP 5: Select prompt in Slot 1 dropdown ===
+    // === STEP 11: Select prompt in Slot 1 dropdown ===
     {
-      id: 5,
+      id: 11,
       title: { en: 'Assign a Prompt', ru: 'Назначьте промпт' },
       description: {
         en: 'Click the dropdown and select your prompt to assign it to a hotkey slot.',
@@ -93,9 +187,9 @@ function buildSteps() {
       icon: 'select',
       badge: { en: 'SELECT PROMPT', ru: 'ВЫБОР ПРОМПТА' }
     },
-    // === STEP 6: Save Settings ===
+    // === STEP 12: Save Settings ===
     {
-      id: 6,
+      id: 12,
       title: { en: 'Save Settings', ru: 'Сохраните настройки' },
       description: {
         en: 'Great! Now click "Save Changes" to apply your hotkey settings.',
@@ -108,9 +202,9 @@ function buildSteps() {
       icon: 'save',
       badge: { en: 'SAVE', ru: 'СОХРАНЕНИЕ' }
     },
-    // === STEP 7: Show the hotkey to use ===
+    // === STEP 13: Show the hotkey to use ===
     {
-      id: 7,
+      id: 13,
       title: { en: 'Try Your Hotkey!', ru: 'Попробуйте горячую клавишу!' },
       description: {
         en: `Now go to any AI chat (ChatGPT, Claude, Gemini...) and press {hotkey} to instantly insert your prompt!`,
@@ -124,9 +218,24 @@ function buildSteps() {
       isPrimary: true,
       dynamic: true
     },
-    // === STEP 8: Library teaser ===
+    // === STEP 14: Search mention ===
     {
-      id: 8,
+      id: 14,
+      title: { en: 'Quick Search', ru: 'Быстрый поиск' },
+      description: {
+        en: 'Use the search bar to find prompts by title, tags, or text. You can also use Alt+S on any AI site for an instant search overlay!',
+        ru: 'Используйте строку поиска для поиска промптов по названию, тегам или тексту. А ещё можно нажать Alt+S на любом AI-сайте для мгновенного поиска!'
+      },
+      target: '#search-input',
+      action: 'observe',
+      tooltipPosition: 'bottom',
+      icon: 'search',
+      badge: { en: 'SEARCH', ru: 'ПОИСК' },
+      switchTab: 'prompts'
+    },
+    // === STEP 15: Library teaser ===
+    {
+      id: 15,
       title: { en: 'Explore the Library', ru: 'Откройте Библиотеку' },
       description: {
         en: 'Discover ready-made prompts from the community in the Library tab. Sign in to browse, save, and share prompts!',
@@ -138,21 +247,13 @@ function buildSteps() {
       icon: 'explore',
       badge: { en: 'LIBRARY', ru: 'БИБЛИОТЕКА' }
     },
-    // === STEP 9: Final ===
+    // === STEP 16: Final ===
     {
-      id: 9,
-      title: { en: 'You\'re All Set!', ru: 'Всё готово!' },
+      id: 16,
+      title: { en: 'You\'re Ready!', ru: 'Вы готовы!' },
       description: {
-        en: 'Here\'s what you learned:\n\n' +
-            '1. Create & save prompts\n' +
-            '2. Quick Insert via hotkeys ({hotkey})\n' +
-            '3. Library — discover community prompts\n\n' +
-            'Pro tip: Use Ctrl+Shift+P on any AI site for quick search overlay!',
-        ru: 'Вот что вы узнали:\n\n' +
-            '1. Создание и сохранение промптов\n' +
-            '2. Быстрая вставка через горячие клавиши ({hotkey})\n' +
-            '3. Библиотека — промпты от сообщества\n\n' +
-            'Совет: Ctrl+Shift+P на любом AI-сайте для быстрого поиска!'
+        en: 'final_custom',
+        ru: 'final_custom'
       },
       target: null,
       action: 'final',
@@ -167,9 +268,13 @@ function buildSteps() {
 const ICONS = {
   create: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
   save: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>',
+  favorite: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+  folder: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+  edit: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
   settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
   hotkey: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>',
   select: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>',
   explore: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
   finish: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
 };
@@ -196,7 +301,7 @@ class OnboardingTutorial {
     this.currentStep = 0;
     this.steps = buildSteps();
 
-    log('=== STARTING TUTORIAL v11 (9 steps) ===');
+    log('=== STARTING TUTORIAL v12 (16 steps) ===');
 
     // Create 4 overlay panels
     const panelNames = ['top', 'right', 'bottom', 'left'];
@@ -341,6 +446,16 @@ class OnboardingTutorial {
       setTimeout(() => this._autoFillPrompt(), 350);
     }
 
+    // Auto-fill folder name
+    if (step.autoFillFolder) {
+      setTimeout(() => this._autoFillFolder(), 350);
+    }
+
+    // Auto-select folder in editor
+    if (step.autoSelectFolder) {
+      setTimeout(() => this._autoSelectFolder(), 350);
+    }
+
     // Auto-open dropdown
     if (step.autoOpenDropdown && target) {
       setTimeout(() => {
@@ -361,6 +476,12 @@ class OnboardingTutorial {
     const total = this.steps.length;
     const icon = ICONS[step.icon] || '';
     const isPrimary = step.isPrimary;
+    const isFinal = step.action === 'final';
+
+    // Custom final step rendering
+    if (isFinal) {
+      return this._renderFinalStep(lang, total);
+    }
 
     let description = step.description[lang] || step.description.en;
     if (step.dynamic) {
@@ -373,32 +494,75 @@ class OnboardingTutorial {
       : '';
 
     let hotkeyVisualHtml = '';
-    if (step.id === 7) {
+    if (step.id === 13) {
       const keys = this.assignedHotkey.split('+');
       hotkeyVisualHtml = `<div class="tut-hotkey-visual">
         ${keys.map(k => `<span class="tut-key">${k.trim()}</span>`).join('<span class="tut-key-plus">+</span>')}
       </div>`;
     }
 
-    const isFinal = step.action === 'final';
-
     return `
       <div class="tut-content">
         <div class="tut-header">
           <div class="tut-step-num">${step.id}/${total}</div>
-          ${!isFinal ? `<button class="tut-skip" id="tut-skip">${lang === 'ru' ? 'Пропустить' : 'Skip'}</button>` : ''}
+          <button class="tut-skip" id="tut-skip">${lang === 'ru' ? 'Пропустить' : 'Skip'}</button>
         </div>
         ${icon ? `<div class="tut-icon${isPrimary ? ' tut-icon-primary' : ''}">${icon}</div>` : ''}
         ${badgeHtml}
         ${hotkeyVisualHtml}
         <div class="tut-title">${step.title[lang] || step.title.en}</div>
         <div class="tut-desc">${description}</div>
-        ${isFinal ? `
-          <button class="tut-btn-finish" id="tut-finish">${lang === 'ru' ? 'Начать!' : 'Get Started!'}</button>
-        ` : step.action === 'observe' || step.action === 'info' ? `
+        ${step.action === 'observe' || step.action === 'info' ? `
           <button class="tut-btn-next" id="tut-next">${lang === 'ru' ? 'Далее' : 'Next'}</button>
         ` : ''}
-        ${!isFinal ? `<div class="tut-progress"><div class="tut-progress-bar" style="width:${(step.id / total) * 100}%"></div></div>` : ''}
+        <div class="tut-progress"><div class="tut-progress-bar" style="width:${(step.id / total) * 100}%"></div></div>
+      </div>
+    `;
+  }
+
+  // ==================== CUSTOM FINAL STEP ====================
+  _renderFinalStep(lang, total) {
+    const hotkey = this.assignedHotkey;
+    const isRu = lang === 'ru';
+
+    const items = isRu ? [
+      { icon: 'create', text: 'Создавать и сохранять промпты' },
+      { icon: 'favorite', text: 'Добавлять в Избранное' },
+      { icon: 'folder', text: 'Организовывать по папкам' },
+      { icon: 'hotkey', text: `Быстрая вставка — <span class="tut-inline-key">${hotkey}</span>` },
+      { icon: 'search', text: 'Поиск — <span class="tut-inline-key">Alt+S</span> на AI-сайте' },
+      { icon: 'explore', text: 'Библиотека промптов от сообщества' }
+    ] : [
+      { icon: 'create', text: 'Create & save prompts' },
+      { icon: 'favorite', text: 'Add to Favorites' },
+      { icon: 'folder', text: 'Organize with folders' },
+      { icon: 'hotkey', text: `Quick Insert — <span class="tut-inline-key">${hotkey}</span>` },
+      { icon: 'search', text: 'Search — <span class="tut-inline-key">Alt+S</span> on any AI site' },
+      { icon: 'explore', text: 'Community prompt library' }
+    ];
+
+    const tipText = isRu
+      ? `Совет: нажмите <span class="tut-inline-key">Alt+1</span> на любом AI-сайте для мгновенной вставки вашего промпта!`
+      : `Tip: press <span class="tut-inline-key">Alt+1</span> on any AI site to instantly insert your prompt!`;
+
+    return `
+      <div class="tut-content tut-final-content">
+        <div class="tut-header">
+          <div class="tut-step-num">${total}/${total}</div>
+        </div>
+        <div class="tut-icon tut-icon-primary">${ICONS.finish}</div>
+        <div class="tut-title">${isRu ? 'Вы готовы!' : "You're Ready!"}</div>
+        <div class="tut-final-subtitle">${isRu ? 'Вот что вы теперь умеете:' : "Here's what you can do:"}</div>
+        <div class="tut-final-list">
+          ${items.map(item => `
+            <div class="tut-final-item">
+              <div class="tut-final-item-icon">${ICONS[item.icon] || ''}</div>
+              <div class="tut-final-item-text">${item.text}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="tut-final-tip">${tipText}</div>
+        <button class="tut-btn-finish" id="tut-finish">${isRu ? 'Начать работу!' : 'Start Using Promptory!'}</button>
       </div>
     `;
   }
@@ -733,6 +897,31 @@ class OnboardingTutorial {
       titleInput.dispatchEvent(new Event('input', { bubbles: true }));
       textInput.dispatchEvent(new Event('input', { bubbles: true }));
       log('Auto-filled prompt');
+    }
+  }
+
+  // ==================== AUTO-FILL FOLDER ====================
+  _autoFillFolder() {
+    const nameInput = document.getElementById('fe-name');
+    if (nameInput) {
+      const lang = this._getLang();
+      nameInput.value = lang === 'ru' ? 'Мои промпты' : 'My Prompts';
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      log('Auto-filled folder name');
+    }
+  }
+
+  // ==================== AUTO-SELECT FOLDER IN EDITOR ====================
+  _autoSelectFolder() {
+    const folderSelect = document.getElementById('pe-folder');
+    if (folderSelect && folderSelect.options.length > 1) {
+      // Select the first real folder (skip "No folder" option)
+      folderSelect.selectedIndex = 1;
+      folderSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      // Flash the dropdown
+      folderSelect.classList.add('tut-dropdown-flash');
+      setTimeout(() => folderSelect.classList.remove('tut-dropdown-flash'), 600);
+      log('Auto-selected folder in editor');
     }
   }
 

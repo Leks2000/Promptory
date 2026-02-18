@@ -42,7 +42,7 @@ P.openSettingsModal = function(opts = {}) {
   const hotkeys = s.hotkeys || {};
 
   const commandNames = {
-    'open-search': { label: t('searchOverlay'), default: 'Ctrl+Shift+P' },
+    'open-search': { label: t('searchOverlay'), default: 'Alt+S' },
     'hotkey-1': { label: t('quickInsertSlot', '1'), default: 'Alt+1' },
     'hotkey-2': { label: t('quickInsertSlot', '2'), default: 'Alt+2' },
     'hotkey-3': { label: t('quickInsertSlot', '3'), default: 'Alt+3' }

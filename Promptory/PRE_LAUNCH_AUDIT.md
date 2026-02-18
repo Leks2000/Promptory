@@ -33,7 +33,7 @@
 | Теги | ✅ | Работает |
 | Поиск по промптам | ✅ | **Исправлено:** переключает на Prompts |
 | Горячие клавиши (Alt+1/2/3) | ✅ | Работает |
-| Поиск (Ctrl+Shift+P) | ✅ | Работает |
+| Поиск (Alt+S) | ✅ | Работает |
 | Context Menu | ✅ | "Save selection as Prompt" |
 | Переменные {var} | ✅ | Работает |
 | Вставка в AI платформы | ✅ | 11 платформ |
@@ -250,7 +250,7 @@ Promptory is your personal AI prompt manager. Save, organize, and instantly inse
 ChatGPT, Claude, Google Gemini, Perplexity, Poe, You.com, Bing, Copilot, and more!
 
 ⌨️ KEYBOARD SHORTCUTS:
-• Ctrl+Shift+P — Quick search
+• Alt+S — Quick search
 • Alt+1/2/3 — Quick insert
 • Customizable in settings
 

@@ -209,7 +209,7 @@ async function showVariableDialog(text, variables) {
   });
 }
 
-// ---------- Search Overlay (Ctrl+Shift+P) - performance-optimized ----------
+// ---------- Search Overlay (Alt+S) - performance-optimized ----------
 let searchOverlayPrompts = []; // Cache prompts to avoid repeated fetches
 const searchResultsCache = new Map(); // Query cache for fast repeated searches
 let searchOverlayRAF = null; // RAF handle for cleanup
