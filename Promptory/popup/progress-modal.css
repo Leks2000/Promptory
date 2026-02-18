@@ -1,0 +1,205 @@
+/* ============================================
+   Promptory Progress Modal Styles
+   ============================================ */
+
+/* Progress modal overlay */
+.progress-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: var(--z-modal-overlay, 1000);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.progress-modal-overlay.visible {
+  opacity: 1;
+}
+
+/* Progress modal */
+.progress-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  width: 90%;
+  max-width: 400px;
+  box-shadow: var(--shadow-xl);
+  transform: scale(0.95);
+  transition: transform 0.3s ease;
+}
+
+.progress-modal-overlay.visible .progress-modal {
+  transform: scale(1);
+}
+
+/* Header */
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.progress-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-light);
+  border-radius: var(--radius-md);
+  color: var(--accent);
+}
+
+.progress-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.progress-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+/* Progress bar */
+.progress-bar-container {
+  margin-bottom: var(--space-4);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent-gradient);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shimmer effect */
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Progress info */
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.progress-count {
+  font-weight: var(--font-weight-medium);
+}
+
+.progress-eta {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+/* Current action */
+.progress-action {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+  text-align: center;
+}
+
+/* Footer */
+.progress-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+.progress-cancel-btn {
+  padding: 10px 24px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-family);
+}
+
+.progress-cancel-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.progress-cancel-btn:active {
+  transform: translateY(1px);
+}
+
+/* Success state */
+.progress-modal.success .progress-icon {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.progress-modal.success .progress-bar-fill {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+/* Error state */
+.progress-modal.error .progress-icon {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.progress-modal.error .progress-bar-fill {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+/* Loading spinner */
+.progress-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

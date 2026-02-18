@@ -3,7 +3,7 @@
 > AI Prompt Manager — Save, organize, and instantly insert prompts into ChatGPT, Claude, Gemini, Perplexity, and 11+ AI platforms.
 
 ![Version](https://img.shields.io/badge/version-1.9.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-Proprietary-red)
 ![Chrome MV3](https://img.shields.io/badge/Chrome-MV3-brightgreen)
 
 ## Features
@@ -183,17 +183,13 @@ bash build.sh
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+This is a proprietary closed-source project. Contributions are not accepted from external contributors. If you find a bug or have a feature request, please submit an issue on GitHub.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Proprietary License - see the [LICENSE](LICENSE) file for details.
+
+**This is NOT open-source software. All rights reserved.**
 
 ## Support
 

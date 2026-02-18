@@ -1,0 +1,137 @@
+/* ============================================
+   Promptory Onboarding Tutorial Styles v8
+   ============================================ */
+
+/* Overlay - затемнение с "дыркой" */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 9998;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.onboarding-overlay.visible {
+  opacity: 1;
+}
+
+/* Spotlight - рамка вокруг элемента */
+.onboarding-spotlight {
+  position: fixed;
+  border-radius: var(--radius-md);
+  border: 3px solid var(--accent);
+  box-shadow: 
+    0 0 20px rgba(var(--accent-rgb), 0.6),
+    inset 0 0 20px rgba(var(--accent-rgb), 0.1);
+  pointer-events: none;
+  z-index: 9999;
+  transition: all 0.3s ease;
+  display: none;
+  animation: spotlightPulse 2s ease-in-out infinite;
+}
+
+@keyframes spotlightPulse {
+  0%, 100% {
+    border-color: var(--accent);
+    box-shadow: 
+      0 0 20px rgba(var(--accent-rgb), 0.6),
+      inset 0 0 20px rgba(var(--accent-rgb), 0.1);
+  }
+  50% {
+    border-color: var(--accent-hover);
+    box-shadow: 
+      0 0 30px rgba(var(--accent-rgb), 0.9),
+      inset 0 0 30px rgba(var(--accent-rgb), 0.2);
+  }
+}
+
+/* Tutorial box - плашка с инструкцией */
+.onboarding-tutorial {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  max-width: 280px; /* ✅ ЕЩЁ МЕНЬШЕ */
+  width: 90%;
+  z-index: 10000;
+  box-shadow: var(--shadow-2xl);
+  opacity: 0;
+  transform: scale(0.9) translateY(10px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: auto;
+  
+  /* ✅ ЯВНОЕ ПРАВИЛО - НЕ ПЕРЕКРЫВАТЬ ЭЛЕМЕНТЫ */
+  will-change: top, left;
+}
+
+.onboarding-tutorial.visible {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+/* Tutorial content */
+.onboarding-tutorial-content {
+  text-align: center;
+}
+
+.onboarding-step-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  padding: 4px 12px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.onboarding-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+  line-height: 1.3;
+}
+
+.onboarding-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+  margin-bottom: var(--space-4);
+}
+
+/* Finish button */
+.onboarding-btn {
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: none;
+  font-family: var(--font-family);
+  width: 100%;
+}
+
+.onboarding-btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.onboarding-btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.3);
+}
+
+/* ✅ ЭЛЕМЕНТ ПОД СПОТЛАЙТОМ ДОЛЖЕН БЫТЬ КЛИКАБЕЛЬНЫМ И ВЫШЕ ВСЕГО */
+.onboarding-target-highlight {
+  position: relative !important;
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+}

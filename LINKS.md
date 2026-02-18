@@ -106,15 +106,13 @@ PromptVault/
 
 ## 🤝 Contributing
 
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+This is a proprietary closed-source project. Contributions are not accepted from external contributors. If you find a bug or have a feature request, please submit an issue on GitHub.
 
 ## 📝 License
 
-MIT License - See [LICENSE](promptvault/LICENSE)
+Proprietary License - See [LICENSE](promptvault/LICENSE)
+
+**This is NOT open-source software. All rights reserved.**
 
 ## 💬 Support
 

@@ -180,6 +180,11 @@ function initTabs() {
       const target = document.getElementById(`${btn.dataset.tab}-tab`);
       if (target) target.classList.add('active');
       if (btn.dataset.tab === 'stats') renderStats();
+      
+      // Update search filters for current tab
+      if (searchFilters) {
+        searchFilters.setCurrentTab(btn.dataset.tab);
+      }
     });
     // Keyboard: Arrow Left/Right to navigate between tabs
     btn.addEventListener('keydown', (e) => {
@@ -1342,30 +1347,46 @@ function _renderFoldersImmediate() {
   // Click on folder card to navigate to prompts in that folder
   document.querySelectorAll('[data-folder-click]').forEach(card => {
     card.addEventListener('click', (e) => {
-      if (e.target.closest('.prompt-action-btn')) return; // Don't trigger on action buttons
+      if (e.target.closest('.prompt-action-btn')) return;
       const folderId = card.dataset.folderClick;
       // Switch to prompts tab
       document.querySelector('[data-tab="prompts"]').click();
-      // Expand only this folder section after tab switch
+      
       setTimeout(() => {
         const sections = document.querySelectorAll('.folder-section');
         let targetSection = null;
+        
+        // Collapse all folders EXCEPT the target one
         sections.forEach(s => {
           if (s.dataset.folderId === folderId) {
+            // This is the target - expand it
             s.classList.add('expanded');
             localStorage.setItem(`pv-folder-${folderId}`, 'true');
+            s.setAttribute('aria-expanded', 'true');
             targetSection = s;
-            // Add highlight effect
+            
+            // Highlight animation
             s.classList.add('folder-highlight');
             setTimeout(() => s.classList.remove('folder-highlight'), 2000);
           } else {
+            // Collapse all other folders
             s.classList.remove('expanded');
             localStorage.setItem(`pv-folder-${s.dataset.folderId}`, 'false');
+            s.setAttribute('aria-expanded', 'false');
           }
         });
-        // Scroll to the folder if found
+        
+        // Scroll to target smoothly - use 'start' to show it at top
+        // but add offset so previous folders are still visible
         if (targetSection) {
-          targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const rect = targetSection.getBoundingClientRect();
+          const headerOffset = 120; // Account for header + search + tabs
+          const scrollPosition = window.scrollY + rect.top - headerOffset;
+          
+          window.scrollTo({
+            top: scrollPosition,
+            behavior: 'smooth'
+          });
         }
       }, 150);
     });
@@ -1793,10 +1814,9 @@ function renderExplore() {
   if (_libraryHasMore) {
     const loadMoreContainer = document.createElement('div');
     loadMoreContainer.className = 'explore-load-more';
-    loadMoreContainer.style.cssText = 'grid-column: 1 / -1; text-align: center; padding: 16px 0;';
     loadMoreContainer.innerHTML = `<button class="btn btn-secondary btn-sm ripple" id="explore-load-more-btn">${_libraryLoading ? (t('loading') || 'Loading...') : (t('loadMore') || 'Load More')}</button>`;
     list.appendChild(loadMoreContainer);
-    
+
     document.getElementById('explore-load-more-btn')?.addEventListener('click', () => {
       if (!_libraryLoading) {
         _libraryPage++;
@@ -1959,7 +1979,7 @@ function openSettings() {
         </div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('language')}</label><select id="settings-lang"><option value="en" ${P.getLang() === 'en' ? 'selected' : ''}>${t('langEnglish')}</option><option value="ru" ${P.getLang() === 'ru' ? 'selected' : ''}>${t('langRussian')}</option></select></div><div class="divider"></div>
         <div class="form-group"><label class="form-label">${t('keyboardShortcuts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('shortcutsHint')} <a href="#" id="open-shortcuts-link" style="color:var(--accent);">${t('chromeShortcuts')}</a></span><div class="hotkey-rebind-section" id="shortcuts-display"></div></div><div class="divider"></div>
-        <div class="form-group"><label class="form-label">${t('quickInsertPrompts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('quickInsertHint')}</span><span class="form-hint" style="margin-bottom:8px;display:block;">${state.prompts.length > SETTINGS_PROMPT_SELECT_LIMIT ? `Showing recent ${SETTINGS_PROMPT_SELECT_LIMIT} prompts for faster settings` : ''}</span><div class="hotkey-section">
+        <div class="form-group"><label class="form-label">${t('quickInsertPrompts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('quickInsertHint')}</span><span class="form-hint" style="margin-bottom:8px;display:block;">${state.prompts.length > SETTINGS_PROMPT_SELECT_LIMIT ? `Showing recent ${SETTINGS_PROMPT_SELECT_LIMIT} prompts for faster settings` : ''}</span><div class="hotkey-section" data-hotkey-section="true">
           ${[1, 2, 3].map(n => {
             const slotId = `slot${n}`;
             const slot = hotkeys[slotId] || {};
@@ -2383,7 +2403,11 @@ async function checkPremiumStatus() {
     const profileRes = await supabaseMsg({ action: 'supabaseRequest', method: 'GET', path: `profiles?id=eq.${state.user.id}&select=is_admin` });
     if (profileRes?.data?.[0]) {
       state.isAdmin = profileRes.data[0].is_admin || false;
-      console.log('✅ Admin status:', state.isAdmin);
+      console.log('✅ Admin status:', state.isAdmin, 'Email:', state.user?.email);
+      console.log('📋 Full profile data:', profileRes.data[0]);
+    } else {
+      console.warn('⚠️ No profile data found for user:', state.user?.id);
+      console.warn('⚠️ Profile response:', profileRes);
     }
   } catch (e) { /* silent */ }
 }
@@ -2750,11 +2774,26 @@ function initSearch() {
   const input = document.getElementById('search-input');
   let searchCache = null; // Cache lowercase versions for faster search
   let lastQuery = '';
-  
+  let hasSwitchedToPrompts = false; // Track if we've already switched to Prompts tab
+
   const debouncedSearch = debounce((q) => {
     if (q === lastQuery) return; // Skip if query hasn't changed
     lastQuery = q;
-    
+
+    // If typing and not on Prompts tab, switch to Prompts tab
+    if (q.length > 0 && !hasSwitchedToPrompts) {
+      const promptsTab = document.querySelector('[data-tab="prompts"]');
+      if (promptsTab) {
+        promptsTab.click();
+        hasSwitchedToPrompts = true;
+      }
+    }
+
+    // Reset flag when search is cleared (allow switching again next time)
+    if (q.length === 0 && hasSwitchedToPrompts) {
+      hasSwitchedToPrompts = false;
+    }
+
     if (!q) {
       if (state.searchOriginalPrompts) { state.prompts = state.searchOriginalPrompts; state.searchOriginalPrompts = null; searchCache = null; }
       renderPrompts();
@@ -2771,10 +2810,10 @@ function initSearch() {
         text: p.text.substring(0, 500).toLowerCase() // Only search first 500 chars of text
       }));
     }
-    
+
     // Split query into tokens for multi-word search
     const tokens = q.split(/\s+/).filter(Boolean);
-    
+
     // Use cached lowercase fields for faster filtering
     const filtered = searchCache.filter(c =>
       tokens.every(token =>
@@ -3264,8 +3303,59 @@ function updateStaticTexts() {
   renderExplore();
 }
 
+// ==================== APPLY SEARCH FILTERS ====================
+function applySearchFilters(filters) {
+  const searchInput = document.getElementById('search-input');
+  const query = searchInput?.value.trim().toLowerCase() || '';
+  
+  // Apply filters to prompts
+  if (state.searchOriginalPrompts) {
+    let filtered = [...state.searchOriginalPrompts];
+    
+    // Platform filter
+    if (filters.platform !== 'all') {
+      filtered = filtered.filter(p => {
+        if (filters.platform === 'other') {
+          return !['chatgpt', 'claude', 'gemini', 'perplexity', 'poe'].includes(p.platform?.toLowerCase());
+        }
+        return p.platform?.toLowerCase() === filters.platform;
+      });
+    }
+    
+    // Tags filter
+    if (filters.tags?.length > 0) {
+      filtered = filtered.filter(p => 
+        filters.tags.some(tag => p.tags?.includes(tag))
+      );
+    }
+    
+    // Has variables filter
+    if (filters.hasVariables) {
+      filtered = filtered.filter(p => p.variables?.length > 0);
+    }
+    
+    // Favorites filter
+    if (filters.favoritesOnly) {
+      filtered = filtered.filter(p => p.isFavorite);
+    }
+    
+    state.prompts = filtered;
+    renderPrompts();
+    
+    if (state.prompts.length === 0 && !query) {
+      document.getElementById('prompts-list').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-title">No prompts found</div>
+          <div class="empty-state-text">Try adjusting your filters</div>
+        </div>
+      `;
+    }
+  }
+}
+
 // ==================== INIT ====================
 let _initRenderDone = false; // Guard against duplicate renders during init
+let searchFilters = null; // Search filters instance
 
 async function init() {
   try {
@@ -3275,10 +3365,9 @@ async function init() {
 
   await loadData();
   applyTheme(state.settings.theme);
-  
+
   // Initialize offline queue module
   if (P.initOffline) {
-    // state is already P.state — single source of truth, no need to assign
     await P.initOffline();
   }
 
@@ -3292,10 +3381,21 @@ async function init() {
     document.getElementById('welcome-title').textContent = t('welcomeTitle');
     document.getElementById('welcome-text').textContent = t('welcomeText');
     document.getElementById('get-started-btn').textContent = t('getStarted');
-    document.getElementById('get-started-btn').addEventListener('click', () => {
+    document.getElementById('get-started-btn').addEventListener('click', async () => {
       welcomeScreen.style.display = 'none';
       mainApp.style.display = 'flex';
       state.isFirstLaunch = false;
+      await saveData('isFirstLaunch', false);
+      
+      // Start onboarding tutorial after a short delay
+      setTimeout(() => {
+        if (window.OnboardingTutorial) {
+          const tutorial = new window.OnboardingTutorial();
+          tutorial.start(() => {
+            console.log('✅ Onboarding complete');
+          });
+        }
+      }, 300);
     });
   } else {
     welcomeScreen.style.display = 'none';
@@ -3305,6 +3405,19 @@ async function init() {
   // Initialize tabs and search BEFORE any rendering
   initTabs();
   initSearch();
+  
+  // Initialize search filters
+  if (window.SearchFilters) {
+    searchFilters = new window.SearchFilters();
+    searchFilters.init({
+      currentTab: 'prompts',
+      onFilterChange: (filters) => {
+        console.log('Filters changed:', filters);
+        // Apply filters to search results
+        applySearchFilters(filters);
+      }
+    });
+  }
 
   // Update static text from i18n — this also does the FIRST render of all tabs
   updateStaticTexts();
