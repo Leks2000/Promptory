@@ -1,98 +1,74 @@
-# Promptory Onboarding Tutorial v9
+# Promptory Onboarding Tutorial v10
 
-**Version:** 9.0  
+**Version:** 10.0  
 **Date:** 18 February 2026
 
 ---
 
-## COMPLETE 11-STEP TUTORIAL (covering all 6 key features)
+## GAME-STYLE SPOTLIGHT TUTORIAL (9 steps)
 
-| Step | Feature | Action | Description |
-|------|---------|--------|-------------|
-| **1** | Setup | Click "+ New" | Create your first prompt |
-| **2** | Setup | Click "Create Prompt" | Auto-fills title + text with {variables} demo |
-| **3** | **INSERT** | Click arrow button | **MAIN FEATURE** - insert prompt into AI chat |
-| **4** | **COPY** | Click prompt card | Copy prompt text to clipboard |
-| **5** | **FAVORITES** | Click star | Add prompt to favorites |
-| **6** | **FAVORITES** | Click Favorites tab | View all starred prompts |
-| **7** | **SEARCH** | Focus search input | Search prompts by title/tags/content |
-| **8** | **EDIT** | Click pencil icon | Edit prompt (title, text, tags, folder) |
-| **9** | **EXPLORE** | Click Explore tab | Browse community prompt library |
-| **10** | Settings | Click Settings gear | Configure hotkeys, theme, cloud sync |
-| **11** | Final | Click "Get Started!" | Summary of all 6 features + pro tip |
+### Visual Approach
+- **Dark overlay** (0.75 opacity) covers everything
+- **clip-path cutout** creates transparent hole around target
+- **Pulsing border ring** around highlighted element
+- **No blur** — zero performance impact
+- **Smooth CSS transitions** on all movements (0.45s cubic-bezier)
+- Target element is clickable through the overlay (z-index above)
 
----
+### Step Flow
 
-## 6 KEY FEATURES COVERED
-
-1. **Insert (MAIN)** - Step 3 - Paste prompts directly into AI chats
-2. **Copy** - Step 4 - Click card to copy to clipboard
-3. **Favorites** - Steps 5-6 - Star prompts for quick access
-4. **Search** - Step 7 - Find prompts instantly
-5. **Edit** - Step 8 - Modify any prompt
-6. **Explore** - Step 9 - Discover community prompts
+| Step | Action | Target | Description |
+|------|--------|--------|-------------|
+| **1** | Click "+ New" | New button | Create first prompt |
+| **2** | Click "Create" | Save button | Auto-fills & saves prompt |
+| **3** | Click Settings | Settings gear | Open Settings panel |
+| **4** | Observe | Hotkey section | Auto-scrolls to Quick Insert, explains hotkeys |
+| **5** | Select dropdown | Slot 1 dropdown | Pick prompt for hotkey slot (any slot works) |
+| **6** | Click Save | Save button | Save settings |
+| **7** | Info | Center modal | Shows assigned hotkey visually (dynamic!) |
+| **8** | Observe | Explore tab | Library teaser — sign in required |
+| **9** | Final | Center modal | Summary + Ctrl+Shift+P tip |
 
 ---
 
-## VISUAL FEATURES
+## KEY FEATURES
 
-### Overlay (Dark background with cutout)
-- `rgba(0, 0, 0, 0.75)` overlay
-- `clip-path` polygon creates "hole" around target
-- Smooth transitions between steps
+### Dynamic Hotkey Detection
+If user assigns prompt to Alt+3 instead of Alt+1, the tutorial automatically:
+1. Detects the chosen slot via `chrome.commands.getAll()`
+2. Updates the hotkey visual in step 7
+3. Shows correct key combo in final summary
 
-### Spotlight (Animated border)
-- 3px solid accent border
-- Pulsating glow animation (2s infinite)
-- Transitions smoothly between targets
+### Smart Auto-Interactions
+- **Auto-fill** prompt title/text with sample data
+- **Auto-scroll** settings modal to Quick Insert section
+- **Auto-focus** dropdown with flash animation
+- User can pick ANY slot (not just Slot 1)
 
-### Tutorial Card
-- Step counter badge (e.g., "3/11")
-- Feature-specific icon
-- Feature badge ("MAIN FEATURE", "COPY", etc.)
-- Skip button on every step (except final)
-- Progress bar showing completion
-
-### New in v9
-- **Skip button** on every step
-- **Feature badges** for the 6 key features
-- **Icons** per step type
-- **Progress bar** at bottom
-- **Variables demo** in auto-fill (`{role}`, `{task}`)
-- **Improved positioning** with better boundary checks
-- **Cleanup** between steps (no stale handlers)
+### Library Teaser (No Full Tour)
+- Step 8 just mentions the Library tab
+- Says "sign in to browse, save and share"
+- Does NOT open the Library tab (per spec)
 
 ---
 
-## TECHNICAL IMPLEMENTATION
+## FILES
 
-### Files
-- `popup/onboarding-tutorial.js` - Logic (class OnboardingTutorial)
-- `popup/onboarding-tutorial.css` - Styles
+- `popup/onboarding-tutorial.js` — Tutorial logic (class OnboardingTutorial)
+- `popup/onboarding-tutorial.css` — All styles
 
-### Class: `window.OnboardingTutorial`
-
-**Key Methods:**
-- `start(onComplete)` - Start the tutorial tour
-- `showStep(index)` - Show a specific step
-- `highlightTarget(element)` - Highlight target with spotlight
-- `positionTutorialNear(element, position)` - Smart positioning
-- `updateOverlayHole(rect, padding)` - Create overlay cutout
-- `setupInteraction(step, target)` - Setup click/focus handlers
-- `cleanupStep()` - Remove handlers/highlights from previous step
-- `waitForElementAsync(selector, timeout)` - Wait for DOM element
-- `close()` - Close tutorial and save completion state
-
-### Storage
-```javascript
-chrome.storage.local.set({ onboardingTutorialComplete: true });
-```
+### CSS Architecture
+- `.tut-overlay` — Dark dimming layer with clip-path hole
+- `.tut-spotlight` — Pulsing border ring
+- `.tut-tooltip` — Instruction card
+- `.tut-target-active` — Makes target element clickable above overlay
+- `.tut-key` — Keyboard key visual (for hotkey display)
 
 ---
 
 ## TESTING
 
-### Reset storage to re-run tutorial:
+### Reset tutorial:
 ```javascript
 chrome.storage.local.remove(['onboardingTutorialComplete', 'hasLaunched'], () => {
   console.log('Tutorial reset. Close and reopen popup.');
@@ -100,24 +76,16 @@ chrome.storage.local.remove(['onboardingTutorialComplete', 'hasLaunched'], () =>
 ```
 
 ### Expected behavior:
-- Overlay darkens everything except target
-- Spotlight pulses around target element
-- Tutorial card appears near target with smart positioning
-- Click/focus on target advances to next step
-- Skip button closes tutorial at any point
-- Progress bar shows completion percentage
-- Final step summarizes all 6 features
+1. Dark overlay covers entire popup (0.75 opacity)
+2. Target element visible through clip-path hole
+3. Pulsing border ring around target
+4. Tooltip card appears near target with smart positioning
+5. Click/change on target advances to next step
+6. Settings modal auto-scrolls to Quick Insert
+7. Dropdown selection detects chosen slot
+8. Final step shows actual hotkey combo
+9. Skip available on every step
 
 ---
 
-## STATUS
-
-| Component | Status |
-|-----------|--------|
-| Logic (JS) | DONE |
-| Styles (CSS) | DONE |
-| Integration | DONE |
-| 6 Features Covered | DONE |
-| Skip Button | DONE |
-| Progress Bar | DONE |
-| i18n (EN/RU) | DONE |
+## STATUS: DONE
