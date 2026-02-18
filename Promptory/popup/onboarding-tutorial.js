@@ -407,8 +407,11 @@ class OnboardingTutorial {
     const rect = element.getBoundingClientRect();
     const pad = 6;
 
-    // Make element clickable above overlay
+    // Ensure the target element (and its ancestors) can render above the overlay.
+    // Walk up the DOM and force any ancestor with a stacking context that would
+    // trap our z-index to also sit above the overlay layer.
     element.classList.add('tut-target-active');
+    this._ensureAncestorStacking(element);
 
     // Position spotlight ring
     this.spotlight.style.display = 'block';
@@ -421,6 +424,25 @@ class OnboardingTutorial {
     // Update overlay clip-path to create "hole"
     this.overlay.classList.remove('tut-full-dim');
     this._updateOverlayHole(rect, pad);
+  }
+
+  // Walk up ancestors and temporarily raise any positioned/stacking containers
+  // so the target element can paint above the z-index:9998 overlay.
+  _ensureAncestorStacking(element) {
+    let el = element.parentElement;
+    while (el && el !== document.body && el !== document.documentElement) {
+      const style = getComputedStyle(el);
+      // If ancestor creates a stacking context (has z-index set, or transform, etc.)
+      // we need to raise it above the overlay so the child's z-index works.
+      const pos = style.position;
+      if (pos === 'relative' || pos === 'absolute' || pos === 'fixed' || pos === 'sticky') {
+        const currentZ = parseInt(style.zIndex, 10);
+        if (isNaN(currentZ) || currentZ < 10001) {
+          el.classList.add('tut-ancestor-raised');
+        }
+      }
+      el = el.parentElement;
+    }
   }
 
   _updateOverlayHole(rect, pad) {
@@ -528,10 +550,8 @@ class OnboardingTutorial {
 
     if (!target) return;
 
-    // Make target interactive
-    target.style.zIndex = '10001';
-    target.style.position = target.style.position || 'relative';
-    target.style.cursor = 'pointer';
+    // Make target interactive — it's already raised by tut-target-active class
+    // Just ensure pointer-events are explicitly enabled
     target.style.pointerEvents = 'auto';
 
     if (step.action === 'click') {
@@ -694,6 +714,11 @@ class OnboardingTutorial {
       el.style.pointerEvents = '';
     });
 
+    // Remove ancestor stacking overrides
+    document.querySelectorAll('.tut-ancestor-raised').forEach(el => {
+      el.classList.remove('tut-ancestor-raised');
+    });
+
     // Reset other slot z-indices
     document.querySelectorAll('[data-hotkey-slot]').forEach(el => {
       el.style.zIndex = '';
@@ -729,6 +754,10 @@ class OnboardingTutorial {
       this.overlay?.remove();
       this.tooltip?.remove();
       this.spotlight?.remove();
+      // Final cleanup of any ancestor stacking overrides
+      document.querySelectorAll('.tut-ancestor-raised').forEach(el => {
+        el.classList.remove('tut-ancestor-raised');
+      });
     }, 400);
 
     // Save completion

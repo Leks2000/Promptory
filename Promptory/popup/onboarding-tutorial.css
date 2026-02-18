@@ -11,7 +11,7 @@
   background: rgba(0, 0, 0, 0.75);
   z-index: 9998;
   opacity: 0;
-  pointer-events: auto;
+  pointer-events: none; /* Let clicks through to the hole area */
   transition:
     opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
     clip-path 0.45s cubic-bezier(0.4, 0, 0.2, 1);
@@ -24,10 +24,11 @@
   opacity: 1;
 }
 
-/* When no target (final/info steps), darken everything with slightly less opacity */
+/* When no target (final/info steps), darken everything and block clicks */
 .tut-overlay.tut-full-dim {
   clip-path: none;
   background: rgba(0, 0, 0, 0.8);
+  pointer-events: auto;
 }
 
 /* ========== SPOTLIGHT — pulsing animated border around target ========== */
@@ -323,6 +324,15 @@
 /* ========== TARGET ACTIVE STATE ========== */
 .tut-target-active {
   position: relative !important;
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  /* Force new stacking context so element renders above overlay */
+  isolation: isolate;
+}
+
+/* Ancestor containers raised above overlay during tutorial */
+.tut-ancestor-raised {
   z-index: 10001 !important;
   pointer-events: auto !important;
 }

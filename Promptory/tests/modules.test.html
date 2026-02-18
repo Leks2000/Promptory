@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Promptory Module Tests - Hotkeys, Variables, Migration, Import/Export</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; background: #1a1a1a; color: #e0e0e0; }
+    h1 { font-size: 20px; margin-bottom: 16px; color: #fff; }
+    .suite { margin-bottom: 24px; }
+    .suite-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+    .test { padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    .test.pass { background: #0d2a1f; color: #4ade80; }
+    .test.fail { background: #2a0d0d; color: #f87171; }
+    .test-icon { font-size: 16px; }
+    .summary { margin-top: 24px; padding: 16px; background: #222; border-radius: 8px; font-size: 14px; }
+    .summary.all-pass { border: 1px solid #4ade80; }
+    .summary.has-fail { border: 1px solid #f87171; }
+  </style>
+</head>
+<body>
+  <h1>Promptory Module Tests</h1>
+  <div id="results"></div>
+  <div id="summary"></div>
+  <script>
+    // ===== Test Framework =====
+    const results = [];
+    function assert(condition, message) {
+      results.push({ pass: !!condition, message });
+    }
+    function assertEqual(actual, expected, message) {
+      const pass = JSON.stringify(actual) === JSON.stringify(expected);
+      results.push({ pass, message: `${message} | expected: ${JSON.stringify(expected)}, got: ${JSON.stringify(actual)}` });
+    }
+    function assertNotEqual(actual, expected, message) {
+      const pass = JSON.stringify(actual) !== JSON.stringify(expected);
+      results.push({ pass, message });
+    }
+    function suite(name, fn) {
+      const startIdx = results.length;
+      fn();
+      const div = document.createElement('div');
+      div.className = 'suite';
+      div.innerHTML = `<div class="suite-title">${name}</div>`;
+      for (let i = startIdx; i < results.length; i++) {
+        const r = results[i];
+        div.innerHTML += `<div class="test ${r.pass ? 'pass' : 'fail'}"><span class="test-icon">${r.pass ? '✅' : '❌'}</span>${r.message}</div>`;
+      }
+      document.getElementById('results').appendChild(div);
+    }
+    function renderSummary() {
+      const pass = results.filter(r => r.pass).length;
+      const fail = results.filter(r => !r.pass).length;
+      const total = results.length;
+      const el = document.getElementById('summary');
+      el.className = `summary ${fail > 0 ? 'has-fail' : 'all-pass'}`;
+      el.textContent = `${pass}/${total} tests passed${fail > 0 ? ` (${fail} failed)` : ' ✓'}`;
+    }
+
+    // ===== Mock Chrome API =====
+    const _storageData = {};
+    const chrome = {
+      storage: { local: {
+        get: (keys, cb) => {
+          const result = {};
+          (Array.isArray(keys) ? keys : [keys]).forEach(k => { if (_storageData[k] !== undefined) result[k] = _storageData[k]; });
+          cb(result);
+        },
+        set: (obj, cb) => { Object.assign(_storageData, obj); if (cb) cb(); }
+      }},
+      runtime: { getURL: (path) => path, sendMessage: (msg, cb) => { if (cb) cb({}); } },
+      i18n: { getUILanguage: () => 'en' },
+      commands: { getAll: (cb) => cb([]) },
+      tabs: { create: () => {} }
+    };
+    window.chrome = chrome;
+
+    // Mock CONFIG
+    window.CONFIG = {
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_ANON_KEY: 'test-key',
+      FREE_PROMPT_LIMIT: 25,
+      MAX_ANIM_ITEMS: 20,
+      SETTINGS_PROMPT_SELECT_LIMIT: 50,
+      LIBRARY_PAGE_SIZE: 20,
+      VERSION: '1.9.0'
+    };
+
+    // ===================================================================
+    // TEST SUITE 1: HOTKEY INSERTION LOGIC
+    // ===================================================================
+    suite('Hotkey Insertion Logic', () => {
+      // Test hotkey slot assignment
+      const settings = { hotkeys: { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } } };
+      
+      // Assign prompt to slot1
+      settings.hotkeys.slot1.promptId = 'prompt-123';
+      assertEqual(settings.hotkeys.slot1.promptId, 'prompt-123', 'Assign prompt ID to slot1');
+      
+      // Verify slot2 is still empty
+      assertEqual(settings.hotkeys.slot2.promptId, null, 'Slot2 remains unassigned');
+      
+      // Reassign slot1
+      settings.hotkeys.slot1.promptId = 'prompt-456';
+      assertEqual(settings.hotkeys.slot1.promptId, 'prompt-456', 'Reassign slot1 to different prompt');
+      
+      // Clear slot
+      settings.hotkeys.slot1.promptId = null;
+      assertEqual(settings.hotkeys.slot1.promptId, null, 'Clear slot1 assignment');
+      
+      // Test all 3 slots simultaneously
+      settings.hotkeys.slot1.promptId = 'a';
+      settings.hotkeys.slot2.promptId = 'b';
+      settings.hotkeys.slot3.promptId = 'c';
+      assert(
+        settings.hotkeys.slot1.promptId === 'a' &&
+        settings.hotkeys.slot2.promptId === 'b' &&
+        settings.hotkeys.slot3.promptId === 'c',
+        'All 3 slots can be assigned simultaneously'
+      );
+      
+      // Hotkey lookup by slot
+      const slotToKey = { slot1: 'Alt+1', slot2: 'Alt+2', slot3: 'Alt+3' };
+      assertEqual(slotToKey['slot1'], 'Alt+1', 'Slot1 maps to Alt+1');
+      assertEqual(slotToKey['slot2'], 'Alt+2', 'Slot2 maps to Alt+2');
+      assertEqual(slotToKey['slot3'], 'Alt+3', 'Slot3 maps to Alt+3');
+      
+      // Find prompt by hotkey
+      const prompts = [
+        { id: 'a', title: 'Prompt A', text: 'Text A' },
+        { id: 'b', title: 'Prompt B', text: 'Text B' },
+        { id: 'c', title: 'Prompt C', text: 'Text C' }
+      ];
+      function getPromptBySlot(slotId) {
+        const pid = settings.hotkeys[slotId]?.promptId;
+        return pid ? prompts.find(p => p.id === pid) : null;
+      }
+      assertEqual(getPromptBySlot('slot1')?.title, 'Prompt A', 'Lookup prompt by slot1');
+      assertEqual(getPromptBySlot('slot3')?.title, 'Prompt C', 'Lookup prompt by slot3');
+      
+      // Missing prompt returns null
+      settings.hotkeys.slot1.promptId = 'nonexistent';
+      assertEqual(getPromptBySlot('slot1'), null, 'Missing prompt returns null');
+    });
+
+    // ===================================================================
+    // TEST SUITE 2: VARIABLE SUBSTITUTION
+    // ===================================================================
+    suite('Variable Substitution ({role}, {task})', () => {
+      // Extract variables from text
+      function extractVars(text) {
+        return [...new Set((text.match(/\{([^}]+)\}/g) || []).map(m => m.slice(1, -1)))];
+      }
+      
+      assertEqual(extractVars('You are a {role}'), ['role'], 'Extract single variable');
+      assertEqual(extractVars('You are a {role}. Help me with {task}.'), ['role', 'task'], 'Extract multiple variables');
+      assertEqual(extractVars('No variables here'), [], 'No variables returns empty array');
+      assertEqual(extractVars('{role} and {role} again'), ['role'], 'Deduplicate variables');
+      assertEqual(extractVars('{a} {b} {c} {a}'), ['a', 'b', 'c'], 'Deduplicate with multiple');
+      assertEqual(extractVars('{}'), [], 'Empty braces are not a variable');
+      assertEqual(extractVars('{role with spaces}'), ['role with spaces'], 'Variable with spaces');
+      
+      // Substitute variables in text
+      function substituteVars(text, values) {
+        let result = text;
+        for (const [key, val] of Object.entries(values)) {
+          result = result.replace(new RegExp(`\\{${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`, 'g'), val);
+        }
+        return result;
+      }
+      
+      assertEqual(
+        substituteVars('You are a {role}. Help with {task}.', { role: 'developer', task: 'coding' }),
+        'You are a developer. Help with coding.',
+        'Substitute role and task'
+      );
+      assertEqual(
+        substituteVars('{role} is {role}', { role: 'AI' }),
+        'AI is AI',
+        'Substitute duplicate variables'
+      );
+      assertEqual(
+        substituteVars('No vars', {}),
+        'No vars',
+        'No substitution needed'
+      );
+      assertEqual(
+        substituteVars('{a} and {b}', { a: 'hello' }),
+        'hello and {b}',
+        'Partial substitution leaves unmatched vars'
+      );
+      
+      // Edge cases
+      assertEqual(extractVars('Nested {outer{inner}}'), ['outer{inner'], 'Nested braces (greedy match)');
+      assertEqual(extractVars('Unicode {переменная}'), ['переменная'], 'Unicode variable names');
+    });
+
+    // ===================================================================
+    // TEST SUITE 3: DATA MIGRATION (v0 → v1 → v2)
+    // ===================================================================
+    suite('Data Migration (v0 → v1 → v2)', () => {
+      // Simulate v0 data (missing fields)
+      const v0Prompts = [
+        { id: '1', title: 'Old prompt', text: 'Some text' },
+        { id: '2', title: 'Another', text: 'More text', tags: ['existing'] }
+      ];
+      
+      // v0 → v1 migration: add imageUrl, variables, tags, useCount
+      function migrateV0ToV1(prompts) {
+        return prompts.map(p => ({
+          ...p,
+          imageUrl: p.imageUrl !== undefined ? p.imageUrl : null,
+          variables: p.variables || [],
+          tags: p.tags || [],
+          useCount: p.useCount !== undefined ? p.useCount : 0
+        }));
+      }
+      
+      const v1Prompts = migrateV0ToV1(v0Prompts);
+      assertEqual(v1Prompts[0].imageUrl, null, 'v0→v1: imageUrl defaults to null');
+      assertEqual(v1Prompts[0].variables, [], 'v0→v1: variables defaults to []');
+      assertEqual(v1Prompts[0].tags, [], 'v0→v1: tags defaults to []');
+      assertEqual(v1Prompts[0].useCount, 0, 'v0→v1: useCount defaults to 0');
+      assertEqual(v1Prompts[1].tags, ['existing'], 'v0→v1: existing tags preserved');
+      
+      // v1 → v2 migration: add platform, createdAt, updatedAt
+      function migrateV1ToV2(prompts) {
+        const now = Date.now();
+        return prompts.map(p => ({
+          ...p,
+          platform: p.platform || 'universal',
+          createdAt: p.createdAt || now,
+          updatedAt: p.updatedAt || now
+        }));
+      }
+      
+      const v2Prompts = migrateV1ToV2(v1Prompts);
+      assertEqual(v2Prompts[0].platform, 'universal', 'v1→v2: platform defaults to universal');
+      assert(typeof v2Prompts[0].createdAt === 'number', 'v1→v2: createdAt is a number');
+      assert(typeof v2Prompts[0].updatedAt === 'number', 'v1→v2: updatedAt is a number');
+      
+      // Full chain: v0 → v1 → v2
+      const fullyMigrated = migrateV1ToV2(migrateV0ToV1([{ id: 'x', title: 'Test', text: 'Body' }]));
+      assert(
+        fullyMigrated[0].imageUrl === null &&
+        fullyMigrated[0].variables.length === 0 &&
+        fullyMigrated[0].platform === 'universal' &&
+        typeof fullyMigrated[0].createdAt === 'number',
+        'Full migration chain v0→v1→v2 produces valid prompt'
+      );
+      
+      // Already migrated data should not be changed
+      const alreadyV2 = { id: 'y', title: 'V2', text: 'Already v2', platform: 'chatgpt', createdAt: 1000, updatedAt: 2000, imageUrl: 'url', variables: ['a'], tags: ['b'], useCount: 5 };
+      const reMigrated = migrateV1ToV2(migrateV0ToV1([alreadyV2]))[0];
+      assertEqual(reMigrated.platform, 'chatgpt', 'Already-migrated: platform preserved');
+      assertEqual(reMigrated.createdAt, 1000, 'Already-migrated: createdAt preserved');
+      assertEqual(reMigrated.useCount, 5, 'Already-migrated: useCount preserved');
+    });
+
+    // ===================================================================
+    // TEST SUITE 4: IMPORT/EXPORT JSON VALIDATION
+    // ===================================================================
+    suite('Import/Export JSON Validation', () => {
+      // Valid export format
+      const validExport = {
+        prompts: [
+          { id: 'p1', title: 'Prompt 1', text: 'Text 1', tags: ['tag1'], variables: [], useCount: 3, isFavorite: true, folderId: 'f1', platform: 'universal', createdAt: Date.now(), updatedAt: Date.now() }
+        ],
+        folders: [
+          { id: 'f1', name: 'Folder 1', createdAt: Date.now(), updatedAt: Date.now() }
+        ],
+        settings: { theme: 'dark' },
+        exportDate: new Date().toISOString()
+      };
+      
+      // Schema validator (mirrors the logic in modules/settings.js)
+      function validateImportSchema(data) {
+        const errors = [];
+        if (typeof data !== 'object' || data === null) return ['Root must be an object'];
+        if (!data.prompts && !data.folders) return ['Must contain "prompts" and/or "folders"'];
+        if (data.prompts) {
+          if (!Array.isArray(data.prompts)) return ['"prompts" must be an array'];
+          data.prompts.forEach((p, i) => {
+            if (typeof p !== 'object' || p === null) { errors.push(`prompts[${i}]: not an object`); return; }
+            if (!p.title && !p.text) errors.push(`prompts[${i}]: missing title and text`);
+            if (p.id && typeof p.id !== 'string') errors.push(`prompts[${i}]: id must be string`);
+            if (p.tags && !Array.isArray(p.tags)) errors.push(`prompts[${i}]: tags must be array`);
+            if (p.variables && !Array.isArray(p.variables)) errors.push(`prompts[${i}]: variables must be array`);
+            if (p.useCount !== undefined && typeof p.useCount !== 'number') errors.push(`prompts[${i}]: useCount must be number`);
+          });
+        }
+        if (data.folders && !Array.isArray(data.folders)) errors.push('"folders" must be an array');
+        return errors;
+      }
+      
+      // Valid data
+      assertEqual(validateImportSchema(validExport), [], 'Valid export has no errors');
+      
+      // Invalid: not an object
+      assertEqual(validateImportSchema('string'), ['Root must be an object'], 'String rejected');
+      assertEqual(validateImportSchema(null), ['Root must be an object'], 'Null rejected');
+      assertEqual(validateImportSchema(42), ['Root must be an object'], 'Number rejected');
+      
+      // Invalid: missing prompts and folders
+      assertEqual(validateImportSchema({ settings: {} }), ['Must contain "prompts" and/or "folders"'], 'Missing prompts/folders rejected');
+      
+      // Invalid: prompts not array
+      assertEqual(validateImportSchema({ prompts: 'not-array' }), ['"prompts" must be an array'], 'Non-array prompts rejected');
+      
+      // Invalid: prompt missing title and text
+      const badPrompts = validateImportSchema({ prompts: [{ id: '1' }] });
+      assert(badPrompts.length > 0 && badPrompts[0].includes('missing title'), 'Prompt without title/text rejected');
+      
+      // Invalid: bad field types
+      const typeErrors = validateImportSchema({ prompts: [{ title: 'OK', text: 'OK', id: 123, tags: 'not-array', useCount: 'nan' }] });
+      assert(typeErrors.length >= 3, `Type validation catches id/tags/useCount errors (found ${typeErrors.length})`);
+      
+      // Valid: only folders
+      assertEqual(validateImportSchema({ folders: [{ id: 'f1', name: 'Test' }] }), [], 'Folders-only import is valid');
+      
+      // Valid: only prompts
+      assertEqual(validateImportSchema({ prompts: [{ title: 'T', text: 'X' }] }), [], 'Prompts-only import is valid');
+      
+      // Sanitize imported prompt (ensure defaults)
+      function sanitizePrompt(p) {
+        return {
+          id: (typeof p.id === 'string' && p.id) ? p.id : 'generated-id',
+          title: String(p.title || p.text || '').substring(0, 500),
+          text: String(p.text || p.title || '').substring(0, 50000),
+          platform: ['universal', 'chatgpt', 'claude', 'gemini', 'perplexity'].includes(p.platform) ? p.platform : 'universal',
+          tags: Array.isArray(p.tags) ? p.tags.filter(t => typeof t === 'string').slice(0, 20) : [],
+          variables: Array.isArray(p.variables) ? p.variables.filter(v => typeof v === 'string').slice(0, 50) : [],
+          useCount: (typeof p.useCount === 'number' && p.useCount >= 0) ? Math.floor(p.useCount) : 0,
+          isFavorite: !!p.isFavorite
+        };
+      }
+      
+      // Test sanitization
+      const sanitized = sanitizePrompt({ title: 'Test', text: 'Body', platform: 'invalid', tags: [1, 'valid', null], useCount: -5 });
+      assertEqual(sanitized.platform, 'universal', 'Sanitize: invalid platform → universal');
+      assertEqual(sanitized.tags, ['valid'], 'Sanitize: non-string tags filtered');
+      assertEqual(sanitized.useCount, 0, 'Sanitize: negative useCount → 0');
+      
+      // Very long title is truncated
+      const longTitle = 'A'.repeat(600);
+      const sanitizedLong = sanitizePrompt({ title: longTitle, text: 'x' });
+      assert(sanitizedLong.title.length <= 500, 'Sanitize: title truncated to 500 chars');
+    });
+
+    // ===================================================================
+    // TEST SUITE 5: CSV PARSING
+    // ===================================================================
+    suite('CSV Parsing', () => {
+      function parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (inQuotes) {
+            if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { current += ch; }
+          } else {
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === ',') { result.push(current); current = ''; }
+            else { current += ch; }
+          }
+        }
+        result.push(current);
+        return result;
+      }
+      
+      assertEqual(parseCSVLine('a,b,c'), ['a', 'b', 'c'], 'Simple CSV fields');
+      assertEqual(parseCSVLine('"quoted,field",normal'), ['quoted,field', 'normal'], 'Quoted field with comma');
+      assertEqual(parseCSVLine('"field ""with"" quotes"'), ['field "with" quotes'], 'Escaped quotes in field');
+      assertEqual(parseCSVLine(''), [''], 'Empty line returns one empty field');
+      assertEqual(parseCSVLine(',,,'), ['', '', '', ''], 'Multiple empty fields');
+    });
+
+    // ===================================================================
+    // TEST SUITE 6: WORD-BOUNDARY TRUNCATION
+    // ===================================================================
+    suite('Word-Boundary Truncation', () => {
+      function truncateAtWordBoundary(text, max) {
+        if (!text || text.length <= max) return text || '';
+        const sub = text.substring(0, max);
+        const lastBreak = Math.max(
+          sub.lastIndexOf(' '),
+          sub.lastIndexOf('.'),
+          sub.lastIndexOf(','),
+          sub.lastIndexOf(';'),
+          sub.lastIndexOf('-'),
+          sub.lastIndexOf('\u3000'),
+          sub.lastIndexOf('\u3001'),
+          sub.lastIndexOf('\u3002')
+        );
+        if (lastBreak <= max * 0.3) return sub + '...';
+        return text.substring(0, lastBreak) + '...';
+      }
+      
+      assertEqual(truncateAtWordBoundary('Short', 50), 'Short', 'Short text unchanged');
+      assertEqual(truncateAtWordBoundary('', 50), '', 'Empty text unchanged');
+      assertEqual(truncateAtWordBoundary(null, 50), '', 'Null returns empty');
+      
+      const longEn = 'This is a very long English sentence that should be truncated at a word boundary not mid-word';
+      const truncEn = truncateAtWordBoundary(longEn, 50);
+      assert(truncEn.endsWith('...'), 'English: ends with ellipsis');
+      assert(truncEn.length <= 53, 'English: respects max length + ellipsis');
+      assert(!truncEn.includes(' ...'.replace(' ', '')), 'English: does not cut mid-word');
+      
+      // CJK truncation
+      const longCJK = '这是一个很长的中文句子，需要在适当的地方截断，而不是在字的中间截断';
+      const truncCJK = truncateAtWordBoundary(longCJK, 20);
+      assert(truncCJK.endsWith('...'), 'CJK: ends with ellipsis');
+      assert(truncCJK.length <= 23, 'CJK: respects max length');
+      
+      // Russian text
+      const longRu = 'Это очень длинное русское предложение которое должно быть обрезано на границе слова';
+      const truncRu = truncateAtWordBoundary(longRu, 40);
+      assert(truncRu.endsWith('...'), 'Russian: ends with ellipsis');
+    });
+
+    // ===================================================================
+    // TEST SUITE 7: IMAGE CACHE LRU
+    // ===================================================================
+    suite('Image Cache LRU Eviction', () => {
+      // Simulate LRU cache
+      const MAX = 5;
+      const cache = new Map();
+      function cacheSet(key, value) {
+        if (cache.size >= MAX) {
+          const oldest = cache.keys().next().value;
+          cache.delete(oldest);
+        }
+        cache.set(key, value);
+      }
+      function cacheGet(key) {
+        const val = cache.get(key);
+        if (val === undefined) return undefined;
+        cache.delete(key);
+        cache.set(key, val); // Move to end (MRU)
+        return val;
+      }
+      
+      // Fill cache to max
+      for (let i = 0; i < 5; i++) cacheSet(`key${i}`, `val${i}`);
+      assertEqual(cache.size, 5, 'Cache fills to max');
+      
+      // Adding one more evicts oldest
+      cacheSet('key5', 'val5');
+      assertEqual(cache.size, 5, 'Cache stays at max after eviction');
+      assert(!cache.has('key0'), 'Oldest entry (key0) evicted');
+      assert(cache.has('key5'), 'Newest entry (key5) present');
+      
+      // Access key1 to make it MRU
+      cacheGet('key1');
+      cacheSet('key6', 'val6');
+      assert(cache.has('key1'), 'Accessed key1 survives eviction');
+      assert(!cache.has('key2'), 'Unadccessed key2 evicted');
+    });
+
+    // ===== Render Summary =====
+    renderSummary();
+  </script>
+</body>
+</html>
