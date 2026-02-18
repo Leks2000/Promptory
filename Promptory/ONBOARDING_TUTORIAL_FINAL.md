@@ -1,162 +1,123 @@
-# 🎉 Promptory Onboarding Tutorial - Финальная Версия
+# Promptory Onboarding Tutorial v9
 
-**Версия:** 3.0  
-**Дата:** 18 февраля 2026
-
----
-
-## 📋 **ПОЛНЫЙ СПИСОК ШАГОВ (11 шагов)**
-
-| Шаг | Цель | Действие | Переход |
-|-----|------|----------|---------|
-| **1** | Кнопка **New** | Клик на New | Клик → Шаг 2 |
-| **2** | Модалка создания | Авто-заполнение → Клик Create | Создание → Шаг 3 |
-| **3** | Созданный промпт | Показ кнопок (Edit/Delete/Fav/Insert) | Клик → Шаг 4 |
-| **4** | Кнопка **Settings ⚙️** | Клик на Settings | Клик → Шаг 5 |
-| **5** | Секция Hotkeys | Авто-скролл к "Quick Insert" | Скролл → Шаг 6 |
-| **6** | Dropdown **Slot 1** | Клик → Выбор промпта | Клик → Шаг 7 |
-| **7** | Кнопка **Save** | Клик Save → Закрытие Settings | Клик → Шаг 8 |
-| **8** | Вкладка **Folders** | Клик на Folders | Клик → Шаг 9 |
-| **9** | Вкладка **Favorites** | Клик на Favorites | Клик → Шаг 10 |
-| **10** | Вкладка **Explore** | Клик на Explore | Клик → Шаг 11 |
-| **11** | Финал | Плашка "Вы готовы!" | Клик "Начать" → Конец |
+**Version:** 9.0  
+**Date:** 18 February 2026
 
 ---
 
-## 🎨 **ВИЗУАЛЬНЫЕ ЭФФЕКТЫ:**
+## COMPLETE 11-STEP TUTORIAL (covering all 6 key features)
 
-### **1. Затемнение (Overlay):**
-- **Тёмный фон:** `rgba(0, 0, 0, 0.7)`
-- **"Дырка" вокруг элемента:** `clip-path polygon`
-- **Без блюра** (не жрёт FPS)
-
-### **2. Spotlight (Подсветка):**
-- **Рамка:** 3px solid var(--accent)
-- **Пульсация:** `animation: tutorialPulse 2s infinite`
-- **Тень:** `box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7)`
-
-### **3. Tutorial Box (Плашка):**
-- **Позиция:** Снизу/сверху от элемента
-- **Badge:** "1/11", "2/11", etc.
-- **Анимация:** `scale(0.9) → scale(1)`
+| Step | Feature | Action | Description |
+|------|---------|--------|-------------|
+| **1** | Setup | Click "+ New" | Create your first prompt |
+| **2** | Setup | Click "Create Prompt" | Auto-fills title + text with {variables} demo |
+| **3** | **INSERT** | Click arrow button | **MAIN FEATURE** - insert prompt into AI chat |
+| **4** | **COPY** | Click prompt card | Copy prompt text to clipboard |
+| **5** | **FAVORITES** | Click star | Add prompt to favorites |
+| **6** | **FAVORITES** | Click Favorites tab | View all starred prompts |
+| **7** | **SEARCH** | Focus search input | Search prompts by title/tags/content |
+| **8** | **EDIT** | Click pencil icon | Edit prompt (title, text, tags, folder) |
+| **9** | **EXPLORE** | Click Explore tab | Browse community prompt library |
+| **10** | Settings | Click Settings gear | Configure hotkeys, theme, cloud sync |
+| **11** | Final | Click "Get Started!" | Summary of all 6 features + pro tip |
 
 ---
 
-## 🔧 **ТЕХНИЧЕСКАЯ РЕАЛИЗАЦИЯ:**
+## 6 KEY FEATURES COVERED
 
-### **Файлы:**
-- `popup/onboarding-tutorial.js` — логика (317 строк)
-- `popup/onboarding-tutorial.css` — стили (156 строк)
+1. **Insert (MAIN)** - Step 3 - Paste prompts directly into AI chats
+2. **Copy** - Step 4 - Click card to copy to clipboard
+3. **Favorites** - Steps 5-6 - Star prompts for quick access
+4. **Search** - Step 7 - Find prompts instantly
+5. **Edit** - Step 8 - Modify any prompt
+6. **Explore** - Step 9 - Discover community prompts
 
-### **Класс:** `window.OnboardingTutorial`
+---
 
-**Методы:**
-- `start(onComplete)` — начать тур
-- `showStep(index)` — показать шаг
-- `highlightTarget(element)` — подсветить элемент
-- `updateOverlayHole(rect)` — сделать "дырку" в overlay
-- `positionTutorial(position)` — позиционировать плашку
-- `close()` — закрыть
+## VISUAL FEATURES
 
-### **Хранение:**
+### Overlay (Dark background with cutout)
+- `rgba(0, 0, 0, 0.75)` overlay
+- `clip-path` polygon creates "hole" around target
+- Smooth transitions between steps
+
+### Spotlight (Animated border)
+- 3px solid accent border
+- Pulsating glow animation (2s infinite)
+- Transitions smoothly between targets
+
+### Tutorial Card
+- Step counter badge (e.g., "3/11")
+- Feature-specific icon
+- Feature badge ("MAIN FEATURE", "COPY", etc.)
+- Skip button on every step (except final)
+- Progress bar showing completion
+
+### New in v9
+- **Skip button** on every step
+- **Feature badges** for the 6 key features
+- **Icons** per step type
+- **Progress bar** at bottom
+- **Variables demo** in auto-fill (`{role}`, `{task}`)
+- **Improved positioning** with better boundary checks
+- **Cleanup** between steps (no stale handlers)
+
+---
+
+## TECHNICAL IMPLEMENTATION
+
+### Files
+- `popup/onboarding-tutorial.js` - Logic (class OnboardingTutorial)
+- `popup/onboarding-tutorial.css` - Styles
+
+### Class: `window.OnboardingTutorial`
+
+**Key Methods:**
+- `start(onComplete)` - Start the tutorial tour
+- `showStep(index)` - Show a specific step
+- `highlightTarget(element)` - Highlight target with spotlight
+- `positionTutorialNear(element, position)` - Smart positioning
+- `updateOverlayHole(rect, padding)` - Create overlay cutout
+- `setupInteraction(step, target)` - Setup click/focus handlers
+- `cleanupStep()` - Remove handlers/highlights from previous step
+- `waitForElementAsync(selector, timeout)` - Wait for DOM element
+- `close()` - Close tutorial and save completion state
+
+### Storage
 ```javascript
 chrome.storage.local.set({ onboardingTutorialComplete: true });
 ```
 
 ---
 
-## 🎯 **АВТОМАТИЗАЦИЯ:**
+## TESTING
 
-### **Шаг 2 — Авто-заполнение:**
+### Reset storage to re-run tutorial:
 ```javascript
-autoFillPrompt() {
-  document.getElementById('pe-title').value = 'My First Prompt';
-  document.getElementById('pe-text').value = 'This is my first prompt...';
-}
-```
-
-### **Шаг 5 — Авто-скролл:**
-```javascript
-async scrollToTarget(element) {
-  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-```
-
-### **Шаг 7 — Авто-закрытие Settings:**
-```javascript
-if (step.closeSettings) {
-  setTimeout(() => {
-    const closeBtn = document.querySelector('#settings-modal .close-modal-btn');
-    if (closeBtn) closeBtn.click();
-  }, 500);
-}
-```
-
----
-
-## 🧪 **ТЕСТИРОВАНИЕ:**
-
-### **Очистка storage:**
-```javascript
-chrome.storage.local.clear(() => {
-  console.log('✅ Очищено!');
-  window.close();
+chrome.storage.local.remove(['onboardingTutorialComplete', 'hasLaunched'], () => {
+  console.log('Tutorial reset. Close and reopen popup.');
 });
 ```
 
-### **Проверка шагов:**
-
-1. **Очисти storage**
-2. **Открой popup**
-3. **Кликни "Get Started"**
-4. **Пройди все 11 шагов**
-
-**Ожидаемое поведение:**
-- ✅ Затемнение только вокруг целевого элемента
-- ✅ Пульсирующая подсветка
-- ✅ Плавные переходы между шагами
-- ✅ Авто-скролл к Settings
-- ✅ Авто-заполнение промпта
+### Expected behavior:
+- Overlay darkens everything except target
+- Spotlight pulses around target element
+- Tutorial card appears near target with smart positioning
+- Click/focus on target advances to next step
+- Skip button closes tutorial at any point
+- Progress bar shows completion percentage
+- Final step summarizes all 6 features
 
 ---
 
-## 💡 **ИДЕИ ДЛЯ УЛУЧШЕНИЙ:**
+## STATUS
 
-### **Можно добавить:**
-
-1. **Пропуск шагов:**
-   - Кнопка "Skip Tutorial" в любом месте
-   - Клик вне области → пропустить шаг
-
-2. **Возврат к шагу:**
-   - Кнопка "← Back" в плашке
-   - История пройденных шагов
-
-3. **Анимации:**
-   - Стрелочки указывающие на элемент
-   - Подсказки с мигающей иконкой
-
-4. **Звуковые эффекты:**
-   - Тихий "click" при переходе
-   - "Success" при завершении
-
-5. **Адаптивность:**
-   - Разные позиции для мобильных
-   - Уменьшенный текст для маленьких экранов
-
----
-
-## ✅ **ГОТОВНОСТЬ:**
-
-| Компонент | Статус |
+| Component | Status |
 |-----------|--------|
-| Логика | ✅ 100% |
-| Стили | ✅ 100% |
-| Интеграция | ✅ 100% |
-| Тесты | ⏳ Нужно пройти |
-
----
-
-**ВЕРСИЯ 3.0 ГОТОВА!** 🚀
-
-**Осталось:** Протестировать в браузере и можно публиковать!
+| Logic (JS) | DONE |
+| Styles (CSS) | DONE |
+| Integration | DONE |
+| 6 Features Covered | DONE |
+| Skip Button | DONE |
+| Progress Bar | DONE |
+| i18n (EN/RU) | DONE |
