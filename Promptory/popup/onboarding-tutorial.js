@@ -1,651 +1,779 @@
-// Promptory Onboarding Tutorial Module v9
-// COMPLETE REWRITE - covers all 6 key features:
-// 1. Insert prompt (MAIN feature)
-// 2. Copy prompt
-// 3. Favorites
-// 4. Search
-// 5. Edit prompt
-// 6. Explore library
+// Promptory Onboarding Tutorial Module v10
+// COMPLETE REWRITE — Game-style spotlight overlay tutorial
+// Flow: Create prompt → Settings → Quick Insert → Select slot → Save → Use hotkey → Library teaser
+// Features: clip-path cutout overlay, pulsing border, smooth scroll, dynamic hotkey detection
 
 (function() {
 'use strict';
 
 const DEBUG = true;
-
 function log(...args) {
-  if (DEBUG) console.log('[Tutorial]', ...args);
+  if (DEBUG) console.log('[Tutorial v10]', ...args);
 }
 
-const STEPS = [
-  // === STEP 1: Create a prompt (prerequisite for everything) ===
-  {
-    id: 1,
-    title: { en: 'Create Your First Prompt', ru: 'Создайте первый промпт' },
-    description: {
-      en: 'Click the "+ New" button to create a prompt.',
-      ru: 'Нажмите кнопку "+ New", чтобы создать промпт.'
+// ==================== STEP DEFINITIONS ====================
+// Steps are built dynamically based on user's actual hotkey config
+function buildSteps(assignedSlotKey) {
+  // assignedSlotKey is the key user chose a prompt for, e.g. 'slot1' → Alt+1
+  // We detect which hotkey the user ends up using
+  return [
+    // === STEP 1: Create a prompt ===
+    {
+      id: 1,
+      title: { en: 'Create Your First Prompt', ru: 'Создайте первый промпт' },
+      description: {
+        en: 'Click the "+ New" button to create your first prompt.',
+        ru: 'Нажмите кнопку "+ New", чтобы создать свой первый промпт.'
+      },
+      target: '#new-prompt-btn',
+      action: 'click',
+      tooltipPosition: 'bottom',
+      icon: 'create',
+      badge: null
     },
-    target: '#new-prompt-btn',
-    nextAction: 'click',
-    tooltipPosition: 'bottom',
-    icon: 'create'
-  },
-  // === STEP 2: Auto-fill and save prompt ===
-  {
-    id: 2,
-    title: { en: 'Fill & Create', ru: 'Заполните и создайте' },
-    description: {
-      en: 'Title and text are filled for you. Click "Create Prompt" to save.',
-      ru: 'Заголовок и текст заполнены. Нажмите "Create Prompt" чтобы сохранить.'
+    // === STEP 2: Auto-fill and save ===
+    {
+      id: 2,
+      title: { en: 'Save Your Prompt', ru: 'Сохраните промпт' },
+      description: {
+        en: 'We filled in a sample prompt for you. Click "Create Prompt" to save it.',
+        ru: 'Мы заполнили пример промпта. Нажмите "Create Prompt", чтобы сохранить.'
+      },
+      target: '#pe-save-btn',
+      action: 'click',
+      autoFill: true,
+      waitForModal: true,
+      tooltipPosition: 'bottom',
+      icon: 'save',
+      badge: null
     },
-    target: '#pe-save-btn',
-    autoFill: true,
-    nextAction: 'click',
-    waitForModal: true,
-    tooltipPosition: 'bottom',
-    icon: 'save'
-  },
-  // === STEP 3: INSERT - the MAIN feature ===
-  {
-    id: 3,
-    title: { en: 'Insert Prompt (Main Feature!)', ru: 'Вставка промпта (Главная функция!)' },
-    description: {
-      en: 'Click the arrow button to insert this prompt directly into any AI chat. This is the core feature of Promptory!',
-      ru: 'Нажмите кнопку со стрелкой, чтобы вставить промпт в любой AI-чат. Это главная функция Promptory!'
+    // === STEP 3: Open Settings ===
+    {
+      id: 3,
+      title: { en: 'Open Settings', ru: 'Откройте Настройки' },
+      description: {
+        en: 'Now let\'s set up Quick Insert — your main power feature! Click the Settings button.',
+        ru: 'Теперь настроим Быструю вставку — вашу главную суперсилу! Нажмите кнопку Настройки.'
+      },
+      target: '#settings-btn',
+      action: 'click',
+      waitForPrompt: true,
+      tooltipPosition: 'left',
+      icon: 'settings',
+      badge: { en: 'SETTINGS', ru: 'НАСТРОЙКИ' },
+      switchTab: 'prompts'
     },
-    target: '.prompt-card:first-child [data-action="insert"]',
-    waitForPrompt: true,
-    nextAction: 'click',
-    tooltipPosition: 'bottom',
-    icon: 'insert',
-    highlight: 'primary'
-  },
-  // === STEP 4: COPY prompt ===
-  {
-    id: 4,
-    title: { en: 'Copy Prompt', ru: 'Копирование промпта' },
-    description: {
-      en: 'Click anywhere on the card to copy the prompt text to clipboard. Quick and easy!',
-      ru: 'Кликните на карточку, чтобы скопировать текст промпта в буфер обмена. Быстро и удобно!'
+    // === STEP 4: Focus on Quick Insert section (scroll to it) ===
+    {
+      id: 4,
+      title: { en: 'Quick Insert Hotkeys', ru: 'Горячие клавиши' },
+      description: {
+        en: 'This is the Quick Insert section. You can assign any prompt to Alt+1, Alt+2 or Alt+3 for instant insertion into any AI chat!',
+        ru: 'Это раздел Быстрой вставки. Назначьте любой промпт на Alt+1, Alt+2 или Alt+3 для мгновенной вставки в любой AI-чат!'
+      },
+      target: '[data-hotkey-section]',
+      action: 'observe',
+      waitForSettings: true,
+      scrollInSettings: true,
+      tooltipPosition: 'top',
+      icon: 'hotkey',
+      badge: { en: 'QUICK INSERT', ru: 'БЫСТРАЯ ВСТАВКА' }
     },
-    target: '.prompt-card:first-child',
-    waitForPrompt: true,
-    nextAction: 'click',
-    tooltipPosition: 'bottom',
-    icon: 'copy'
-  },
-  // === STEP 5: FAVORITES ===
-  {
-    id: 5,
-    title: { en: 'Add to Favorites', ru: 'Добавьте в Избранное' },
-    description: {
-      en: 'Click the star to favorite this prompt for quick access later.',
-      ru: 'Нажмите звезду, чтобы добавить промпт в Избранное для быстрого доступа.'
+    // === STEP 5: Select prompt in Slot 1 dropdown ===
+    {
+      id: 5,
+      title: { en: 'Assign a Prompt', ru: 'Назначьте промпт' },
+      description: {
+        en: 'Click the dropdown and select your prompt to assign it to a hotkey slot.',
+        ru: 'Нажмите на выпадающий список и выберите промпт для назначения на горячую клавишу.'
+      },
+      target: '[data-hotkey-slot="slot1"]',
+      action: 'change',
+      autoOpenDropdown: true,
+      tooltipPosition: 'top',
+      icon: 'select',
+      badge: { en: 'SELECT PROMPT', ru: 'ВЫБОР ПРОМПТА' }
     },
-    target: '.prompt-card:first-child [data-action="toggle-fav"]',
-    waitForPrompt: true,
-    nextAction: 'click',
-    tooltipPosition: 'bottom',
-    icon: 'star'
-  },
-  // === STEP 6: FAVORITES TAB ===
-  {
-    id: 6,
-    title: { en: 'Favorites Tab', ru: 'Вкладка Избранное' },
-    description: {
-      en: 'Open the Favorites tab to see all your starred prompts in one place.',
-      ru: 'Откройте вкладку Избранное, чтобы увидеть все отмеченные промпты.'
+    // === STEP 6: Save Settings ===
+    {
+      id: 6,
+      title: { en: 'Save Settings', ru: 'Сохраните настройки' },
+      description: {
+        en: 'Great! Now click "Save Changes" to apply your hotkey settings.',
+        ru: 'Отлично! Нажмите "Сохранить", чтобы применить настройки горячих клавиш.'
+      },
+      target: '#settings-save-btn',
+      action: 'click',
+      scrollToBottom: true,
+      tooltipPosition: 'top',
+      icon: 'save',
+      badge: { en: 'SAVE', ru: 'СОХРАНЕНИЕ' }
     },
-    target: '[data-tab="favorites"]',
-    nextAction: 'click',
-    tooltipPosition: 'bottom',
-    icon: 'star'
-  },
-  // === STEP 7: SEARCH ===
-  {
-    id: 7,
-    title: { en: 'Search Your Prompts', ru: 'Поиск промптов' },
-    description: {
-      en: 'Use the search bar to find prompts by title, tags, or content. Try typing something!',
-      ru: 'Используйте поиск для нахождения промптов по заголовку, тегам или содержанию.'
+    // === STEP 7: Show the hotkey to use (dynamic based on which slot user chose) ===
+    {
+      id: 7,
+      title: { en: 'Try Your Hotkey!', ru: 'Попробуйте горячую клавишу!' },
+      description: {
+        en: `Now go to any AI chat (ChatGPT, Claude, Gemini...) and press {hotkey} to instantly insert your prompt!`,
+        ru: `Теперь перейдите в любой AI-чат (ChatGPT, Claude, Gemini...) и нажмите {hotkey} для мгновенной вставки промпта!`
+      },
+      target: null,
+      action: 'info',
+      tooltipPosition: 'center',
+      icon: 'hotkey',
+      badge: { en: 'MAIN FEATURE', ru: 'ГЛАВНАЯ ФУНКЦИЯ' },
+      isPrimary: true,
+      dynamic: true // description is computed at render time
     },
-    target: '#search-input',
-    nextAction: 'focus',
-    tooltipPosition: 'bottom',
-    icon: 'search',
-    switchTab: 'prompts'
-  },
-  // === STEP 8: EDIT prompt ===
-  {
-    id: 8,
-    title: { en: 'Edit Your Prompts', ru: 'Редактирование промптов' },
-    description: {
-      en: 'Click the pencil icon to edit any prompt - change title, text, tags, folder, and more.',
-      ru: 'Нажмите иконку карандаша, чтобы отредактировать промпт - заголовок, текст, теги, папку.'
+    // === STEP 8: Library teaser (login required) ===
+    {
+      id: 8,
+      title: { en: 'Explore the Library', ru: 'Откройте Библиотеку' },
+      description: {
+        en: 'Discover ready-made prompts from the community in the Library tab. Sign in to browse, save, and share prompts!',
+        ru: 'Откройте готовые промпты от сообщества во вкладке Библиотека. Войдите в аккаунт, чтобы просматривать, сохранять и делиться промптами!'
+      },
+      target: '[data-tab="explore"]',
+      action: 'observe',
+      tooltipPosition: 'bottom',
+      icon: 'explore',
+      badge: { en: 'LIBRARY', ru: 'БИБЛИОТЕКА' }
     },
-    target: '.prompt-card:first-child [data-action="edit"]',
-    waitForPrompt: true,
-    nextAction: 'click',
-    tooltipPosition: 'bottom',
-    icon: 'edit'
-  },
-  // === STEP 9: EXPLORE library ===
-  {
-    id: 9,
-    title: { en: 'Explore Library', ru: 'Библиотека Explore' },
-    description: {
-      en: 'Browse the public prompt library! Discover ready-made prompts shared by the community. Save, like, and use them instantly.',
-      ru: 'Откройте публичную библиотеку промптов! Находите готовые промпты от сообщества. Сохраняйте, лайкайте и используйте.'
-    },
-    target: '[data-tab="explore"]',
-    nextAction: 'click',
-    tooltipPosition: 'bottom',
-    icon: 'explore'
-  },
-  // === STEP 10: Settings & Hotkeys ===
-  {
-    id: 10,
-    title: { en: 'Settings & Hotkeys', ru: 'Настройки и горячие клавиши' },
-    description: {
-      en: 'Open Settings to configure hotkeys (Alt+1/2/3), theme, cloud sync, and more.',
-      ru: 'Откройте Настройки для горячих клавиш (Alt+1/2/3), тем, облачной синхронизации и другого.'
-    },
-    target: '#settings-btn',
-    nextAction: 'click',
-    tooltipPosition: 'left',
-    icon: 'settings',
-    switchTab: 'prompts'
-  },
-  // === STEP 11: FINAL ===
-  {
-    id: 11,
-    title: { en: 'You\'re All Set!', ru: 'Всё готово!' },
-    description: {
-      en: 'You now know all 6 key features:\n\n' +
-          '1. Insert - paste prompts into AI chats\n' +
-          '2. Copy - quick clipboard copy\n' +
-          '3. Favorites - star your best prompts\n' +
-          '4. Search - find prompts fast\n' +
-          '5. Edit - modify any prompt\n' +
-          '6. Explore - discover community prompts\n\n' +
-          'Pro tip: Use Ctrl+Shift+P on any AI site for quick search!',
-      ru: 'Теперь вы знаете все 6 ключевых функций:\n\n' +
-          '1. Вставка - вставляйте промпты в AI-чаты\n' +
-          '2. Копирование - быстрое копирование\n' +
-          '3. Избранное - отмечайте лучшие промпты\n' +
-          '4. Поиск - находите промпты мгновенно\n' +
-          '5. Редактирование - изменяйте промпты\n' +
-          '6. Explore - открывайте промпты сообщества\n\n' +
-          'Совет: Ctrl+Shift+P на любом AI-сайте для быстрого поиска!'
-    },
-    target: null,
-    final: true,
-    icon: 'finish'
-  }
-];
+    // === STEP 9: Final ===
+    {
+      id: 9,
+      title: { en: 'You\'re All Set!', ru: 'Всё готово!' },
+      description: {
+        en: 'Here\'s what you learned:\n\n' +
+            '1. Create & save prompts\n' +
+            '2. Quick Insert via hotkeys ({hotkey})\n' +
+            '3. Library — discover community prompts\n\n' +
+            'Pro tip: Use Ctrl+Shift+P on any AI site for quick search overlay!',
+        ru: 'Вот что вы узнали:\n\n' +
+            '1. Создание и сохранение промптов\n' +
+            '2. Быстрая вставка через горячие клавиши ({hotkey})\n' +
+            '3. Библиотека — промпты от сообщества\n\n' +
+            'Совет: Ctrl+Shift+P на любом AI-сайте для быстрого поиска!'
+      },
+      target: null,
+      action: 'final',
+      icon: 'finish',
+      badge: null,
+      dynamic: true
+    }
+  ];
+}
 
-// SVG icons for each step type
-const STEP_ICONS = {
+// ==================== SVG ICONS ====================
+const ICONS = {
   create: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
   save: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>',
-  insert: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>',
-  copy: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
-  star: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
-  search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>',
-  edit: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-  explore: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
   settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  hotkey: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>',
+  select: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  explore: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
   finish: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
 };
 
+// ==================== TUTORIAL CLASS ====================
 class OnboardingTutorial {
   constructor() {
     this.currentStep = 0;
     this.overlay = null;
-    this.tutorial = null;
+    this.tooltip = null;
     this.spotlight = null;
     this.onComplete = null;
-    this.checkInterval = null;
-    this._clickHandlerCleanup = null;
+    this._cleanup = null;
+    this._resizeObserver = null;
+    this.steps = null;
+    this.assignedHotkey = 'Alt+1'; // Default; updated if user picks different slot
+    this.assignedSlot = 'slot1';
   }
 
+  // ==================== START ====================
   async start(onComplete) {
     this.onComplete = onComplete;
     this.currentStep = 0;
-    
-    log('=== STARTING TUTORIAL (11 steps, 6 key features) ===');
-    
-    // Create overlay
+    this.steps = buildSteps();
+
+    log('=== STARTING TUTORIAL v10 (9 steps) ===');
+
+    // Create overlay container (full screen, handles darkening)
     this.overlay = document.createElement('div');
-    this.overlay.className = 'onboarding-overlay';
+    this.overlay.className = 'tut-overlay';
+    this.overlay.id = 'tut-overlay';
     document.body.appendChild(this.overlay);
-    
-    // Create spotlight
+
+    // Create spotlight ring (pulsing border around target)
     this.spotlight = document.createElement('div');
-    this.spotlight.className = 'onboarding-spotlight';
-    this.spotlight.style.display = 'none';
+    this.spotlight.className = 'tut-spotlight';
+    this.spotlight.id = 'tut-spotlight';
     document.body.appendChild(this.spotlight);
-    
-    await this.nextFrame();
-    this.overlay.classList.add('visible');
-    
-    await this.showStep(0);
+
+    // Create tooltip container
+    this.tooltip = document.createElement('div');
+    this.tooltip.className = 'tut-tooltip';
+    this.tooltip.id = 'tut-tooltip';
+    document.body.appendChild(this.tooltip);
+
+    // Fade in overlay
+    await this._raf();
+    this.overlay.classList.add('tut-visible');
+    await this._wait(300);
+
+    // Handle resize to reposition
+    this._resizeObserver = new ResizeObserver(() => this._repositionCurrent());
+    this._resizeObserver.observe(document.body);
+
+    await this._showStep(0);
   }
 
-  async showStep(stepIndex) {
-    if (stepIndex >= STEPS.length) {
-      this.close();
-      if (this.onComplete) this.onComplete();
+  // ==================== SHOW STEP ====================
+  async _showStep(index) {
+    if (index >= this.steps.length) {
+      this._finish();
       return;
     }
 
-    const step = STEPS[stepIndex];
-    log(`Step ${step.id}/${STEPS.length}: ${step.title.en} | target=${step.target || 'FINAL'}`);
-    
+    const step = this.steps[index];
+    this.currentStep = index;
+    log(`Step ${step.id}/${this.steps.length}: ${step.title.en}`);
+
     // Cleanup previous step
-    this.cleanupStep();
-    
-    // Remove old tutorial
-    if (this.tutorial) {
-      this.tutorial.classList.remove('visible');
-      await this.wait(120);
-      this.tutorial.remove();
-    }
-    
+    this._cleanupStep();
+
+    // Hide tooltip during transition
+    this.tooltip.classList.remove('tut-visible');
+    await this._wait(200);
+
     // Switch tab if needed
     if (step.switchTab) {
-      log(`Switching to tab: ${step.switchTab}`);
       const tabBtn = document.querySelector(`[data-tab="${step.switchTab}"]`);
       if (tabBtn) {
         tabBtn.click();
-        await this.wait(250);
+        await this._wait(200);
       }
     }
-    
-    // Create tutorial box
-    this.tutorial = document.createElement('div');
-    this.tutorial.className = 'onboarding-tutorial';
-    this.tutorial.innerHTML = this.renderTutorial(step);
-    document.body.appendChild(this.tutorial);
-    
-    await this.nextFrame();
-    this.tutorial.classList.add('visible');
-    
-    if (step.target) {
-      let target = document.querySelector(step.target);
-      
-      if (!target && (step.waitForPrompt || step.waitForModal)) {
-        log(`Waiting for element: ${step.target}`);
-        target = await this.waitForElementAsync(
-          step.waitForPrompt ? '.prompt-card:first-child' : step.target,
-          10000
-        );
-        
-        if (!target) {
-          log('Element not found after waiting, skipping step');
-          this.nextStep();
-          return;
-        }
-        
-        // Re-query the actual target from step (may be a child of the waited element)
-        if (step.waitForPrompt && step.target !== '.prompt-card:first-child') {
-          const actual = document.querySelector(step.target);
-          if (actual) target = actual;
-        }
-      }
-      
-      if (target) {
-        log('Target found:', target.tagName, target.className);
-        
-        // Scroll to target if needed
-        if (step.ensureVisible || step.scrollTo) {
-          await this.scrollToTarget(target);
-        }
-        
-        // Position tutorial near target
-        this.positionTutorialNear(target, step.tooltipPosition);
-        
-        // Highlight target
-        await this.highlightTarget(target);
-        
-        // Setup interaction
-        this.setupInteraction(step, target);
-      } else {
-        log('Target not found, auto-advancing in 2s');
-        this.centerTutorial();
-        this.hideHighlight();
-        setTimeout(() => this.nextStep(), 2000);
+
+    // Wait for settings modal if needed
+    if (step.waitForSettings) {
+      log('Waiting for settings modal...');
+      const settingsModal = await this._waitForEl('#settings-modal.visible', 5000);
+      if (!settingsModal) {
+        log('Settings modal not found, skipping');
+        this._nextStep();
         return;
       }
-    } else {
-      // Final step or no target
-      this.centerTutorial();
-      this.hideHighlight();
-      this.setupInteraction(step, null);
+      await this._wait(400);
     }
-    
-    // Auto-fill actions
-    if (step.autoFill) setTimeout(() => this.autoFillPrompt(), 300);
-    if (step.autoFillFolder) setTimeout(() => this.autoFillFolder(), 300);
+
+    // Find target element
+    let target = null;
+    if (step.target) {
+      target = document.querySelector(step.target);
+
+      // Wait for element if needed
+      if (!target && (step.waitForPrompt || step.waitForModal)) {
+        log(`Waiting for target: ${step.target}`);
+        const waitSelector = step.waitForPrompt ? '.prompt-card:first-child' : step.target;
+        await this._waitForEl(waitSelector, 10000);
+        target = document.querySelector(step.target);
+        if (!target && step.waitForPrompt) {
+          target = document.querySelector('.prompt-card:first-child');
+        }
+      }
+
+      if (!target) {
+        log(`Target ${step.target} not found, auto-advancing`);
+        setTimeout(() => this._nextStep(), 1500);
+        return;
+      }
+    }
+
+    // Scroll to target inside settings modal if needed
+    if (step.scrollInSettings && target) {
+      await this._smoothScrollInSettings(target);
+    }
+
+    // Scroll save button into view
+    if (step.scrollToBottom && target) {
+      const modalBody = target.closest('.modal-body');
+      if (modalBody) {
+        const targetRect = target.getBoundingClientRect();
+        const modalRect = modalBody.getBoundingClientRect();
+        // Scroll footer area into view
+        const footer = target.closest('.modal')?.querySelector('.modal-footer');
+        if (footer) {
+          footer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          await this._wait(500);
+        }
+      }
+    }
+
+    // Render tooltip content
+    this.tooltip.innerHTML = this._renderTooltip(step);
+    await this._raf();
+
+    // Position spotlight and tooltip
+    if (target) {
+      this._highlightTarget(target, step);
+      this._positionTooltip(target, step.tooltipPosition);
+    } else {
+      // Center tooltip for info/final steps
+      this._hideSpotlight();
+      this._centerTooltip();
+      // Darken everything
+      this.overlay.style.clipPath = 'none';
+      this.overlay.classList.add('tut-full-dim');
+    }
+
+    // Show tooltip with animation
+    await this._raf();
+    this.tooltip.classList.add('tut-visible');
+
+    // Auto-fill prompt editor
+    if (step.autoFill) {
+      setTimeout(() => this._autoFillPrompt(), 350);
+    }
+
+    // Auto-open dropdown
+    if (step.autoOpenDropdown && target) {
+      setTimeout(() => {
+        log('Auto-opening dropdown');
+        target.focus();
+        // Small flash to draw attention
+        target.classList.add('tut-dropdown-flash');
+        setTimeout(() => target.classList.remove('tut-dropdown-flash'), 600);
+      }, 500);
+    }
+
+    // Setup interaction for this step
+    this._setupInteraction(step, target);
   }
 
-  renderTutorial(step) {
-    const lang = this.getLang();
-    const totalSteps = STEPS.length;
-    const icon = STEP_ICONS[step.icon] || '';
-    const isPrimary = step.highlight === 'primary';
-    const description = step.description[lang].replace(/\n/g, '<br>');
-    
-    // Feature badge mapping
-    const featureBadges = {
-      3: { en: 'MAIN FEATURE', ru: 'ГЛАВНАЯ ФУНКЦИЯ' },
-      4: { en: 'COPY', ru: 'КОПИРОВАНИЕ' },
-      5: { en: 'FAVORITES', ru: 'ИЗБРАННОЕ' },
-      7: { en: 'SEARCH', ru: 'ПОИСК' },
-      8: { en: 'EDIT', ru: 'РЕДАКТИРОВАНИЕ' },
-      9: { en: 'EXPLORE', ru: 'БИБЛИОТЕКА' }
-    };
-    
-    const badge = featureBadges[step.id];
-    const featureBadgeHtml = badge 
-      ? `<div class="onboarding-feature-badge${isPrimary ? ' primary' : ''}">${badge[lang]}</div>` 
+  // ==================== RENDER TOOLTIP ====================
+  _renderTooltip(step) {
+    const lang = this._getLang();
+    const total = this.steps.length;
+    const icon = ICONS[step.icon] || '';
+    const isPrimary = step.isPrimary;
+
+    // Process dynamic descriptions (replace {hotkey})
+    let description = step.description[lang] || step.description.en;
+    if (step.dynamic) {
+      description = description.replace(/\{hotkey\}/g, this.assignedHotkey);
+    }
+    description = description.replace(/\n/g, '<br>');
+
+    // Feature badge
+    const badgeHtml = step.badge
+      ? `<div class="tut-badge${isPrimary ? ' tut-badge-primary' : ''}">${step.badge[lang] || step.badge.en}</div>`
       : '';
-    
+
+    // Build hotkey visual for step 7
+    let hotkeyVisualHtml = '';
+    if (step.id === 7) {
+      const keys = this.assignedHotkey.split('+');
+      hotkeyVisualHtml = `<div class="tut-hotkey-visual">
+        ${keys.map(k => `<span class="tut-key">${k.trim()}</span>`).join('<span class="tut-key-plus">+</span>')}
+      </div>`;
+    }
+
+    const isFinal = step.action === 'final';
+
     return `
-      <div class="onboarding-tutorial-content">
-        <div class="onboarding-header-row">
-          <div class="onboarding-step-badge">${step.id}/${totalSteps}</div>
-          ${step.final ? '' : `<button class="onboarding-skip-btn" id="onboarding-skip">${lang === 'ru' ? 'Пропустить' : 'Skip'}</button>`}
+      <div class="tut-content">
+        <div class="tut-header">
+          <div class="tut-step-num">${step.id}/${total}</div>
+          ${!isFinal ? `<button class="tut-skip" id="tut-skip">${lang === 'ru' ? 'Пропустить' : 'Skip'}</button>` : ''}
         </div>
-        ${icon ? `<div class="onboarding-icon${isPrimary ? ' primary' : ''}">${icon}</div>` : ''}
-        ${featureBadgeHtml}
-        <div class="onboarding-title">${step.title[lang]}</div>
-        <div class="onboarding-description">${description}</div>
-        ${step.final ? `
-          <button class="onboarding-btn onboarding-btn-primary" id="onboarding-finish">
-            ${lang === 'ru' ? 'Начать использовать!' : 'Get Started!'}
-          </button>
-        ` : `
-          <div class="onboarding-progress">
-            <div class="onboarding-progress-bar" style="width: ${(step.id / totalSteps) * 100}%"></div>
-          </div>
-        `}
+        ${icon ? `<div class="tut-icon${isPrimary ? ' tut-icon-primary' : ''}">${icon}</div>` : ''}
+        ${badgeHtml}
+        ${hotkeyVisualHtml}
+        <div class="tut-title">${step.title[lang] || step.title.en}</div>
+        <div class="tut-desc">${description}</div>
+        ${isFinal ? `
+          <button class="tut-btn-finish" id="tut-finish">${lang === 'ru' ? 'Начать!' : 'Get Started!'}</button>
+        ` : step.action === 'observe' || step.action === 'info' ? `
+          <button class="tut-btn-next" id="tut-next">${lang === 'ru' ? 'Далее' : 'Next'}</button>
+        ` : ''}
+        ${!isFinal ? `<div class="tut-progress"><div class="tut-progress-bar" style="width:${(step.id / total) * 100}%"></div></div>` : ''}
       </div>
     `;
   }
 
-  positionTutorialNear(element, preferredPos = 'bottom') {
-    const tutorialRect = this.tutorial.getBoundingClientRect();
-    const elementRect = element.getBoundingClientRect();
-    const viewportWidth = window.innerWidth || 400;
-    const viewportHeight = window.innerHeight || 600;
-    
-    let top, left;
-    const gap = 14;
-    
-    // Calculate preferred position
-    if (preferredPos === 'top') {
-      top = elementRect.top - tutorialRect.height - gap;
-      left = elementRect.left + (elementRect.width / 2) - (tutorialRect.width / 2);
-    } else if (preferredPos === 'right') {
-      top = elementRect.top + (elementRect.height / 2) - (tutorialRect.height / 2);
-      left = elementRect.right + gap;
-    } else if (preferredPos === 'left') {
-      top = elementRect.top + (elementRect.height / 2) - (tutorialRect.height / 2);
-      left = elementRect.left - tutorialRect.width - gap;
-    } else { // bottom
-      top = elementRect.bottom + gap;
-      left = elementRect.left + (elementRect.width / 2) - (tutorialRect.width / 2);
-    }
-    
-    // Boundary checks
-    const margin = 8;
-    
-    // Horizontal
-    left = Math.max(margin, Math.min(left, viewportWidth - tutorialRect.width - margin));
-    
-    // Vertical - flip if needed
-    if (top < margin && preferredPos === 'top') {
-      top = elementRect.bottom + gap;
-    }
-    if (top + tutorialRect.height > viewportHeight - margin && preferredPos === 'bottom') {
-      top = elementRect.top - tutorialRect.height - gap;
-    }
-    
-    // Final clamp
-    top = Math.max(margin, Math.min(top, viewportHeight - tutorialRect.height - margin));
-    
-    this.tutorial.style.position = 'fixed';
-    this.tutorial.style.top = top + 'px';
-    this.tutorial.style.left = left + 'px';
-    this.tutorial.style.zIndex = '10000';
-  }
-
-  centerTutorial() {
-    this.tutorial.style.position = 'fixed';
-    this.tutorial.style.top = '50%';
-    this.tutorial.style.left = '50%';
-    this.tutorial.style.transform = 'translate(-50%, -50%)';
-    this.tutorial.style.zIndex = '10000';
-  }
-
-  async highlightTarget(element) {
-    if (!element) {
-      this.hideHighlight();
-      return;
-    }
-    
+  // ==================== HIGHLIGHT TARGET ====================
+  _highlightTarget(element, step) {
     const rect = element.getBoundingClientRect();
-    const padding = 6;
-    
-    // Add highlight class to element
-    element.classList.add('onboarding-target-highlight');
-    
-    // Position spotlight
+    const pad = 6;
+
+    // Make element clickable above overlay
+    element.classList.add('tut-target-active');
+
+    // Position spotlight ring
     this.spotlight.style.display = 'block';
-    this.spotlight.style.left = (rect.left - padding) + 'px';
-    this.spotlight.style.top = (rect.top - padding) + 'px';
-    this.spotlight.style.width = (rect.width + padding * 2) + 'px';
-    this.spotlight.style.height = (rect.height + padding * 2) + 'px';
-    this.spotlight.style.zIndex = '9999';
-    
-    // Update overlay hole
-    this.overlay.style.background = 'rgba(0, 0, 0, 0.75)';
-    this.updateOverlayHole(rect, padding);
+    this.spotlight.style.left = `${rect.left - pad}px`;
+    this.spotlight.style.top = `${rect.top - pad}px`;
+    this.spotlight.style.width = `${rect.width + pad * 2}px`;
+    this.spotlight.style.height = `${rect.height + pad * 2}px`;
+    this.spotlight.style.borderRadius = step.borderRadius || '8px';
+
+    // Update overlay clip-path to create "hole"
+    this.overlay.classList.remove('tut-full-dim');
+    this._updateOverlayHole(rect, pad);
   }
 
-  hideHighlight() {
-    document.querySelectorAll('.onboarding-target-highlight').forEach(el => {
-      el.classList.remove('onboarding-target-highlight');
-      el.style.zIndex = '';
-    });
-    
+  _updateOverlayHole(rect, pad) {
+    const l = rect.left - pad;
+    const t = rect.top - pad;
+    const r = rect.right + pad;
+    const b = rect.bottom + pad;
+
+    // Cross-browser clip-path polygon with hole (non-zero winding)
+    // Outer rect clockwise, inner rect counter-clockwise
+    this.overlay.style.clipPath = `polygon(
+      0% 0%, 100% 0%, 100% ${t}px,
+      ${r}px ${t}px, ${r}px ${b}px,
+      100% ${b}px, 100% 100%, 0% 100%,
+      0% ${b}px, ${l}px ${b}px,
+      ${l}px ${t}px, 0% ${t}px
+    )`;
+  }
+
+  _hideSpotlight() {
     this.spotlight.style.display = 'none';
-    this.overlay.style.background = 'transparent';
-    this.overlay.style.clipPath = 'none';
   }
 
-  updateOverlayHole(rect, padding) {
-    const l = rect.left - padding;
-    const t = rect.top - padding;
-    const r = rect.right + padding;
-    const b = rect.bottom + padding;
-    
-    this.overlay.style.clipPath = `
-      polygon(
-        0% 0%, 100% 0%, 100% ${t}px,
-        ${r}px ${t}px, ${r}px ${b}px,
-        100% ${b}px, 100% 100%, 0% 100%,
-        0% ${b}px, ${l}px ${b}px,
-        ${l}px ${t}px, 0% ${t}px
-      )
-    `;
+  // ==================== POSITION TOOLTIP ====================
+  _positionTooltip(element, preferred = 'bottom') {
+    const tooltipRect = this.tooltip.getBoundingClientRect();
+    const elRect = element.getBoundingClientRect();
+    const vw = window.innerWidth || 400;
+    const vh = window.innerHeight || 600;
+    const gap = 14;
+    const margin = 8;
+
+    let top, left;
+
+    // Calculate based on preferred position
+    switch (preferred) {
+      case 'top':
+        top = elRect.top - tooltipRect.height - gap;
+        left = elRect.left + elRect.width / 2 - tooltipRect.width / 2;
+        break;
+      case 'right':
+        top = elRect.top + elRect.height / 2 - tooltipRect.height / 2;
+        left = elRect.right + gap;
+        break;
+      case 'left':
+        top = elRect.top + elRect.height / 2 - tooltipRect.height / 2;
+        left = elRect.left - tooltipRect.width - gap;
+        break;
+      default: // bottom
+        top = elRect.bottom + gap;
+        left = elRect.left + elRect.width / 2 - tooltipRect.width / 2;
+    }
+
+    // Boundary checks — flip if out of view
+    if (top < margin && preferred === 'top') {
+      top = elRect.bottom + gap;
+    }
+    if (top + tooltipRect.height > vh - margin && preferred === 'bottom') {
+      top = elRect.top - tooltipRect.height - gap;
+    }
+
+    // Clamp
+    left = Math.max(margin, Math.min(left, vw - tooltipRect.width - margin));
+    top = Math.max(margin, Math.min(top, vh - tooltipRect.height - margin));
+
+    this.tooltip.style.position = 'fixed';
+    this.tooltip.style.top = `${top}px`;
+    this.tooltip.style.left = `${left}px`;
+    this.tooltip.style.transform = 'none';
   }
 
-  setupInteraction(step, target) {
+  _centerTooltip() {
+    this.tooltip.style.position = 'fixed';
+    this.tooltip.style.top = '50%';
+    this.tooltip.style.left = '50%';
+    this.tooltip.style.transform = 'translate(-50%, -50%)';
+  }
+
+  // ==================== INTERACTION ====================
+  _setupInteraction(step, target) {
     // Skip button
-    const skipBtn = document.getElementById('onboarding-skip');
+    const skipBtn = document.getElementById('tut-skip');
     if (skipBtn) {
       skipBtn.addEventListener('click', () => {
-        log('Tutorial skipped by user');
-        this.close();
-        if (this.onComplete) this.onComplete();
+        log('Tutorial skipped');
+        this._finish();
       });
     }
-    
+
     // Final step
-    if (step.final) {
-      document.getElementById('onboarding-finish')?.addEventListener('click', () => {
-        this.close();
-        if (this.onComplete) this.onComplete();
+    if (step.action === 'final') {
+      document.getElementById('tut-finish')?.addEventListener('click', () => {
+        this._finish();
       });
       return;
     }
-    
+
+    // Next button (for observe/info steps)
+    const nextBtn = document.getElementById('tut-next');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        this._nextStep();
+      });
+    }
+
     if (!target) return;
-    
-    // Make target clickable above overlay
-    target.style.position = target.style.position || 'relative';
+
+    // Make target interactive
     target.style.zIndex = '10001';
+    target.style.position = target.style.position || 'relative';
     target.style.cursor = 'pointer';
-    
-    if (step.nextAction === 'focus') {
-      // For search input - advance on focus
-      const handler = () => {
-        target.removeEventListener('focus', handler);
-        log('Focus detected, advancing');
-        setTimeout(() => this.nextStep(), 800);
-      };
-      target.addEventListener('focus', handler);
-      this._clickHandlerCleanup = () => target.removeEventListener('focus', handler);
-    } else {
-      // Default: advance on click
+    target.style.pointerEvents = 'auto';
+
+    if (step.action === 'click') {
       const handler = () => {
         target.removeEventListener('click', handler);
-        log('Click detected on target, advancing');
-        // Small delay to let the click action complete
-        setTimeout(() => this.nextStep(), 400);
+        log('Click on target, advancing');
+        setTimeout(() => this._nextStep(), 400);
       };
       target.addEventListener('click', handler);
-      this._clickHandlerCleanup = () => target.removeEventListener('click', handler);
+      this._cleanup = () => target.removeEventListener('click', handler);
+    }
+    else if (step.action === 'change') {
+      // For <select> — listen for change event
+      const handler = (e) => {
+        target.removeEventListener('change', handler);
+        log('Selection changed, value:', target.value);
+
+        // Detect which slot the user picked and what prompt
+        const slotId = target.dataset.hotkeySlot; // e.g. 'slot1'
+        if (slotId) {
+          const slotNum = slotId.replace('slot', '');
+          this.assignedSlot = slotId;
+          // Try to detect the actual Chrome shortcut for this slot
+          this._detectHotkey(slotNum).then(hotkey => {
+            this.assignedHotkey = hotkey;
+            log(`Detected hotkey for ${slotId}: ${hotkey}`);
+          });
+        }
+
+        setTimeout(() => this._nextStep(), 500);
+      };
+      target.addEventListener('change', handler);
+      this._cleanup = () => target.removeEventListener('change', handler);
+
+      // Also support clicking other slot dropdowns
+      const allSlots = document.querySelectorAll('[data-hotkey-slot]');
+      const otherHandlers = [];
+      allSlots.forEach(sel => {
+        if (sel === target) return;
+        const h = (e) => {
+          // User picked a different slot
+          allSlots.forEach(s => s.removeEventListener('change', h));
+          target.removeEventListener('change', handler);
+          const slotId = sel.dataset.hotkeySlot;
+          const slotNum = slotId.replace('slot', '');
+          this.assignedSlot = slotId;
+          this._detectHotkey(slotNum).then(hotkey => {
+            this.assignedHotkey = hotkey;
+            log(`User chose different slot ${slotId}: ${hotkey}`);
+          });
+          setTimeout(() => this._nextStep(), 500);
+        };
+        sel.addEventListener('change', h);
+        otherHandlers.push({ el: sel, handler: h });
+        // Make other slots clickable too
+        sel.style.zIndex = '10001';
+        sel.style.position = sel.style.position || 'relative';
+        sel.style.pointerEvents = 'auto';
+      });
+
+      const prevCleanup = this._cleanup;
+      this._cleanup = () => {
+        prevCleanup();
+        otherHandlers.forEach(({ el, handler }) => el.removeEventListener('change', handler));
+      };
+    }
+    else if (step.action === 'focus') {
+      const handler = () => {
+        target.removeEventListener('focus', handler);
+        setTimeout(() => this._nextStep(), 700);
+      };
+      target.addEventListener('focus', handler);
+      this._cleanup = () => target.removeEventListener('focus', handler);
     }
   }
 
-  cleanupStep() {
-    if (this._clickHandlerCleanup) {
-      this._clickHandlerCleanup();
-      this._clickHandlerCleanup = null;
-    }
-    
-    // Remove highlight from all elements
-    document.querySelectorAll('.onboarding-target-highlight').forEach(el => {
-      el.classList.remove('onboarding-target-highlight');
-      el.style.zIndex = '';
-      el.style.cursor = '';
+  // ==================== DETECT ACTUAL HOTKEY ====================
+  async _detectHotkey(slotNum) {
+    return new Promise(resolve => {
+      if (typeof chrome !== 'undefined' && chrome.commands && chrome.commands.getAll) {
+        chrome.commands.getAll(commands => {
+          const cmd = commands.find(c => c.name === `hotkey-${slotNum}`);
+          if (cmd && cmd.shortcut) {
+            resolve(cmd.shortcut);
+          } else {
+            resolve(`Alt+${slotNum}`);
+          }
+        });
+      } else {
+        resolve(`Alt+${slotNum}`);
+      }
     });
   }
 
-  waitForElementAsync(selector, timeoutMs = 10000) {
-    return new Promise((resolve) => {
-      const startTime = Date.now();
-      
+  // ==================== SCROLL INSIDE SETTINGS MODAL ====================
+  async _smoothScrollInSettings(target) {
+    log('Smooth scrolling to Quick Insert section in settings');
+    const modalBody = target.closest('.modal-body');
+    if (!modalBody) return;
+
+    // Scroll target into center of modal
+    const targetRect = target.getBoundingClientRect();
+    const modalRect = modalBody.getBoundingClientRect();
+    const scrollTop = modalBody.scrollTop + (targetRect.top - modalRect.top) - modalRect.height / 3;
+
+    modalBody.scrollTo({
+      top: Math.max(0, scrollTop),
+      behavior: 'smooth'
+    });
+    await this._wait(600);
+  }
+
+  // ==================== AUTO-FILL PROMPT ====================
+  _autoFillPrompt() {
+    const titleInput = document.getElementById('pe-title');
+    const textInput = document.getElementById('pe-text');
+
+    if (titleInput && textInput) {
+      const lang = this._getLang();
+      titleInput.value = lang === 'ru' ? 'Мой первый промпт' : 'My First Prompt';
+      textInput.value = lang === 'ru'
+        ? 'Ты {role}. Помоги мне с {task}. Ответь подробно и структурированно.'
+        : 'You are a {role}. Help me with {task}. Give a detailed, structured response.';
+
+      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+      textInput.dispatchEvent(new Event('input', { bubbles: true }));
+      log('Auto-filled prompt');
+    }
+  }
+
+  // ==================== REPOSITION ON RESIZE ====================
+  _repositionCurrent() {
+    if (this.currentStep >= this.steps.length) return;
+    const step = this.steps[this.currentStep];
+    if (!step || !step.target) return;
+
+    const target = document.querySelector(step.target);
+    if (!target) return;
+
+    this._highlightTarget(target, step);
+    this._positionTooltip(target, step.tooltipPosition);
+  }
+
+  // ==================== NAVIGATION ====================
+  _nextStep() {
+    this._showStep(this.currentStep + 1);
+  }
+
+  _cleanupStep() {
+    if (this._cleanup) {
+      this._cleanup();
+      this._cleanup = null;
+    }
+
+    // Remove active state from all targets
+    document.querySelectorAll('.tut-target-active').forEach(el => {
+      el.classList.remove('tut-target-active');
+      el.style.zIndex = '';
+      el.style.cursor = '';
+      el.style.pointerEvents = '';
+    });
+
+    // Reset other slot z-indices
+    document.querySelectorAll('[data-hotkey-slot]').forEach(el => {
+      el.style.zIndex = '';
+      el.style.pointerEvents = '';
+    });
+  }
+
+  // ==================== FINISH ====================
+  _finish() {
+    log('=== CLOSING TUTORIAL ===');
+    this._cleanupStep();
+
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+
+    // Fade out
+    if (this.overlay) {
+      this.overlay.classList.remove('tut-visible');
+      this.overlay.classList.remove('tut-full-dim');
+      this.overlay.style.clipPath = 'none';
+    }
+    if (this.tooltip) {
+      this.tooltip.classList.remove('tut-visible');
+    }
+    if (this.spotlight) {
+      this.spotlight.style.display = 'none';
+    }
+
+    // Remove elements after fade
+    setTimeout(() => {
+      this.overlay?.remove();
+      this.tooltip?.remove();
+      this.spotlight?.remove();
+    }, 400);
+
+    // Save completion
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({ onboardingTutorialComplete: true });
+    }
+
+    if (this.onComplete) this.onComplete();
+    log('Tutorial saved as complete');
+  }
+
+  // ==================== UTILITIES ====================
+  _getLang() {
+    try {
+      // Use Promptory's lang if available
+      if (window.Promptory && window.Promptory.getLang) {
+        return window.Promptory.getLang();
+      }
+    } catch (e) {}
+    return navigator.language.startsWith('ru') ? 'ru' : 'en';
+  }
+
+  _waitForEl(selector, timeoutMs = 10000) {
+    return new Promise(resolve => {
+      const start = Date.now();
       const check = () => {
         const el = document.querySelector(selector);
-        if (el) {
-          resolve(el);
-          return;
-        }
-        if (Date.now() - startTime > timeoutMs) {
-          log(`Timeout waiting for ${selector}`);
-          resolve(null);
-          return;
-        }
+        if (el) { resolve(el); return; }
+        if (Date.now() - start > timeoutMs) { resolve(null); return; }
         requestAnimationFrame(check);
       };
-      
       check();
     });
   }
 
-  async scrollToTarget(element) {
-    if (!element) return;
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await this.wait(500);
-  }
-
-  autoFillPrompt() {
-    const titleInput = document.getElementById('pe-title');
-    const textInput = document.getElementById('pe-text');
-    
-    if (titleInput && textInput) {
-      const lang = this.getLang();
-      titleInput.value = lang === 'ru' ? 'Мой первый промпт' : 'My First Prompt';
-      textInput.value = lang === 'ru' 
-        ? 'Ты {role}. Помоги мне с {task}. Ответь подробно и структурированно.' 
-        : 'You are a {role}. Help me with {task}. Give a detailed, structured response.';
-      
-      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
-      textInput.dispatchEvent(new Event('input', { bubbles: true }));
-      log('Auto-filled prompt with variables demo');
-    }
-  }
-
-  autoFillFolder() {
-    const nameInput = document.getElementById('fe-name');
-    
-    if (nameInput) {
-      const lang = this.getLang();
-      nameInput.value = lang === 'ru' ? 'Мои промпты' : 'My Prompts';
-      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-      log('Auto-filled folder name');
-    }
-  }
-
-  nextStep() {
-    this.currentStep++;
-    this.showStep(this.currentStep);
-  }
-
-  close() {
-    log('=== CLOSING TUTORIAL ===');
-    
-    this.cleanupStep();
-    
-    if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-      this.checkInterval = null;
-    }
-    
-    if (this.overlay) {
-      this.overlay.classList.remove('visible');
-      this.overlay.style.clipPath = 'none';
-      setTimeout(() => this.overlay?.remove(), 300);
-    }
-    if (this.tutorial) {
-      this.tutorial.classList.remove('visible');
-      setTimeout(() => this.tutorial?.remove(), 300);
-    }
-    if (this.spotlight) {
-      this.spotlight.remove();
-    }
-    
-    chrome.storage.local.set({ onboardingTutorialComplete: true });
-    log('Tutorial state saved');
-  }
-
-  getLang() {
-    return navigator.language.startsWith('ru') ? 'ru' : 'en';
-  }
-
-  nextFrame() {
+  _raf() {
     return new Promise(resolve => requestAnimationFrame(resolve));
   }
 
-  wait(ms) {
+  _wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 
+// ==================== EXPORT ====================
 window.OnboardingTutorial = OnboardingTutorial;
 
 })();
