@@ -1,34 +1,44 @@
 /* ============================================
-   Promptory Onboarding Tutorial v10
-   Game-style spotlight overlay
-   No blur, clip-path cutout, pulsing border
+   Promptory Onboarding Tutorial v11
+   4-panel overlay (no clip-path stacking issues)
+   Spotlight ring + tooltip + proper click-through
    ============================================ */
 
-/* ========== OVERLAY — dark dimming with clip-path hole ========== */
-.tut-overlay {
+/* ========== OVERLAY — 4 panels around the spotlight hole ========== */
+/* Instead of a single overlay with clip-path (which has z-index stacking
+   issues in popup contexts), we use 4 absolutely-positioned panels that
+   surround the highlighted element. This guarantees:
+   1. The target element is NEVER covered/dimmed
+   2. Clicks on the target always work (no z-index wars)
+   3. Clicks on dimmed areas are blocked
+*/
+.tut-overlay-panel {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.72);
   z-index: 9998;
   opacity: 0;
-  pointer-events: none; /* Let clicks through to the hole area */
-  transition:
-    opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    clip-path 0.45s cubic-bezier(0.4, 0, 0.2, 1);
-  /* Default: fully darken everything */
-  clip-path: none;
-  will-change: opacity, clip-path;
+  pointer-events: auto; /* Block clicks on dimmed areas */
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
 }
 
-.tut-overlay.tut-visible {
+.tut-overlay-panel.tut-visible {
   opacity: 1;
 }
 
-/* When no target (final/info steps), darken everything and block clicks */
-.tut-overlay.tut-full-dim {
-  clip-path: none;
+/* Single full-screen overlay for info/final steps (no target) */
+.tut-overlay-full {
+  position: fixed;
+  inset: 0;
   background: rgba(0, 0, 0, 0.8);
+  z-index: 9998;
+  opacity: 0;
   pointer-events: auto;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tut-overlay-full.tut-visible {
+  opacity: 1;
 }
 
 /* ========== SPOTLIGHT — pulsing animated border around target ========== */
@@ -36,14 +46,14 @@
   position: fixed;
   border: 3px solid var(--accent, #6366f1);
   border-radius: 8px;
-  pointer-events: none;
+  pointer-events: none; /* Let clicks through to the element behind it */
   z-index: 9999;
   display: none;
   transition:
-    left 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-    top 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-    width 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-    height 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   animation: tut-pulse 2s ease-in-out infinite;
   will-change: left, top, width, height;
 }
@@ -74,7 +84,7 @@
   padding: 18px 20px;
   max-width: 300px;
   width: 92%;
-  z-index: 10000;
+  z-index: 10002; /* Above everything including spotlight */
   pointer-events: auto;
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.5),
@@ -322,19 +332,21 @@
 }
 
 /* ========== TARGET ACTIVE STATE ========== */
+/* The target element needs to sit ABOVE the overlay panels (z-index 9998)
+   and BELOW the tooltip (z-index 10002).
+   We set z-index: 10000 with position: relative to ensure it renders
+   above the 4 surrounding overlay panels. */
 .tut-target-active {
   position: relative !important;
-  z-index: 10001 !important;
+  z-index: 10000 !important;
   pointer-events: auto !important;
   cursor: pointer !important;
-  /* Force new stacking context so element renders above overlay */
-  isolation: isolate;
 }
 
-/* Ancestor containers raised above overlay during tutorial */
+/* When target is inside a modal or other positioned container,
+   we need that container to also be above the overlay. */
 .tut-ancestor-raised {
-  z-index: 10001 !important;
-  pointer-events: auto !important;
+  z-index: 9999 !important;
 }
 
 /* Dropdown flash animation */
@@ -349,12 +361,13 @@
 }
 
 /* ========== LIGHT THEME OVERRIDES ========== */
-[data-theme="light"] .tut-overlay {
-  background: rgba(0, 0, 0, 0.6);
+[data-theme="light"] .tut-overlay-panel,
+[data-theme="light"] .tut-overlay-full {
+  background: rgba(0, 0, 0, 0.55);
 }
 
-[data-theme="light"] .tut-overlay.tut-full-dim {
-  background: rgba(0, 0, 0, 0.65);
+[data-theme="light"] .tut-overlay-full {
+  background: rgba(0, 0, 0, 0.6);
 }
 
 [data-theme="light"] .tut-tooltip {
