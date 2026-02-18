@@ -6,6 +6,26 @@ importScripts('../config.js');
 const SUPABASE_URL = CONFIG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
 const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT || 25;
+
+// Word-boundary-aware truncation (handles multi-byte/CJK characters)
+function _truncateAtWordBoundary(text, max = 50) {
+  if (!text || text.length <= max) return text || '';
+  const sub = text.substring(0, max);
+  // Find last word boundary (space, punctuation, CJK delimiters)
+  const lastBreak = Math.max(
+    sub.lastIndexOf(' '),
+    sub.lastIndexOf('.'),
+    sub.lastIndexOf(','),
+    sub.lastIndexOf(';'),
+    sub.lastIndexOf('-'),
+    sub.lastIndexOf('\u3000'), // CJK space
+    sub.lastIndexOf('\u3001'), // CJK comma
+    sub.lastIndexOf('\u3002')  // CJK period
+  );
+  // If no good break point in the first 30% of the string, just cut at max
+  if (lastBreak <= max * 0.3) return sub + '...';
+  return text.substring(0, lastBreak) + '...';
+}
 // Redirect URL is computed dynamically from chrome.identity
 const REDIRECT_URL = chrome.identity.getRedirectURL();
 
@@ -58,7 +78,7 @@ chrome.contextMenus.onClicked.addListener(async (info, _tab) => {
     const prompts = result.prompts || [];
     const newPrompt = {
       id: crypto.randomUUID(),
-      title: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+      title: _truncateAtWordBoundary(text, 50),
       text: text,
       description: 'Saved from selection',
       folderId: null,
