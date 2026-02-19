@@ -1,16 +1,21 @@
-// Promptory Onboarding Tutorial Module v11
+// Promptory Onboarding Tutorial Module v12
 // REWRITE — 4-panel overlay approach (no clip-path z-index issues)
 // Flow: Create prompt -> Settings -> Quick Insert -> Select slot -> Save -> Use hotkey -> Library teaser
-// KEY FIX: Uses 4 overlay panels (top/right/bottom/left) around the target instead of
-// a single overlay with clip-path. This ensures the highlighted element is NEVER dimmed
-// and is always clickable, regardless of its position in the DOM stacking context.
+// KEY FIX v12: Modal-aware z-index layering.
+// When the target element is inside a modal (e.g. prompt editor, settings),
+// the modal-overlay is raised above the base tutorial panels, then
+// "inside-modal" panels are layered ON TOP of the raised modal to create
+// the dark surround. This ensures the highlighted element inside the modal
+// is ALWAYS visible and clickable, never hidden behind the overlay.
+// Z-index stack: base panels (9998) < modal raised (10001/10002) <
+//   inside-modal panels (10003) < spotlight (10004) < tooltip (10005).
 
 (function() {
 'use strict';
 
 const DEBUG = false;
 function log(...args) {
-  if (DEBUG) console.log('[Tutorial v11]', ...args);
+  if (DEBUG) console.log('[Tutorial v12]', ...args);
 }
 
 // ==================== STEP DEFINITIONS ====================
@@ -196,7 +201,7 @@ class OnboardingTutorial {
     this.currentStep = 0;
     this.steps = buildSteps();
 
-    log('=== STARTING TUTORIAL v11 (9 steps) ===');
+    log('=== STARTING TUTORIAL v12 (9 steps) ===');
 
     // Create 4 overlay panels
     const panelNames = ['top', 'right', 'bottom', 'left'];
@@ -403,7 +408,7 @@ class OnboardingTutorial {
     `;
   }
 
-  // ==================== HIGHLIGHT TARGET (4-panel approach) ====================
+  // ==================== HIGHLIGHT TARGET (4-panel approach, modal-aware) ====================
   _highlightTarget(element, step) {
     const rect = element.getBoundingClientRect();
     const pad = 6;
@@ -416,6 +421,22 @@ class OnboardingTutorial {
     const holeTop = Math.max(0, rect.top - pad);
     const holeRight = Math.min(vw, rect.right + pad);
     const holeBottom = Math.min(vh, rect.bottom + pad);
+
+    // Detect if target is inside a modal
+    const modalOverlay = element.closest('.modal-overlay');
+    const isInsideModal = !!modalOverlay;
+
+    if (isInsideModal) {
+      // MODAL-AWARE MODE:
+      // 1. Raise the modal-overlay above base tutorial panels
+      modalOverlay.classList.add('tut-modal-raised');
+      // 2. Switch panels to inside-modal mode (z-index above the raised modal)
+      this.panels.forEach(p => p.classList.add('tut-inside-modal'));
+      log('Target is inside modal — using raised modal z-index');
+    } else {
+      // Normal mode — remove any previous modal-raised classes
+      this.panels.forEach(p => p.classList.remove('tut-inside-modal'));
+    }
 
     // Position the 4 panels around the hole
     // Top panel: full width, from top of screen to top of hole
@@ -447,7 +468,20 @@ class OnboardingTutorial {
     // The target element itself is not covered by any panel — it's in the "hole".
     // Raise it above the panels so it's fully interactive.
     element.classList.add('tut-target-active');
-    this._ensureAncestorStacking(element);
+    if (!isInsideModal) {
+      this._ensureAncestorStacking(element);
+    }
+
+    // If target is a prompt-card or contains one, force actions visible
+    const promptCard = element.closest('.prompt-card') || element.querySelector('.prompt-card');
+    if (promptCard) {
+      promptCard.classList.add('tut-actions-visible');
+    }
+    // Also for folder cards
+    const folderCard = element.closest('.folder-card') || element.querySelector('.folder-card');
+    if (folderCard) {
+      folderCard.classList.add('tut-actions-visible');
+    }
 
     // Position spotlight ring around the hole
     this.spotlight.style.display = 'block';
@@ -769,6 +803,19 @@ class OnboardingTutorial {
     document.querySelectorAll('.tut-ancestor-raised').forEach(el => {
       el.classList.remove('tut-ancestor-raised');
     });
+
+    // Remove modal-raised class
+    document.querySelectorAll('.tut-modal-raised').forEach(el => {
+      el.classList.remove('tut-modal-raised');
+    });
+
+    // Remove inside-modal mode from panels
+    this.panels.forEach(p => p.classList.remove('tut-inside-modal'));
+
+    // Remove forced action button visibility
+    document.querySelectorAll('.tut-actions-visible').forEach(el => {
+      el.classList.remove('tut-actions-visible');
+    });
   }
 
   // ==================== FINISH ====================
@@ -799,6 +846,12 @@ class OnboardingTutorial {
       });
       document.querySelectorAll('.tut-target-active').forEach(el => {
         el.classList.remove('tut-target-active');
+      });
+      document.querySelectorAll('.tut-modal-raised').forEach(el => {
+        el.classList.remove('tut-modal-raised');
+      });
+      document.querySelectorAll('.tut-actions-visible').forEach(el => {
+        el.classList.remove('tut-actions-visible');
       });
     }, 400);
 
