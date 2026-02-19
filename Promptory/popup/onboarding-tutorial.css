@@ -1,9 +1,21 @@
 /* ============================================
    Promptory Onboarding Tutorial v12
    4-panel overlay (no clip-path stacking issues)
+   Modal-aware z-index layering
    Spotlight ring + tooltip + proper click-through
    16-step flow with favorites, folders, search
    ============================================ */
+
+/* Z-INDEX STACK (v12):
+   9998  — base overlay panels (top/right/bottom/left)
+   9999  — tut-ancestor-raised (non-modal parents)
+   10000 — tut-target-active (highlighted element)
+   10001 — tut-modal-raised (modal-overlay when target is inside modal)
+   10002 — tut-modal-raised .modal (the modal box itself)
+   10003 — tut-inside-modal panels (overlay panels re-layered above raised modal)
+   10004 — tut-spotlight (pulsing border ring)
+   10005 — tut-tooltip (instruction card)
+*/
 
 /* ========== OVERLAY — 4 panels around the spotlight hole ========== */
 /* Instead of a single overlay with clip-path (which has z-index stacking
@@ -20,11 +32,16 @@
   opacity: 0;
   pointer-events: auto; /* Block clicks on dimmed areas */
   transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: opacity;
+  will-change: opacity, left, top, width, height;
 }
 
 .tut-overlay-panel.tut-visible {
   opacity: 1;
+}
+
+/* When inside-modal mode: panels overlay on top of the raised modal */
+.tut-overlay-panel.tut-inside-modal {
+  z-index: 10003;
 }
 
 /* Single full-screen overlay for info/final steps (no target) */
@@ -48,7 +65,7 @@
   border: 3px solid var(--accent, #6366f1);
   border-radius: 8px;
   pointer-events: none; /* Let clicks through to the element behind it */
-  z-index: 9999;
+  z-index: 10004;
   display: none;
   transition:
     left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
@@ -85,7 +102,7 @@
   padding: 18px 20px;
   max-width: 320px;
   width: 92%;
-  z-index: 10002; /* Above everything including spotlight */
+  z-index: 10005; /* Above everything including spotlight and modal panels */
   pointer-events: auto;
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.5),
@@ -333,10 +350,10 @@
 }
 
 /* ========== TARGET ACTIVE STATE ========== */
-/* The target element needs to sit ABOVE the overlay panels (z-index 9998)
-   and BELOW the tooltip (z-index 10002).
-   We set z-index: 10000 with position: relative to ensure it renders
-   above the 4 surrounding overlay panels. */
+/* The target element needs to sit ABOVE the overlay panels (z-index 9998).
+   In normal mode, it sits at z-index 10000.
+   In modal mode, it sits at 10000 inside a raised modal (10001/10002),
+   and inside-modal panels (10003) handle the darkening around it. */
 .tut-target-active {
   position: relative !important;
   z-index: 10000 !important;
@@ -350,22 +367,28 @@
   z-index: 9999 !important;
 }
 
-/* Modal overlays that appear DURING the tutorial (e.g. prompt editor, 
-   folder editor) must sit above the 4-panel overlay but below the tooltip.
-   The tut-ancestor-raised class handles this, but modals also need
-   their modal-overlay wrapper raised. */
-.modal-overlay.tut-ancestor-raised {
+/* When the target is INSIDE a modal, raise the entire modal-overlay
+   above the tutorial's base panels so modal content is visible.
+   The inside-modal panels (z-index 10003) then overlay on top of it,
+   and spotlight (10004) + tooltip (10005) are above everything. */
+.tut-modal-raised {
   z-index: 10001 !important;
 }
 
-/* Ensure the modal inside a raised modal-overlay is also above overlay */
-.tut-ancestor-raised > .modal {
-  z-index: 10001 !important;
+.tut-modal-raised .modal {
+  z-index: 10002 !important;
 }
 
-/* Tab buttons targeted by tutorial need to be above the panels */
-.tabs .tab-btn.tut-target-active {
-  z-index: 10000 !important;
+/* Force prompt-card action buttons visible during tutorial targeting */
+.tut-actions-visible .prompt-actions {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Force folder-card action buttons visible during tutorial targeting */
+.tut-actions-visible .folder-card-actions {
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 /* Dropdown flash animation */
