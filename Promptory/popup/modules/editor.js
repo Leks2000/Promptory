@@ -97,6 +97,7 @@ P.checkAndRestoreDraft = async function(opts) {
           ? 'У вас есть несохранённый черновик. Восстановить?'
           : 'You have an unsaved draft. Restore it?';
         if (confirm(msg)) {
+          P.analyticsTrackDraftRestored('prompt');
           P.openPromptEditor(draft.editingId, opts);
           // Restore draft values after modal opens
           setTimeout(() => _restoreDraft(draft), 100);
@@ -130,6 +131,9 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
     showToast(t('freeLimitReached', getEffectiveLimit()), 'error');
     return;
   }
+
+  // Analytics: track editor open
+  P.analyticsTrackPromptEditorOpen(!!promptId, promptId);
   pendingImageFile = null;
   const prompt = promptId ? state.prompts.find(p => p.id === promptId) : null;
   const isEdit = !!prompt;
@@ -245,7 +249,11 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
     if (removeTag) document.querySelector(`#pe-tags-list [data-tag="${removeTag}"]`)?.remove();
   });
   // Auto-save draft periodically and on input
-  const draftSave = debounce(() => _saveDraft(promptId), 1000);
+  const draftSave = debounce(() => {
+    _saveDraft(promptId);
+    // Analytics: track draft save during editing
+    P.analyticsTrackPromptDraftSave(!!promptId, promptId);
+  }, 1000);
   document.getElementById('pe-title')?.addEventListener('input', draftSave);
   document.getElementById('pe-text')?.addEventListener('input', draftSave);
   document.getElementById('pe-desc')?.addEventListener('input', draftSave);
@@ -420,12 +428,16 @@ async function _savePrompt(editingId, opts) {
       previousFolderId = p.folderId || null;
       Object.assign(p, { title, text, description: desc, folderId, platform, tags, variables, imageUrl, updatedAt: Date.now() });
       if (syncPromptToSupabase) syncPromptToSupabase(p);
+      // Analytics: track prompt updated (only fires on successful save)
+      P.analyticsTrackPromptUpdated(p);
     }
   } else {
     if (canCreatePrompt && !canCreatePrompt()) { showToast(t('freeLimitReached', getEffectiveLimit()), 'error'); saveBtn.classList.remove('loading'); return; }
     const newP = { id: crypto.randomUUID(), title, text, description: desc, folderId, platform, tags, variables, imageUrl, isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() };
     state.prompts.unshift(newP);
     if (syncPromptToSupabase) syncPromptToSupabase(newP);
+    // Analytics: track prompt created (only fires on successful save)
+    P.analyticsTrackPromptCreated(newP);
   }
 
   if (setSuppressRender) setSuppressRender(true);

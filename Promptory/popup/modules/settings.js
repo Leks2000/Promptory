@@ -241,6 +241,8 @@ P.openSettingsModal = function(opts = {}) {
       await saveData('user', state.user);
       await saveData('session', state.session);
       closeModal('settings-modal');
+      // Analytics: track sign in
+      P.analyticsTrackSignIn(state.user, 'google', true);
       showToast(t('signedInSuccess'), 'success');
       if (renderExplore) renderExplore();
       setTimeout(() => {
@@ -251,6 +253,8 @@ P.openSettingsModal = function(opts = {}) {
         ]);
       }, 50);
     } else {
+      // Analytics: track sign in failure
+      P.analyticsTrackSignIn(null, 'google', false);
       showToast(t('signInFailed') + ': ' + (result?.error || ''), 'error');
     }
   });
@@ -264,6 +268,8 @@ P.openSettingsModal = function(opts = {}) {
       await new Promise((resolve) => chrome.runtime.sendMessage({ action: 'signOut' }, (r) => resolve(r || { success: true })));
     } catch (e) { /* non-critical */ }
     state.user = null; state.session = null; state.isPremium = false;
+    // Analytics: track sign out
+    P.analyticsTrackSignOut();
     state.prompts = []; state.folders = [];
     state.settings.hotkeys = { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } };
     state.libraryPrompts = []; state.userLikes = new Set(); state.userReports = new Set();
@@ -291,6 +297,8 @@ P.openSettingsModal = function(opts = {}) {
     const data = { prompts: state.prompts, folders: state.folders, settings: state.settings, exportDate: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `promptory-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href);
+    // Analytics: track export
+    P.analyticsTrackExport(state.prompts.length, state.folders.length);
     showToast(t('dataExported'), 'success');
   });
 
@@ -417,6 +425,8 @@ function _handleImport(opts) {
       await saveData('folders', state.folders);
       await saveData('settings', state.settings);
       showToast(t('dataImported'), 'success');
+      // Analytics: track import
+      P.analyticsTrackImport(state.prompts.length, state.folders.length);
       closeModal('settings-modal');
       if (renderPrompts) renderPrompts();
       if (renderFolders) renderFolders();
@@ -472,6 +482,8 @@ function _importCSV(fileText, opts) {
   state.prompts = [...imported, ...state.prompts];
   saveData('prompts', state.prompts);
   showToast(`Imported ${imported.length} prompts`, 'success');
+  // Analytics: track CSV import
+  P.analyticsTrackImport(imported.length, 0);
   closeModal('settings-modal');
   if (renderPrompts) renderPrompts();
   if (renderFolders) renderFolders();
