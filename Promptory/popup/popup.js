@@ -2969,6 +2969,9 @@ async function init() {
     renderLimitBanner();
   }
 
+  // Check if we should show the review banner (3 days after install)
+  checkReviewBanner();
+
   } catch (err) {
     // Global error boundary — show fallback UI instead of blank popup
     console.error('❌ Promptory init error:', err);
@@ -2990,6 +2993,85 @@ async function init() {
     }
   }
 }
+
+// ==================== REVIEW BANNER (3 days after install) ====================
+const REVIEW_DELAY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+// Chrome Web Store URL — replace with your actual extension ID
+const CWS_REVIEW_URL = 'https://chromewebstore.google.com/detail/promptory/YOUR_EXTENSION_ID/reviews';
+
+function showReviewBanner() {
+  // Don't show if already visible
+  if (document.getElementById('review-banner')) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'review-banner';
+  banner.className = 'review-banner';
+  banner.innerHTML = `
+    <div class="review-banner-content">
+      <span class="review-banner-text">Enjoying Promptory? Rate us ⭐</span>
+      <div class="review-banner-actions">
+        <button class="btn btn-primary btn-sm ripple" id="review-rate-btn">Rate it</button>
+        <button class="btn btn-ghost btn-sm" id="review-later-btn">Later</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(banner);
+
+  // Animate in
+  requestAnimationFrame(() => {
+    banner.classList.add('visible');
+  });
+
+  document.getElementById('review-rate-btn').addEventListener('click', () => {
+    try { chrome.tabs.create({ url: CWS_REVIEW_URL }); } catch (e) { window.open(CWS_REVIEW_URL, '_blank'); }
+    try { chrome.storage.local.set({ reviewDismissed: true }); } catch (e) { /* silent */ }
+    banner.classList.remove('visible');
+    setTimeout(() => banner.remove(), 300);
+  });
+
+  document.getElementById('review-later-btn').addEventListener('click', () => {
+    try { chrome.storage.local.set({ reviewDismissed: true }); } catch (e) { /* silent */ }
+    banner.classList.remove('visible');
+    setTimeout(() => banner.remove(), 300);
+  });
+}
+
+function checkReviewBanner() {
+  try {
+    chrome.storage.local.get(['installDate', 'reviewDismissed'], (res) => {
+      try {
+        if (res.reviewDismissed === true) return;
+        if (!res.installDate) return;
+        const elapsed = Date.now() - res.installDate;
+        if (elapsed >= REVIEW_DELAY_MS) {
+          showReviewBanner();
+        }
+      } catch (e) {
+        console.warn('[Promptory] checkReviewBanner callback error:', e);
+      }
+    });
+  } catch (e) {
+    console.warn('[Promptory] checkReviewBanner error:', e);
+  }
+}
+
+// Debug functions exposed globally for console testing
+window.debugReviewBanner = function() {
+  console.log('[Promptory] Force-showing review banner (no date check)');
+  showReviewBanner();
+};
+
+window.debugSimulate3Days = function() {
+  chrome.storage.local.set({ installDate: Date.now() - (3 * 24 * 60 * 60 * 1000) }, () => {
+    console.log('[Promptory] Simulated 3 days passed. Reload popup to test.');
+  });
+};
+
+window.debugResetReviewBanner = function() {
+  chrome.storage.local.set({ reviewDismissed: false, installDate: Date.now() - (3 * 24 * 60 * 60 * 1000) }, () => {
+    console.log('[Promptory] Review banner reset. Reload popup to test.');
+  });
+};
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
