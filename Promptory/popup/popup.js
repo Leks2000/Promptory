@@ -164,6 +164,9 @@ function initTabs() {
       if (target) target.classList.add('active');
       if (btn.dataset.tab === 'stats') renderStats();
       
+      // Analytics: track tab switch
+      P.analyticsTrackTabSwitch(btn.dataset.tab);
+      
       // Update search filters for current tab (if enabled)
       if (searchFilters) {
         searchFilters.setCurrentTab(btn.dataset.tab);
@@ -527,6 +530,8 @@ async function toggleFavorite(id) {
   await saveData('prompts', state.prompts);
   _suppressStorageRender = false;
   showToast(p.isFavorite ? t('addedToFavorites') : t('removedFromFavorites'), 'success');
+  // Analytics: track favorite toggle
+  P.analyticsTrackPromptFavoriteToggle(id, p.isFavorite);
   // In-place update for prompts list; only re-render favorites tab (it's simpler)
   updatePromptCardFavorite(id, p.isFavorite);
   renderFavorites();
@@ -618,6 +623,8 @@ async function copyPrompt(id) {
     await saveData('prompts', state.prompts);
     _suppressStorageRender = false;
     showToast(t('copiedToClipboard'), 'success');
+    // Analytics: track prompt copy
+    P.analyticsTrackPromptCopied(id);
     // In-place update instead of full re-render
     updatePromptCardUseCount(id, p.useCount);
     trackUsage(p, 'copy');
@@ -640,6 +647,8 @@ async function insertPromptToPage(id) {
     await saveData('prompts', state.prompts);
     _suppressStorageRender = false;
     showToast(t('promptInserted'), 'success');
+    // Analytics: track prompt insertion
+    P.analyticsTrackPromptInserted(p, new URL(tab.url || '').hostname.replace('www.', '') || 'unknown');
     // In-place update instead of full re-render
     updatePromptCardUseCount(id, p.useCount);
     const platform = new URL(tab.url || '').hostname.replace('www.', '') || 'unknown';
@@ -831,6 +840,8 @@ async function deletePrompt(id) {
   await saveData('prompts', state.prompts);
   _suppressStorageRender = false;
   showToast(t('promptDeleted'), 'success');
+  // Analytics: track prompt deleted
+  P.analyticsTrackPromptDeleted(id);
   renderPrompts();
   renderFavorites();
   syncPromptDeleteToSupabase(id);
@@ -991,6 +1002,8 @@ async function shareToLibrary(promptId) {
       }
       
       showToast(t('promptShared'), 'success');
+      // Analytics: track prompt published to library
+      P.analyticsTrackLibraryPublish(promptId);
       closeModal('share-modal');
       loadLibraryPrompts();
     } catch (e) { 
@@ -1120,6 +1133,9 @@ function _renderFoldersImmediate() {
 function openFolderEditor(folderId = null) {
   const folder = folderId ? state.folders.find(f => f.id === folderId) : null;
   const isEdit = !!folder;
+
+  // Analytics: track folder editor open
+  P.analyticsTrackFolderEditorOpen(isEdit, folderId);
   
   // Free tier folder limit (only for new folders, not editing)
   if (!isEdit && !state.isPremium && state.folders.length >= (CONFIG.FREE_FOLDER_LIMIT || 5)) {
@@ -1144,8 +1160,8 @@ function openFolderEditor(folderId = null) {
     if (!name) { document.getElementById('fe-name-err').style.display = 'block'; return; }
     // Clear folder draft on save
     try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
-    if (folderId) { const f = state.folders.find(x => x.id === folderId); if (f) { f.name = name; f.updatedAt = Date.now(); syncFolderToSupabase(f); } }
-    else { const newF = { id: crypto.randomUUID(), name, createdAt: Date.now(), updatedAt: Date.now() }; state.folders.push(newF); syncFolderToSupabase(newF); }
+    if (folderId) { const f = state.folders.find(x => x.id === folderId); if (f) { f.name = name; f.updatedAt = Date.now(); syncFolderToSupabase(f); P.analyticsTrackFolderUpdated(f); } }
+    else { const newF = { id: crypto.randomUUID(), name, createdAt: Date.now(), updatedAt: Date.now() }; state.folders.push(newF); syncFolderToSupabase(newF); P.analyticsTrackFolderCreated(newF); }
     _suppressStorageRender = true;
     await saveData('folders', state.folders);
     _suppressStorageRender = false;
@@ -1171,6 +1187,8 @@ function openFolderEditor(folderId = null) {
     const val = nameInput?.value || '';
     if (val) {
       try { chrome.storage.local.set({ folderEditorDraft: { folderId: folderId || null, name: val, savedAt: Date.now() } }); } catch (e) { /* silent */ }
+      // Analytics: track folder draft save during editing
+      P.analyticsTrackFolderDraftSave(!!folderId, folderId);
     }
   };
   nameInput?.addEventListener('input', debounce(saveFolderDraft, 500));
@@ -1452,6 +1470,8 @@ function renderExplore() {
       state.prompts.unshift({ id: crypto.randomUUID(), sourceId: id, title: ep.title, text: ep.text, description: `From ${ep.author}`, tags: ep.tags || [], folderId: null, platform: 'universal', variables: [], isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() }); 
       await saveData('prompts', state.prompts); 
       showToast(t('savedToLibrary'), 'success'); 
+      // Analytics: track library save
+      P.analyticsTrackLibrarySave(id);
       supabaseMsg({ action: 'supabaseRequest', method: 'POST', path: 'rpc/increment_download_count', body: { prompt_uuid: id } }); 
       renderPrompts();
       return; 
@@ -1468,6 +1488,8 @@ function renderExplore() {
           const result = Array.isArray(res.data) ? res.data[0] : res.data; 
           if (result.liked) state.userLikes.add(id); 
           else state.userLikes.delete(id); 
+          // Analytics: track library like
+          P.analyticsTrackLibraryLike(id, result.liked);
           const lp = state.libraryPrompts.find(x => x.id === id); 
           if (lp) lp.likes = result.likes; 
           updateExploreLikeUI(id, result.liked, result.likes); 
@@ -2147,6 +2169,8 @@ function initSearch() {
     );
     state.prompts = filtered.map(c => c.prompt);
     renderPrompts();
+    // Analytics: track search
+    P.analyticsTrackSearch(q, state.prompts.length);
     if (state.prompts.length === 0) {
       document.getElementById('prompts-list').innerHTML = `<div class="empty-state"><div class="empty-state-title">${t('noPromptsFound')}</div></div>`;
     }
@@ -2175,6 +2199,8 @@ function generateUniqueCheckoutUrl(baseUrl, userEmail, userId) {
 
 // ==================== UPGRADE MODAL ====================
 function showUpgradeModal() {
+  // Analytics: track upgrade modal open
+  P.analyticsTrackUpgradeModalOpen();
   const hasCheckoutUrl = CONFIG.LEMONSQUEEZY_CHECKOUT_URL && CONFIG.LEMONSQUEEZY_CHECKOUT_URL.length > 0;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -2233,6 +2259,8 @@ document.getElementById('upgrade-buy-btn')?.addEventListener('click', () => {
   );
   
   console.log('🛒 Opening checkout:', checkoutUrl);
+  // Analytics: track checkout click
+  P.analyticsTrackCheckoutClick();
   window.open(checkoutUrl, '_blank');
 });
   
@@ -2628,6 +2656,15 @@ async function init() {
     await P.initOffline();
   }
 
+  // Analytics: track popup open and identify user
+  P.analyticsTrackPopupOpen();
+  if (state.user) P.analyticsIdentify(state.user, state.isPremium);
+
+  // Analytics: track popup close
+  window.addEventListener('beforeunload', () => {
+    P.analyticsTrackPopupClose();
+  });
+
   const welcomeScreen = document.getElementById('welcome-screen');
   const mainApp = document.getElementById('main-app');
 
@@ -2693,6 +2730,9 @@ async function init() {
         hasLaunched: true
       });
       
+      // Analytics: terms accepted
+      P.analyticsTrackTermsAccepted();
+
       welcomeScreen.style.display = 'none';
       mainApp.style.display = 'flex';
       state.isFirstLaunch = false;
@@ -2701,9 +2741,11 @@ async function init() {
       // Start onboarding tutorial after a short delay
       setTimeout(() => {
         if (window.OnboardingTutorial) {
+          P.analyticsTrackOnboardingStart();
           const tutorial = new window.OnboardingTutorial();
           tutorial.start(() => {
             console.log('✅ Onboarding complete');
+            P.analyticsTrackOnboardingComplete();
           });
         }
       }, 300);
@@ -2807,6 +2849,7 @@ async function init() {
           ? 'У вас есть несохранённый черновик папки. Восстановить?'
           : 'You have an unsaved folder draft. Restore it?';
         if (confirm(msg)) {
+          P.analyticsTrackDraftRestored('folder');
           openFolderEditor(folderDraft.folderId || null);
           setTimeout(() => {
             const nameInput = document.getElementById('fe-name');
@@ -2872,6 +2915,7 @@ async function init() {
   } catch (err) {
     // Global error boundary — show fallback UI instead of blank popup
     console.error('❌ Promptory init error:', err);
+    P.analyticsTrackError('init', err?.message || String(err));
     const mainApp = document.getElementById('main-app');
     const welcomeScreen = document.getElementById('welcome-screen');
     if (welcomeScreen) welcomeScreen.style.display = 'none';
