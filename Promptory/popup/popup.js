@@ -2580,8 +2580,23 @@ async function init() {
     mainApp.style.display = 'flex';
     
     // Resume onboarding tutorial if it was interrupted (popup was closed mid-tutorial)
-    chrome.storage.local.get(['tutorialCurrentStep', 'onboardingTutorialComplete'], (stored) => {
-      if (!stored.onboardingTutorialComplete && typeof stored.tutorialCurrentStep === 'number' && stored.tutorialCurrentStep > 0) {
+    // Uses tutorialLastCompletedStep (v13) with fallback to tutorialCurrentStep (v12)
+    chrome.storage.local.get(['tutorialLastCompletedStep', 'tutorialCurrentStep', 'onboardingTutorialComplete'], (stored) => {
+      if (stored.onboardingTutorialComplete) return; // Already done
+      
+      // v13: resume from last completed step
+      const hasV13Progress = typeof stored.tutorialLastCompletedStep === 'number' && stored.tutorialLastCompletedStep >= 0;
+      // v12 fallback: migrate old key
+      const hasV12Progress = !hasV13Progress && typeof stored.tutorialCurrentStep === 'number' && stored.tutorialCurrentStep > 0;
+      
+      if (hasV13Progress || hasV12Progress) {
+        // Migrate v12 key to v13 format if needed
+        if (hasV12Progress) {
+          const migratedStep = Math.max(0, stored.tutorialCurrentStep - 1);
+          chrome.storage.local.set({ tutorialLastCompletedStep: migratedStep });
+          chrome.storage.local.remove('tutorialCurrentStep');
+        }
+        
         setTimeout(() => {
           if (window.OnboardingTutorial) {
             const tutorial = new window.OnboardingTutorial();

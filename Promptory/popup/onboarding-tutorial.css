@@ -1,12 +1,12 @@
 /* ============================================
-   Promptory Onboarding Tutorial v12
+   Promptory Onboarding Tutorial v13
    4-panel overlay (no clip-path stacking issues)
    Modal-aware z-index layering
    Spotlight ring + tooltip + proper click-through
-   16-step flow with favorites, folders, search
+   13-step flow with favorites, folders, settings, hotkeys
    ============================================ */
 
-/* Z-INDEX STACK (v12):
+/* Z-INDEX STACK (v13):
    9998  — base overlay panels (top/right/bottom/left)
    9999  — tut-ancestor-raised (non-modal parents)
    10000 — tut-target-active (highlighted element)
@@ -18,21 +18,14 @@
 */
 
 /* ========== OVERLAY — 4 panels around the spotlight hole ========== */
-/* Instead of a single overlay with clip-path (which has z-index stacking
-   issues in popup contexts), we use 4 absolutely-positioned panels that
-   surround the highlighted element. This guarantees:
-   1. The target element is NEVER covered/dimmed
-   2. Clicks on the target always work (no z-index wars)
-   3. Clicks on dimmed areas are blocked
-*/
 .tut-overlay-panel {
   position: fixed;
   background: rgba(0, 0, 0, 0.72);
   z-index: 9998;
   opacity: 0;
-  pointer-events: auto; /* Block clicks on dimmed areas */
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: opacity, left, top, width, height;
+  pointer-events: auto;
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Use transform for GPU-accelerated compositing, no will-change to reduce memory */
 }
 
 .tut-overlay-panel.tut-visible {
@@ -52,7 +45,7 @@
   z-index: 9998;
   opacity: 0;
   pointer-events: auto;
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tut-overlay-full.tut-visible {
@@ -64,16 +57,15 @@
   position: fixed;
   border: 3px solid var(--accent, #6366f1);
   border-radius: 8px;
-  pointer-events: none; /* Let clicks through to the element behind it */
+  pointer-events: none;
   z-index: 10004;
   display: none;
   transition:
-    left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   animation: tut-pulse 2s ease-in-out infinite;
-  will-change: left, top, width, height;
 }
 
 @keyframes tut-pulse {
@@ -102,7 +94,7 @@
   padding: 18px 20px;
   max-width: 320px;
   width: 92%;
-  z-index: 10005; /* Above everything including spotlight and modal panels */
+  z-index: 10005;
   pointer-events: auto;
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.5),
@@ -110,9 +102,8 @@
   opacity: 0;
   transform: scale(0.9) translateY(10px);
   transition:
-    opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  will-change: opacity, transform, top, left;
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .tut-tooltip.tut-visible {
@@ -182,6 +173,14 @@
   animation: tut-icon-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Larger finish icon for final step */
+.tut-icon-finish {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin-bottom: 14px;
+}
+
 @keyframes tut-icon-enter {
   0% { transform: scale(0.5); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
@@ -236,63 +235,6 @@
   line-height: 1.6;
   margin-bottom: 14px;
   text-align: left;
-}
-
-/* ========== HOTKEY VISUAL (step 13) ========== */
-.tut-hotkey-visual {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 12px 0 16px;
-  animation: tut-hotkey-appear 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.tut-key {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  height: 36px;
-  padding: 0 12px;
-  background: linear-gradient(180deg, #2a2a3e 0%, #1e1e2e 100%);
-  border: 2px solid rgba(99, 102, 241, 0.4);
-  border-bottom-width: 4px;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  animation: tut-key-press 2.5s ease-in-out infinite;
-}
-
-.tut-key-plus {
-  color: var(--text-tertiary, #666);
-  font-size: 16px;
-  font-weight: 700;
-}
-
-@keyframes tut-hotkey-appear {
-  0% { transform: scale(0.7); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-@keyframes tut-key-press {
-  0%, 70%, 100% {
-    transform: translateY(0);
-    border-bottom-width: 4px;
-  }
-  80% {
-    transform: translateY(2px);
-    border-bottom-width: 2px;
-  }
-  90% {
-    transform: translateY(0);
-    border-bottom-width: 4px;
-  }
 }
 
 /* ========== PROGRESS BAR ========== */
@@ -350,10 +292,6 @@
 }
 
 /* ========== TARGET ACTIVE STATE ========== */
-/* The target element needs to sit ABOVE the overlay panels (z-index 9998).
-   In normal mode, it sits at z-index 10000.
-   In modal mode, it sits at 10000 inside a raised modal (10001/10002),
-   and inside-modal panels (10003) handle the darkening around it. */
 .tut-target-active {
   position: relative !important;
   z-index: 10000 !important;
@@ -361,16 +299,11 @@
   cursor: pointer !important;
 }
 
-/* When target is inside a modal or other positioned container,
-   we need that container to also be above the overlay. */
 .tut-ancestor-raised {
   z-index: 9999 !important;
 }
 
-/* When the target is INSIDE a modal, raise the entire modal-overlay
-   above the tutorial's base panels so modal content is visible.
-   The inside-modal panels (z-index 10003) then overlay on top of it,
-   and spotlight (10004) + tooltip (10005) are above everything. */
+/* Modal-raised z-index layering */
 .tut-modal-raised {
   z-index: 10001 !important;
 }
@@ -402,6 +335,19 @@
   60% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.2); }
 }
 
+/* ========== FINAL STEP LAYOUT ========== */
+.tut-final-content {
+  text-align: center;
+}
+
+.tut-final-content .tut-desc {
+  text-align: center;
+}
+
+.tut-final-content .tut-desc strong {
+  color: var(--accent, #6366f1);
+}
+
 /* ========== LIGHT THEME OVERRIDES ========== */
 [data-theme="light"] .tut-overlay-panel,
 [data-theme="light"] .tut-overlay-full {
@@ -428,12 +374,6 @@
   background: #f3f4f6;
 }
 
-[data-theme="light"] .tut-key {
-  background: linear-gradient(180deg, #f9fafb 0%, #e5e7eb 100%);
-  border-color: #d1d5db;
-  color: #1f2937;
-}
-
 [data-theme="light"] .tut-btn-next {
   background: #f3f4f6;
   color: #1f2937;
@@ -448,107 +388,6 @@
   background: #e5e7eb;
 }
 
-/* ========== FINAL STEP — structured list layout ========== */
-.tut-final-content {
-  text-align: left;
-}
-
-.tut-final-content .tut-title {
-  text-align: center;
-}
-
-.tut-final-subtitle {
-  font-size: 11px;
-  color: var(--text-tertiary, #888);
-  text-align: center;
-  margin-bottom: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
-}
-
-.tut-final-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.tut-final-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: var(--bg-tertiary, #2a2a3e);
-  transition: background 0.15s;
-}
-
-.tut-final-item:hover {
-  background: rgba(99, 102, 241, 0.1);
-}
-
-.tut-final-item-icon {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+[data-theme="light"] .tut-final-content .tut-desc strong {
   color: var(--accent, #6366f1);
-}
-
-.tut-final-item-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.tut-final-item-text {
-  font-size: 12px;
-  color: var(--text-primary, #fff);
-  line-height: 1.4;
-}
-
-.tut-inline-key {
-  display: inline-block;
-  padding: 1px 6px;
-  background: var(--bg-tertiary, #2a2a3e);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: 'SF Mono', 'Monaco', 'Fira Code', monospace;
-  color: var(--accent, #6366f1);
-  vertical-align: baseline;
-}
-
-.tut-final-tip {
-  font-size: 11px;
-  color: var(--text-secondary, #aaa);
-  text-align: center;
-  margin-bottom: 12px;
-  padding: 8px 10px;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.15);
-  border-radius: 8px;
-  line-height: 1.5;
-}
-
-/* Light theme overrides for final step */
-[data-theme="light"] .tut-final-item {
-  background: #f3f4f6;
-}
-
-[data-theme="light"] .tut-final-item:hover {
-  background: rgba(99, 102, 241, 0.08);
-}
-
-[data-theme="light"] .tut-inline-key {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-}
-
-[data-theme="light"] .tut-final-tip {
-  background: rgba(99, 102, 241, 0.06);
-  border-color: rgba(99, 102, 241, 0.12);
 }

@@ -1,12 +1,17 @@
-// Promptory Onboarding Tutorial Module v12
+// Promptory Onboarding Tutorial Module v13
 // REWRITE — 4-panel overlay approach (no clip-path z-index issues)
-// Flow: Create prompt -> Settings -> Quick Insert -> Select slot -> Save -> Use hotkey -> Library teaser
-// KEY FIX v12: Modal-aware z-index layering.
-// When the target element is inside a modal (e.g. prompt editor, settings),
-// the modal-overlay is raised above the base tutorial panels, then
-// "inside-modal" panels are layered ON TOP of the raised modal to create
-// the dark surround. This ensures the highlighted element inside the modal
-// is ALWAYS visible and clickable, never hidden behind the overlay.
+// Flow: Create prompt -> Favorites -> Folders -> Edit -> Settings -> Hotkeys -> Final
+// KEY FIX v13:
+// 1. Modal-aware z-index layering (from v12).
+// 2. Fixed state persistence: only saves progress on SUCCESSFUL step completion,
+//    marks complete ONLY when user clicks "Finish" on final step or "Skip".
+//    On popup reopen, resumes from last completed step (not current step).
+// 3. Fixed memory leaks: _waitForEl uses setTimeout instead of RAF spin-loop,
+//    all cleanup paths properly release ResizeObserver and event listeners.
+// 4. Fixed folder creation: waitForTab properly waits for tab content to render.
+// 5. Final step: simple checkmark with "Get Started" button.
+// 6. Removed duplicate _renderFinalStep method.
+//
 // Z-index stack: base panels (9998) < modal raised (10001/10002) <
 //   inside-modal panels (10003) < spotlight (10004) < tooltip (10005).
 
@@ -15,7 +20,7 @@
 
 const DEBUG = false;
 function log(...args) {
-  if (DEBUG) console.log('[Tutorial v12]', ...args);
+  if (DEBUG) console.log('[Tutorial v13]', ...args);
 }
 
 // ==================== STEP DEFINITIONS ====================
@@ -205,54 +210,9 @@ function buildSteps() {
       icon: 'save',
       badge: { en: 'SAVE', ru: 'СОХРАНЕНИЕ' }
     },
-    // === STEP 13: Show the hotkey to use ===
+    // === STEP 13: Final — You're Ready! ===
     {
       id: 13,
-      title: { en: 'Try Your Hotkey!', ru: 'Попробуйте горячую клавишу!' },
-      description: {
-        en: `Now go to any AI chat (ChatGPT, Claude, Gemini...) and press {hotkey} to instantly insert your prompt!`,
-        ru: `Теперь перейдите в любой AI-чат (ChatGPT, Claude, Gemini...) и нажмите {hotkey} для мгновенной вставки промпта!`
-      },
-      target: null,
-      action: 'info',
-      tooltipPosition: 'center',
-      icon: 'hotkey',
-      badge: { en: 'MAIN FEATURE', ru: 'ГЛАВНАЯ ФУНКЦИЯ' },
-      isPrimary: true,
-      dynamic: true
-    },
-    // === STEP 14: Search mention ===
-    {
-      id: 14,
-      title: { en: 'Quick Search', ru: 'Быстрый поиск' },
-      description: {
-        en: 'Use the search bar to find prompts by title, tags, or text. You can also use Alt+S on any AI site for an instant search overlay!',
-        ru: 'Используйте строку поиска для поиска промптов по названию, тегам или тексту. А ещё можно нажать Alt+S на любом AI-сайте для мгновенного поиска!'
-      },
-      target: '#search-input',
-      action: 'observe',
-      tooltipPosition: 'bottom',
-      icon: 'search',
-      badge: { en: 'SEARCH', ru: 'ПОИСК' },
-      switchTab: 'prompts'
-    },
-    // === STEP 15: Library teaser ===
-    {
-      id: 15,
-      title: { en: 'Explore the Library', ru: 'Откройте Библиотеку' },
-      description: {
-        en: 'Discover ready-made prompts from the community in the Library tab. Sign in to browse, save, and share prompts!',
-        ru: 'Откройте готовые промпты от сообщества во вкладке Библиотека. Войдите в аккаунт, чтобы просматривать, сохранять и делиться промптами!'
-      },
-      target: '[data-tab="explore"]',
-      action: 'observe',
-      tooltipPosition: 'bottom',
-      icon: 'explore',
-      badge: { en: 'LIBRARY', ru: 'БИБЛИОТЕКА' }
-    },
-    // === STEP 16: Final ===
-    {
-      id: 16,
       title: { en: 'You\'re Ready!', ru: 'Вы готовы!' },
       description: {
         en: 'final_custom',
@@ -279,27 +239,30 @@ const ICONS = {
   select: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
   search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>',
   explore: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
-  finish: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+  finish: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
 };
 
 // ==================== TUTORIAL CLASS ====================
 class OnboardingTutorial {
   constructor() {
     this.currentStep = 0;
-    this.panels = []; // 4 overlay panels (top, right, bottom, left)
+    this.panels = [];       // 4 overlay panels (top, right, bottom, left)
     this.fullOverlay = null; // Full overlay for info/final steps
     this.tooltip = null;
     this.spotlight = null;
     this.onComplete = null;
     this._cleanup = null;
     this._resizeObserver = null;
+    this._waitTimers = [];   // Track all setTimeout/RAF ids for cleanup
     this.steps = null;
     this.assignedHotkey = 'Alt+1';
     this.assignedSlot = 'slot1';
+    this._destroyed = false; // Guard against operations after destroy
   }
 
   // ==================== START ====================
   async start(onComplete) {
+    if (this._destroyed) return;
     this.onComplete = onComplete;
     this.steps = buildSteps();
 
@@ -307,7 +270,7 @@ class OnboardingTutorial {
     let resumeStep = 0;
     try {
       const stored = await new Promise(resolve => {
-        chrome.storage.local.get(['tutorialCurrentStep', 'onboardingTutorialComplete'], resolve);
+        chrome.storage.local.get(['tutorialLastCompletedStep', 'onboardingTutorialComplete'], resolve);
       });
       if (stored.onboardingTutorialComplete) {
         // Tutorial already completed — don't restart
@@ -315,16 +278,24 @@ class OnboardingTutorial {
         if (this.onComplete) this.onComplete();
         return;
       }
-      if (typeof stored.tutorialCurrentStep === 'number' && stored.tutorialCurrentStep > 0) {
-        resumeStep = stored.tutorialCurrentStep;
-        log('Resuming tutorial from step', resumeStep);
+      // Resume from the step AFTER the last completed one
+      if (typeof stored.tutorialLastCompletedStep === 'number' && stored.tutorialLastCompletedStep >= 0) {
+        resumeStep = stored.tutorialLastCompletedStep + 1;
+        // Clamp to valid range
+        if (resumeStep >= this.steps.length) {
+          // All steps were completed but _finish wasn't called (popup closed on final step)
+          this._markComplete();
+          if (this.onComplete) this.onComplete();
+          return;
+        }
+        log('Resuming tutorial from step', resumeStep, '(last completed:', stored.tutorialLastCompletedStep, ')');
       }
     } catch (e) {
       log('Could not read tutorial state:', e);
     }
     this.currentStep = resumeStep;
 
-    log('=== STARTING TUTORIAL v12 (9 steps) ===');
+    log(`=== STARTING TUTORIAL v13 (${this.steps.length} steps) ===`);
 
     // Create 4 overlay panels
     const panelNames = ['top', 'right', 'bottom', 'left'];
@@ -357,27 +328,49 @@ class OnboardingTutorial {
 
     // Fade in panels
     await this._raf();
+    if (this._destroyed) return;
     this.panels.forEach(p => p.classList.add('tut-visible'));
     await this._wait(300);
 
-    // Handle resize
-    this._resizeObserver = new ResizeObserver(() => this._repositionCurrent());
+    // Handle resize — debounced to avoid excessive recalculation
+    let resizeTimer = null;
+    this._resizeObserver = new ResizeObserver(() => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => this._repositionCurrent(), 100);
+    });
     this._resizeObserver.observe(document.body);
 
     await this._showStep(resumeStep);
   }
 
-  // ==================== SAVE TUTORIAL PROGRESS ====================
-  _saveProgress(stepIndex) {
+  // ==================== SAVE PROGRESS ====================
+  // Save the index of the last SUCCESSFULLY COMPLETED step
+  _saveCompletedStep(stepIndex) {
     try {
-      chrome.storage.local.set({ tutorialCurrentStep: stepIndex });
+      chrome.storage.local.set({ tutorialLastCompletedStep: stepIndex });
+      log('Saved completed step:', stepIndex);
     } catch (e) {
       log('Failed to save tutorial progress:', e);
     }
   }
 
+  // Mark the entire tutorial as complete
+  _markComplete() {
+    try {
+      chrome.storage.local.set({
+        onboardingTutorialComplete: true,
+        tutorialLastCompletedStep: -1 // Reset
+      });
+      // Also clean up old key if it exists
+      chrome.storage.local.remove('tutorialCurrentStep');
+    } catch (e) {
+      log('Failed to mark tutorial complete:', e);
+    }
+  }
+
   // ==================== SHOW STEP ====================
   async _showStep(index) {
+    if (this._destroyed) return;
     if (index >= this.steps.length) {
       this._finish();
       return;
@@ -385,7 +378,6 @@ class OnboardingTutorial {
 
     const step = this.steps[index];
     this.currentStep = index;
-    this._saveProgress(index);
     log(`Step ${step.id}/${this.steps.length}: ${step.title.en}`);
 
     // Cleanup previous step
@@ -393,7 +385,8 @@ class OnboardingTutorial {
 
     // Hide tooltip during transition
     this.tooltip.classList.remove('tut-visible');
-    await this._wait(200);
+    await this._wait(150);
+    if (this._destroyed) return;
 
     // Switch tab if needed
     if (step.switchTab) {
@@ -401,19 +394,39 @@ class OnboardingTutorial {
       if (tabBtn) {
         tabBtn.click();
         await this._wait(200);
+        if (this._destroyed) return;
       }
+    }
+
+    // Wait for tab content to render (for steps that depend on tab being active)
+    if (step.waitForTab) {
+      const tabContent = document.getElementById(`${step.waitForTab}-tab`);
+      if (tabContent && !tabContent.classList.contains('active')) {
+        const tabBtn = document.querySelector(`[data-tab="${step.waitForTab}"]`);
+        if (tabBtn) {
+          tabBtn.click();
+          await this._wait(300);
+          if (this._destroyed) return;
+        }
+      }
+      // Wait a bit for the tab content to render
+      await this._wait(200);
+      if (this._destroyed) return;
     }
 
     // Wait for settings modal if needed
     if (step.waitForSettings) {
       log('Waiting for settings modal...');
       const settingsModal = await this._waitForEl('#settings-modal.visible', 5000);
+      if (this._destroyed) return;
       if (!settingsModal) {
         log('Settings modal not found, skipping');
+        this._saveCompletedStep(index);
         this._nextStep();
         return;
       }
       await this._wait(400);
+      if (this._destroyed) return;
     }
 
     // Find target element
@@ -425,6 +438,7 @@ class OnboardingTutorial {
         log(`Waiting for target: ${step.target}`);
         const waitSelector = step.waitForPrompt ? '.prompt-card:first-child' : step.target;
         await this._waitForEl(waitSelector, 10000);
+        if (this._destroyed) return;
         target = document.querySelector(step.target);
         if (!target && step.waitForPrompt) {
           target = document.querySelector('.prompt-card:first-child');
@@ -433,7 +447,9 @@ class OnboardingTutorial {
 
       if (!target) {
         log(`Target ${step.target} not found, auto-advancing`);
-        setTimeout(() => this._nextStep(), 1500);
+        this._saveCompletedStep(index);
+        const tid = setTimeout(() => this._nextStep(), 1500);
+        this._waitTimers.push(tid);
         return;
       }
     }
@@ -441,6 +457,7 @@ class OnboardingTutorial {
     // Scroll to target inside settings modal if needed
     if (step.scrollInSettings && target) {
       await this._smoothScrollInSettings(target);
+      if (this._destroyed) return;
     }
 
     // Scroll save button into view
@@ -449,12 +466,14 @@ class OnboardingTutorial {
       if (footer) {
         footer.scrollIntoView({ behavior: 'smooth', block: 'center' });
         await this._wait(500);
+        if (this._destroyed) return;
       }
     }
 
     // Render tooltip content
     this.tooltip.innerHTML = this._renderTooltip(step);
     await this._raf();
+    if (this._destroyed) return;
 
     // Position spotlight and tooltip
     if (target) {
@@ -472,31 +491,38 @@ class OnboardingTutorial {
 
     // Show tooltip with animation
     await this._raf();
+    if (this._destroyed) return;
     this.tooltip.classList.add('tut-visible');
 
     // Auto-fill prompt editor
     if (step.autoFill) {
-      setTimeout(() => this._autoFillPrompt(), 350);
+      const tid = setTimeout(() => this._autoFillPrompt(), 350);
+      this._waitTimers.push(tid);
     }
 
     // Auto-fill folder name
     if (step.autoFillFolder) {
-      setTimeout(() => this._autoFillFolder(), 350);
+      const tid = setTimeout(() => this._autoFillFolder(), 350);
+      this._waitTimers.push(tid);
     }
 
     // Auto-select folder in editor
     if (step.autoSelectFolder) {
-      setTimeout(() => this._autoSelectFolder(), 350);
+      const tid = setTimeout(() => this._autoSelectFolder(), 350);
+      this._waitTimers.push(tid);
     }
 
     // Auto-open dropdown
     if (step.autoOpenDropdown && target) {
-      setTimeout(() => {
+      const tid = setTimeout(() => {
+        if (this._destroyed) return;
         log('Auto-opening dropdown');
         target.focus();
         target.classList.add('tut-dropdown-flash');
-        setTimeout(() => target.classList.remove('tut-dropdown-flash'), 600);
+        const tid2 = setTimeout(() => target.classList.remove('tut-dropdown-flash'), 600);
+        this._waitTimers.push(tid2);
       }, 500);
+      this._waitTimers.push(tid);
     }
 
     // Setup interaction
@@ -526,14 +552,6 @@ class OnboardingTutorial {
       ? `<div class="tut-badge${isPrimary ? ' tut-badge-primary' : ''}">${step.badge[lang] || step.badge.en}</div>`
       : '';
 
-    let hotkeyVisualHtml = '';
-    if (step.id === 13) {
-      const keys = this.assignedHotkey.split('+');
-      hotkeyVisualHtml = `<div class="tut-hotkey-visual">
-        ${keys.map(k => `<span class="tut-key">${k.trim()}</span>`).join('<span class="tut-key-plus">+</span>')}
-      </div>`;
-    }
-
     return `
       <div class="tut-content">
         <div class="tut-header">
@@ -542,13 +560,12 @@ class OnboardingTutorial {
         </div>
         ${icon ? `<div class="tut-icon${isPrimary ? ' tut-icon-primary' : ''}">${icon}</div>` : ''}
         ${badgeHtml}
-        ${hotkeyVisualHtml}
         <div class="tut-title">${step.title[lang] || step.title.en}</div>
         <div class="tut-desc">${description}</div>
         ${step.action === 'observe' || step.action === 'info' ? `
           <button class="tut-btn-next" id="tut-next">${lang === 'ru' ? 'Далее' : 'Next'}</button>
         ` : ''}
-        ${!isFinal ? `<div class="tut-progress"><div class="tut-progress-bar" style="width:${(step.id / total) * 100}%"></div></div>` : ''}
+        <div class="tut-progress"><div class="tut-progress-bar" style="width:${(step.id / total) * 100}%"></div></div>
       </div>
     `;
   }
@@ -558,26 +575,21 @@ class OnboardingTutorial {
     const isRu = lang === 'ru';
     return `
       <div class="tut-content tut-final-content">
-        <div class="tut-step-num">${total}/${total}</div>
-        <div class="tut-icon tut-icon-primary">${ICONS.finish}</div>
-        <div class="tut-badge tut-badge-primary">${isRu ? 'ГОТОВО' : 'COMPLETE'}</div>
-        <div class="tut-title">${isRu ? 'Вы готовы!' : "You're Ready!"}</div>
-        <div class="tut-desc">
+        <div class="tut-step-num" style="text-align:center;margin:0 auto 12px;">${total}/${total}</div>
+        <div class="tut-icon tut-icon-primary tut-icon-finish">${ICONS.finish}</div>
+        <div class="tut-title" style="text-align:center;">${isRu ? 'Вы готовы!' : "You're Ready!"}</div>
+        <div class="tut-desc" style="text-align:center;">
           ${isRu
-            ? 'Вы настроили Promptory! Вот что вы умеете:<br><br>' +
-              '• <strong>Alt+1/2/3</strong> — мгновенная вставка промптов<br>' +
-              '• <strong>Alt+S</strong> — быстрый поиск на любом AI-сайте<br>' +
-              '• <strong>Папки и теги</strong> — организация промптов<br>' +
-              '• <strong>Библиотека</strong> — промпты от сообщества<br><br>' +
+            ? 'Вы настроили Promptory!<br><br>' +
+              '<strong>Alt+1/2/3</strong> — мгновенная вставка промптов<br>' +
+              '<strong>Alt+S</strong> — быстрый поиск на любом AI-сайте<br><br>' +
               'Удачной работы с AI!'
-            : "You've set up Promptory! Here's what you can do:<br><br>" +
-              '• <strong>Alt+1/2/3</strong> — instant prompt insertion<br>' +
-              '• <strong>Alt+S</strong> — quick search on any AI site<br>' +
-              '• <strong>Folders & tags</strong> — organize your prompts<br>' +
-              '• <strong>Library</strong> — community prompts<br><br>' +
+            : "You've set up Promptory!<br><br>" +
+              '<strong>Alt+1/2/3</strong> — instant prompt insertion<br>' +
+              '<strong>Alt+S</strong> — quick search on any AI site<br><br>' +
               'Happy prompting!'}
         </div>
-        <button class="tut-btn-next tut-btn-finish" id="tut-finish">${isRu ? 'Начать работу' : 'Get Started'}</button>
+        <button class="tut-btn-finish" id="tut-finish">${isRu ? 'Начать работу' : 'Get Started'}</button>
         <div class="tut-progress"><div class="tut-progress-bar" style="width:100%"></div></div>
       </div>
     `;
@@ -602,63 +614,34 @@ class OnboardingTutorial {
     const isInsideModal = !!modalOverlay;
 
     if (isInsideModal) {
-      // MODAL-AWARE MODE:
-      // 1. Raise the modal-overlay above base tutorial panels
       modalOverlay.classList.add('tut-modal-raised');
-      // 2. Switch panels to inside-modal mode (z-index above the raised modal)
       this.panels.forEach(p => p.classList.add('tut-inside-modal'));
       log('Target is inside modal — using raised modal z-index');
     } else {
-      // Normal mode — remove any previous modal-raised classes
       this.panels.forEach(p => p.classList.remove('tut-inside-modal'));
     }
 
     // Position the 4 panels around the hole
-    // Top panel: full width, from top of screen to top of hole
     const [panelTop, panelRight, panelBottom, panelLeft] = this.panels;
 
-    panelTop.style.left = '0';
-    panelTop.style.top = '0';
-    panelTop.style.width = `${vw}px`;
-    panelTop.style.height = `${holeTop}px`;
+    panelTop.style.cssText = `left:0;top:0;width:${vw}px;height:${holeTop}px`;
+    panelRight.style.cssText = `left:${holeRight}px;top:${holeTop}px;width:${vw - holeRight}px;height:${holeBottom - holeTop}px`;
+    panelBottom.style.cssText = `left:0;top:${holeBottom}px;width:${vw}px;height:${vh - holeBottom}px`;
+    panelLeft.style.cssText = `left:0;top:${holeTop}px;width:${holeLeft}px;height:${holeBottom - holeTop}px`;
 
-    // Right panel: from right of hole to right of screen, from top of hole to bottom of hole
-    panelRight.style.left = `${holeRight}px`;
-    panelRight.style.top = `${holeTop}px`;
-    panelRight.style.width = `${vw - holeRight}px`;
-    panelRight.style.height = `${holeBottom - holeTop}px`;
-
-    // Bottom panel: full width, from bottom of hole to bottom of screen
-    panelBottom.style.left = '0';
-    panelBottom.style.top = `${holeBottom}px`;
-    panelBottom.style.width = `${vw}px`;
-    panelBottom.style.height = `${vh - holeBottom}px`;
-
-    // Left panel: from left of screen to left of hole, from top of hole to bottom of hole
-    panelLeft.style.left = '0';
-    panelLeft.style.top = `${holeTop}px`;
-    panelLeft.style.width = `${holeLeft}px`;
-    panelLeft.style.height = `${holeBottom - holeTop}px`;
-
-    // The target element itself is not covered by any panel — it's in the "hole".
-    // Raise it above the panels so it's fully interactive.
+    // Raise the target above the panels
     element.classList.add('tut-target-active');
     if (!isInsideModal) {
       this._ensureAncestorStacking(element);
     }
 
-    // If target is a prompt-card or contains one, force actions visible
+    // Force action buttons visible on prompt/folder cards
     const promptCard = element.closest('.prompt-card') || element.querySelector('.prompt-card');
-    if (promptCard) {
-      promptCard.classList.add('tut-actions-visible');
-    }
-    // Also for folder cards
+    if (promptCard) promptCard.classList.add('tut-actions-visible');
     const folderCard = element.closest('.folder-card') || element.querySelector('.folder-card');
-    if (folderCard) {
-      folderCard.classList.add('tut-actions-visible');
-    }
+    if (folderCard) folderCard.classList.add('tut-actions-visible');
 
-    // Position spotlight ring around the hole
+    // Position spotlight ring
     this.spotlight.style.display = 'block';
     this.spotlight.style.left = `${holeLeft}px`;
     this.spotlight.style.top = `${holeTop}px`;
@@ -673,7 +656,6 @@ class OnboardingTutorial {
     while (el && el !== document.body && el !== document.documentElement) {
       const style = getComputedStyle(el);
       const pos = style.position;
-      // Only raise ancestors that actually create a stacking context
       if (pos === 'relative' || pos === 'absolute' || pos === 'fixed' || pos === 'sticky') {
         const currentZ = parseInt(style.zIndex, 10);
         if (isNaN(currentZ) || currentZ < 9999) {
@@ -696,17 +678,14 @@ class OnboardingTutorial {
   }
 
   _hidePanels() {
-    this.panels.forEach(p => {
-      p.style.display = 'none';
-    });
+    this.panels.forEach(p => { p.style.display = 'none'; });
   }
 
   _showFullOverlay() {
     if (this.fullOverlay) {
       this.fullOverlay.style.display = '';
-      // Delay to allow display change before opacity transition
       requestAnimationFrame(() => {
-        this.fullOverlay.classList.add('tut-visible');
+        if (!this._destroyed) this.fullOverlay.classList.add('tut-visible');
       });
     }
   }
@@ -717,7 +696,6 @@ class OnboardingTutorial {
 
   // ==================== POSITION TOOLTIP ====================
   _positionTooltip(element, preferred = 'bottom') {
-    // Need to measure tooltip first
     this.tooltip.style.visibility = 'hidden';
     this.tooltip.style.display = 'block';
     const tooltipRect = this.tooltip.getBoundingClientRect();
@@ -726,7 +704,7 @@ class OnboardingTutorial {
     const elRect = element.getBoundingClientRect();
     const vw = window.innerWidth || 400;
     const vh = window.innerHeight || 600;
-    const gap = 16; // Increased gap to prevent overlap
+    const gap = 16;
     const margin = 8;
 
     let top, left;
@@ -735,50 +713,38 @@ class OnboardingTutorial {
       case 'top':
         top = elRect.top - tooltipRect.height - gap;
         left = elRect.left + elRect.width / 2 - tooltipRect.width / 2;
-        // If tooltip would go above viewport, flip to bottom
-        if (top < margin) {
-          top = elRect.bottom + gap;
-        }
+        if (top < margin) top = elRect.bottom + gap;
         break;
       case 'right':
         top = elRect.top + elRect.height / 2 - tooltipRect.height / 2;
         left = elRect.right + gap;
-        if (left + tooltipRect.width > vw - margin) {
-          left = elRect.left - tooltipRect.width - gap;
-        }
+        if (left + tooltipRect.width > vw - margin) left = elRect.left - tooltipRect.width - gap;
         break;
       case 'left':
         top = elRect.top + elRect.height / 2 - tooltipRect.height / 2;
         left = elRect.left - tooltipRect.width - gap;
-        if (left < margin) {
-          left = elRect.right + gap;
-        }
+        if (left < margin) left = elRect.right + gap;
         break;
       default: // bottom
         top = elRect.bottom + gap;
         left = elRect.left + elRect.width / 2 - tooltipRect.width / 2;
-        // If tooltip would go below viewport, flip to top
-        if (top + tooltipRect.height > vh - margin) {
-          top = elRect.top - tooltipRect.height - gap;
-        }
+        if (top + tooltipRect.height > vh - margin) top = elRect.top - tooltipRect.height - gap;
     }
 
     // Clamp to viewport
     left = Math.max(margin, Math.min(left, vw - tooltipRect.width - margin));
     top = Math.max(margin, Math.min(top, vh - tooltipRect.height - margin));
 
-    // Final overlap check: if tooltip still overlaps target, push it away
+    // Overlap check
     const tooltipBottom = top + tooltipRect.height;
     const tooltipRight = left + tooltipRect.width;
     if (top < elRect.bottom && tooltipBottom > elRect.top &&
         left < elRect.right && tooltipRight > elRect.left) {
-      // Overlap detected — push tooltip below or above with extra gap
       if (elRect.bottom + gap + tooltipRect.height <= vh - margin) {
         top = elRect.bottom + gap;
       } else if (elRect.top - gap - tooltipRect.height >= margin) {
         top = elRect.top - tooltipRect.height - gap;
       }
-      // If still overlapping horizontally, push to the right
       left = Math.max(margin, Math.min(elRect.right + gap, vw - tooltipRect.width - margin));
     }
 
@@ -818,26 +784,26 @@ class OnboardingTutorial {
     const nextBtn = document.getElementById('tut-next');
     if (nextBtn) {
       nextBtn.addEventListener('click', () => {
+        this._saveCompletedStep(this.currentStep);
         this._nextStep();
       });
     }
 
     if (!target) return;
 
-    // The target is in the "hole" between panels — it's already fully clickable.
-    // We just need to listen for the interaction event.
-
     if (step.action === 'click') {
       const handler = () => {
         target.removeEventListener('click', handler);
         log('Click on target, advancing');
-        setTimeout(() => this._nextStep(), 400);
+        this._saveCompletedStep(this.currentStep);
+        const tid = setTimeout(() => this._nextStep(), 400);
+        this._waitTimers.push(tid);
       };
       target.addEventListener('click', handler);
       this._cleanup = () => target.removeEventListener('click', handler);
     }
     else if (step.action === 'change') {
-      const handler = (e) => {
+      const handler = () => {
         target.removeEventListener('change', handler);
         log('Selection changed, value:', target.value);
 
@@ -851,7 +817,9 @@ class OnboardingTutorial {
           });
         }
 
-        setTimeout(() => this._nextStep(), 500);
+        this._saveCompletedStep(this.currentStep);
+        const tid = setTimeout(() => this._nextStep(), 500);
+        this._waitTimers.push(tid);
       };
       target.addEventListener('change', handler);
       this._cleanup = () => target.removeEventListener('change', handler);
@@ -861,7 +829,7 @@ class OnboardingTutorial {
       const otherHandlers = [];
       allSlots.forEach(sel => {
         if (sel === target) return;
-        const h = (e) => {
+        const h = () => {
           allSlots.forEach(s => s.removeEventListener('change', h));
           target.removeEventListener('change', handler);
           const sid = sel.dataset.hotkeySlot;
@@ -870,7 +838,9 @@ class OnboardingTutorial {
           this._detectHotkey(sn).then(hotkey => {
             this.assignedHotkey = hotkey;
           });
-          setTimeout(() => this._nextStep(), 500);
+          this._saveCompletedStep(this.currentStep);
+          const tid = setTimeout(() => this._nextStep(), 500);
+          this._waitTimers.push(tid);
         };
         sel.addEventListener('change', h);
         otherHandlers.push({ el: sel, handler: h });
@@ -885,7 +855,9 @@ class OnboardingTutorial {
     else if (step.action === 'focus') {
       const handler = () => {
         target.removeEventListener('focus', handler);
-        setTimeout(() => this._nextStep(), 700);
+        this._saveCompletedStep(this.currentStep);
+        const tid = setTimeout(() => this._nextStep(), 700);
+        this._waitTimers.push(tid);
       };
       target.addEventListener('focus', handler);
       this._cleanup = () => target.removeEventListener('focus', handler);
@@ -929,6 +901,7 @@ class OnboardingTutorial {
 
   // ==================== AUTO-FILL PROMPT ====================
   _autoFillPrompt() {
+    if (this._destroyed) return;
     const titleInput = document.getElementById('pe-title');
     const textInput = document.getElementById('pe-text');
 
@@ -947,6 +920,7 @@ class OnboardingTutorial {
 
   // ==================== AUTO-FILL FOLDER ====================
   _autoFillFolder() {
+    if (this._destroyed) return;
     const nameInput = document.getElementById('fe-name');
     if (nameInput) {
       const lang = this._getLang();
@@ -958,20 +932,21 @@ class OnboardingTutorial {
 
   // ==================== AUTO-SELECT FOLDER IN EDITOR ====================
   _autoSelectFolder() {
+    if (this._destroyed) return;
     const folderSelect = document.getElementById('pe-folder');
     if (folderSelect && folderSelect.options.length > 1) {
-      // Select the first real folder (skip "No folder" option)
       folderSelect.selectedIndex = 1;
       folderSelect.dispatchEvent(new Event('change', { bubbles: true }));
-      // Flash the dropdown
       folderSelect.classList.add('tut-dropdown-flash');
-      setTimeout(() => folderSelect.classList.remove('tut-dropdown-flash'), 600);
+      const tid = setTimeout(() => folderSelect.classList.remove('tut-dropdown-flash'), 600);
+      this._waitTimers.push(tid);
       log('Auto-selected folder in editor');
     }
   }
 
   // ==================== REPOSITION ON RESIZE ====================
   _repositionCurrent() {
+    if (this._destroyed) return;
     if (this.currentStep >= this.steps.length) return;
     const step = this.steps[this.currentStep];
     if (!step || !step.target) return;
@@ -985,10 +960,15 @@ class OnboardingTutorial {
 
   // ==================== NAVIGATION ====================
   _nextStep() {
+    if (this._destroyed) return;
     this._showStep(this.currentStep + 1);
   }
 
   _cleanupStep() {
+    // Clear all pending timers
+    this._waitTimers.forEach(id => clearTimeout(id));
+    this._waitTimers = [];
+
     if (this._cleanup) {
       this._cleanup();
       this._cleanup = null;
@@ -1020,6 +1000,8 @@ class OnboardingTutorial {
 
   // ==================== FINISH ====================
   _finish() {
+    if (this._destroyed) return;
+    this._destroyed = true;
     log('=== CLOSING TUTORIAL ===');
     this._cleanupStep();
 
@@ -1035,55 +1017,27 @@ class OnboardingTutorial {
     if (this.spotlight) this.spotlight.style.display = 'none';
 
     // Remove elements after fade
-    setTimeout(() => {
+    const tid = setTimeout(() => {
       this.panels.forEach(p => p.remove());
+      this.panels = [];
       this.fullOverlay?.remove();
+      this.fullOverlay = null;
       this.tooltip?.remove();
+      this.tooltip = null;
       this.spotlight?.remove();
-      // Final cleanup
-      document.querySelectorAll('.tut-ancestor-raised').forEach(el => {
-        el.classList.remove('tut-ancestor-raised');
-      });
-      document.querySelectorAll('.tut-target-active').forEach(el => {
-        el.classList.remove('tut-target-active');
-      });
-      document.querySelectorAll('.tut-modal-raised').forEach(el => {
-        el.classList.remove('tut-modal-raised');
-      });
-      document.querySelectorAll('.tut-actions-visible').forEach(el => {
-        el.classList.remove('tut-actions-visible');
+      this.spotlight = null;
+      // Final cleanup of any leftover classes
+      document.querySelectorAll('.tut-ancestor-raised,.tut-target-active,.tut-modal-raised,.tut-actions-visible').forEach(el => {
+        el.classList.remove('tut-ancestor-raised', 'tut-target-active', 'tut-modal-raised', 'tut-actions-visible');
       });
     }, 400);
+    this._waitTimers.push(tid);
 
-    // Save completion and clear progress
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.set({ onboardingTutorialComplete: true, tutorialCurrentStep: 0 });
-    }
+    // Mark tutorial as complete
+    this._markComplete();
 
     if (this.onComplete) this.onComplete();
     log('Tutorial saved as complete');
-  }
-
-  // ==================== RENDER FINAL STEP ====================
-  _renderFinalStep(lang, total) {
-    const title = lang === 'ru' ? 'Вы готовы!' : "You're Ready!";
-    const desc = lang === 'ru'
-      ? 'Вы освоили все основные функции Promptory!\n\n• Создание и организация промптов\n• Быстрая вставка горячими клавишами\n• Поиск и библиотека\n\nПриятного использования!'
-      : 'You\'ve learned all the core features of Promptory!\n\n• Creating & organizing prompts\n• Quick Insert via hotkeys\n• Search & Library\n\nEnjoy using Promptory!';
-    const btnText = lang === 'ru' ? 'Начать работу' : 'Get Started';
-
-    return `
-      <div class="tut-content tut-final-content">
-        <div class="tut-header">
-          <div class="tut-step-num">${total}/${total}</div>
-        </div>
-        <div class="tut-icon tut-icon-primary">${ICONS.finish}</div>
-        <div class="tut-title">${title}</div>
-        <div class="tut-desc">${desc.replace(/\n/g, '<br>')}</div>
-        <button class="tut-btn-next tut-btn-finish" id="tut-finish">${btnText}</button>
-        <div class="tut-progress"><div class="tut-progress-bar" style="width:100%"></div></div>
-      </div>
-    `;
   }
 
   // ==================== UTILITIES ====================
@@ -1096,14 +1050,17 @@ class OnboardingTutorial {
     return navigator.language.startsWith('ru') ? 'ru' : 'en';
   }
 
+  // Wait for element using setTimeout polling (not RAF spin-loop) to prevent memory pressure
   _waitForEl(selector, timeoutMs = 10000) {
     return new Promise(resolve => {
       const start = Date.now();
       const check = () => {
+        if (this._destroyed) { resolve(null); return; }
         const el = document.querySelector(selector);
         if (el) { resolve(el); return; }
         if (Date.now() - start > timeoutMs) { resolve(null); return; }
-        requestAnimationFrame(check);
+        const tid = setTimeout(check, 100); // Check every 100ms instead of every frame
+        this._waitTimers.push(tid);
       };
       check();
     });
@@ -1114,7 +1071,10 @@ class OnboardingTutorial {
   }
 
   _wait(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => {
+      const tid = setTimeout(resolve, ms);
+      this._waitTimers.push(tid);
+    });
   }
 }
 
