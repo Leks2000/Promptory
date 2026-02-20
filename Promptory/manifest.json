@@ -100,7 +100,7 @@
     "128": "assets/icon-128.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com https://vofgfvlgchqheksvlibl.supabase.co; img-src 'self' https://vofgfvlgchqheksvlibl.supabase.co data:; worker-src 'self' blob:;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com https://vofgfvlgchqheksvlibl.supabase.co; img-src 'self' https://vofgfvlgchqheksvlibl.supabase.co data:; worker-src 'self';"
   },
   "web_accessible_resources": [
     {
