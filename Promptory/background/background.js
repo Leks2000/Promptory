@@ -5,7 +5,8 @@ importScripts('../config.js');
 
 const SUPABASE_URL = CONFIG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
-const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT || 25;
+const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT || 100;
+const GUEST_PROMPT_LIMIT = CONFIG.GUEST_PROMPT_LIMIT || 25;
 
 // ---------- Mixpanel HTTP API (lightweight, for service worker) ----------
 const MIXPANEL_TOKEN = 'c86143cd74824a2d516134f860745000';
@@ -82,7 +83,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       session: null,
       hasLaunched: false,
       isPremium: false,
-      promptLimit: FREE_PROMPT_LIMIT,
+      promptLimit: GUEST_PROMPT_LIMIT,
       language: null
     });
 
@@ -741,7 +742,7 @@ async function handleSignOut() {
       session: null,
       user: null,
       isPremium: false,
-      promptLimit: FREE_PROMPT_LIMIT,
+      promptLimit: GUEST_PROMPT_LIMIT,
       prompts: [],
       folders: [],
       libraryPromptsCache: [],
@@ -1091,7 +1092,7 @@ async function periodicSubscriptionCheck() {
       if (result) {
         const currentPremium = (await chrome.storage.local.get(['isPremium'])).isPremium;
         const newPremium = result.is_premium || false;
-        const newLimit = result.prompt_limit || FREE_PROMPT_LIMIT;
+        const newLimit = result.prompt_limit || FREE_PROMPT_LIMIT; // Logged-in user: 100
 
         await chrome.storage.local.set({
           isPremium: newPremium,

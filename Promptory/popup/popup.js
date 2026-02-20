@@ -123,15 +123,17 @@ async function loadImageIntoElement(imgEl, url) {
 function renderLimitBanner() {
   const existing = document.getElementById('limit-banner');
   if (existing) existing.remove();
-  if (state.isPremium || !state.user) return;
-  // Sanitize: if promptLimit is unreasonably high (e.g. 9999), treat as default 20
-  const effectiveLimit = (state.promptLimit > 0 && state.promptLimit <= 1000) ? state.promptLimit : FREE_PROMPT_LIMIT;
+  if (state.isPremium) return; // Pro users never see limit banner
+  const effectiveLimit = getEffectiveLimit();
+  if (effectiveLimit === Infinity) return;
   const remaining = Math.max(0, effectiveLimit - state.prompts.length);
   if (remaining > 5) return;
   const banner = document.createElement('div');
   banner.id = 'limit-banner';
   banner.className = 'limit-banner';
-  const upgradeBtn = `<button class="btn btn-sm btn-primary limit-upgrade-btn" id="limit-upgrade-btn">${t('upgrade') || 'Upgrade'}</button>`;
+  const tierLabel = state.user ? 'Free' : 'Guest';
+  const upgradeLabel = state.user ? (t('upgrade') || 'Upgrade') : (t('signInForMore') || 'Sign in for more');
+  const upgradeBtn = `<button class="btn btn-sm btn-primary limit-upgrade-btn" id="limit-upgrade-btn">${upgradeLabel}</button>`;
   banner.innerHTML = remaining === 0
     ? `<div class="limit-banner-content"><span class="limit-banner-text">${t('freeLimitBanner')}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${effectiveLimit}</span>${upgradeBtn}</div>`
     : `<div class="limit-banner-content"><span class="limit-banner-text">${t('remainingOnFree', remaining)}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${effectiveLimit}</span>${upgradeBtn}</div>`;
@@ -140,7 +142,18 @@ function renderLimitBanner() {
   
   // Add click handler for upgrade button
   document.getElementById('limit-upgrade-btn')?.addEventListener('click', () => {
-    showUpgradeModal();
+    if (state.user) {
+      showUpgradeModal();
+    } else {
+      // Guest user: prompt to sign in
+      P.openSettingsModal({
+        renderExplore, renderPrompts, renderFolders, renderFavorites,
+        renderLimitBanner, syncAllData, loadLibraryPrompts, checkPremiumStatus,
+        showUpgradeModal, loadAdminDashboard, loadPendingReports, renderModerationPanel,
+        parseCSVLine, setSuppressRender: (v) => { _suppressStorageRender = v; },
+        updateStaticTexts, FREE_PROMPT_LIMIT, SETTINGS_PROMPT_SELECT_LIMIT
+      });
+    }
   });
 }
 
@@ -649,6 +662,7 @@ async function insertPromptToPage(id) {
     showToast(t('promptInserted'), 'success');
     // Analytics: track prompt insertion
     P.analyticsTrackPromptInserted(p, new URL(tab.url || '').hostname.replace('www.', '') || 'unknown');
+    P.analyticsTrackPromptUsed(p, new URL(tab.url || '').hostname.replace('www.', '') || 'unknown');
     // In-place update instead of full re-render
     updatePromptCardUseCount(id, p.useCount);
     const platform = new URL(tab.url || '').hostname.replace('www.', '') || 'unknown';
@@ -844,6 +858,7 @@ async function deletePrompt(id) {
   showToast(t('promptDeleted'), 'success');
   // Analytics: track prompt deleted
   P.analyticsTrackPromptDeleted(id);
+  P.analyticsTrackPromptDeletedEvent(id);
   renderPrompts();
   renderFavorites();
   syncPromptDeleteToSupabase(id);
@@ -1140,8 +1155,11 @@ function openFolderEditor(folderId = null) {
   P.analyticsTrackFolderEditorOpen(isEdit, folderId);
   
   // Free tier folder limit (only for new folders, not editing)
-  if (!isEdit && !state.isPremium && state.folders.length >= (CONFIG.FREE_FOLDER_LIMIT || 5)) {
-    showToast(t('folderLimitReached') || `Free plan: max ${CONFIG.FREE_FOLDER_LIMIT || 5} folders. Upgrade to Premium for unlimited.`, 'error');
+  if (!isEdit && !P.canCreateFolder()) {
+    const folderLimit = P.getEffectiveFolderLimit();
+    showToast(t('folderLimitReached') || `Folder limit reached (${folderLimit}). Upgrade for more.`, 'error');
+    // Track limit hit
+    P.analyticsTrackLimitHit('folders');
     return;
   }
   
@@ -1163,7 +1181,7 @@ function openFolderEditor(folderId = null) {
     // Clear folder draft on save
     try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
     if (folderId) { const f = state.folders.find(x => x.id === folderId); if (f) { f.name = name; f.updatedAt = Date.now(); syncFolderToSupabase(f); P.analyticsTrackFolderUpdated(f); } }
-    else { const newF = { id: crypto.randomUUID(), name, createdAt: Date.now(), updatedAt: Date.now() }; state.folders.push(newF); syncFolderToSupabase(newF); P.analyticsTrackFolderCreated(newF); }
+    else { const newF = { id: crypto.randomUUID(), name, createdAt: Date.now(), updatedAt: Date.now() }; state.folders.push(newF); syncFolderToSupabase(newF); P.analyticsTrackFolderCreated(newF); P.analyticsTrackFolderCreatedEvent(newF); }
     _suppressStorageRender = true;
     await saveData('folders', state.folders);
     _suppressStorageRender = false;
@@ -1469,7 +1487,7 @@ function renderExplore() {
       if (!state.user) { showToast(t('signInToSave') || 'Sign in to save prompts', 'error'); return; }
       const id = saveBtn.dataset.exploreSave; 
       if (state.prompts.some(p => p.sourceId === id)) { showToast(t('alreadyInLibrary'), 'error'); return; } 
-      if (!canCreatePrompt()) { showToast(t('freeLimitReached', getEffectiveLimit()), 'error'); return; } 
+      if (!canCreatePrompt()) { showToast(t('freeLimitReached', getEffectiveLimit()), 'error'); P.analyticsTrackLimitHit('prompts'); return; } 
       const ep = state.libraryPrompts.find(x => x.id === id); 
       if (!ep) return; 
       state.prompts.unshift({ id: crypto.randomUUID(), sourceId: id, title: ep.title, text: ep.text, description: `From ${ep.author}`, tags: ep.tags || [], folderId: null, platform: 'universal', variables: [], isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() }); 
@@ -1708,7 +1726,7 @@ function renderStats() {
     <div class="stats-section"><div class="stats-section-title">${t('mostUsedPrompts')}</div>${topPrompts.length > 0 ? topPrompts.map((p, i) => `<div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 30))}</span><span class="top-prompt-uses">${p.useCount} ${t('uses')}</span></div>`).join('') : `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:8px 0;">${t('noUsageData')}</div>`}</div>
     ${platforms.length > 0 ? `<div class="stats-section"><div class="stats-section-title">${t('usageByPlatform')}</div><div class="platform-stats">${platforms.map(([name, count]) => `<div class="platform-stat-row"><span class="platform-stat-name">${escapeHtml(name)}</span><div class="platform-stat-bar-bg"><div class="platform-stat-bar" style="width:${(count / maxPlatform) * 100}%;"></div></div><span class="platform-stat-count">${count}</span></div>`).join('')}</div></div>` : ''}
     ${topTags.length > 0 ? `<div class="stats-section"><div class="stats-section-title">${t('topTags')}</div><div class="tags" style="flex-wrap:wrap;">${topTags.map(([tag, count]) => `<span class="tag">#${escapeHtml(tag)} (${count})</span>`).join('')}</div></div>` : ''}
-    ${!state.isPremium && state.user ? `<div class="stats-section" style="border-color:rgba(var(--accent-rgb),0.3);"><div class="stats-section-title">${t('freePlan')}</div><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">${t('promptsUsed', state.prompts.length, getEffectiveLimit())}<div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;"><div style="height:100%;width:${Math.min((state.prompts.length / getEffectiveLimit()) * 100, 100)}%;background:${state.prompts.length >= getEffectiveLimit() ? 'var(--error)' : 'var(--accent-gradient)'};border-radius:var(--radius-full);transition:width 500ms var(--ease-out-expo);"></div></div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">${t('upgradeInfo')}</div></div></div>` : ''}
+    ${!state.isPremium ? `<div class="stats-section" style="border-color:rgba(var(--accent-rgb),0.3);"><div class="stats-section-title">${state.user ? t('freePlan') : (t('guestPlan') || 'Guest Plan')}</div><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">${t('promptsUsed', state.prompts.length, getEffectiveLimit())}<div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;"><div style="height:100%;width:${Math.min((state.prompts.length / getEffectiveLimit()) * 100, 100)}%;background:${state.prompts.length >= getEffectiveLimit() ? 'var(--error)' : 'var(--accent-gradient)'};border-radius:var(--radius-full);transition:width 500ms var(--ease-out-expo);"></div></div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">${state.user ? t('upgradeInfo') : (t('signInForMoreInfo') || 'Sign in with Google for 100 prompts, or upgrade to Pro for unlimited.')}</div></div></div>` : ''}
   </div>`;
 }
 
@@ -2211,7 +2229,7 @@ function showUpgradeModal() {
   modal.className = 'modal-overlay';
   modal.id = 'upgrade-modal';
   modal.innerHTML = `
-    <div class="modal" style="max-width:420px;">
+    <div class="modal" style="max-width:460px;">
       <div class="modal-header"><h2 class="modal-title">${t('upgradeToPremium')}</h2><button class="btn btn-icon btn-ghost close-modal-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div class="upgrade-hero-compact">
@@ -2230,7 +2248,23 @@ function showUpgradeModal() {
           <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature4')}</span></div>
         </div>
         ${hasCheckoutUrl ? `
-        <button class="btn btn-primary btn-lg ripple upgrade-cta-btn" id="upgrade-buy-btn">
+        <!-- Pricing Plans -->
+        <div class="upgrade-pricing" style="display:flex;flex-direction:column;gap:8px;margin:16px 0;">
+          <div class="upgrade-plan" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;" data-plan="monthly">
+            <div><div style="font-weight:600;font-size:14px;">${t('planMonthly') || 'Monthly'}</div><div style="font-size:12px;color:var(--text-tertiary);">${t('planMonthlyDesc') || 'Billed monthly'}</div></div>
+            <div style="font-weight:700;font-size:18px;color:var(--accent);">$${CONFIG.PRICE_MONTHLY}</div>
+          </div>
+          <div class="upgrade-plan" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border:2px solid var(--accent);border-radius:var(--radius-md);cursor:pointer;position:relative;" data-plan="yearly">
+            <div style="position:absolute;top:-8px;right:12px;background:var(--accent);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">${t('bestValue') || 'BEST VALUE'}</div>
+            <div><div style="font-weight:600;font-size:14px;">${t('planYearly') || 'Yearly'}</div><div style="font-size:12px;color:var(--text-tertiary);">${t('planYearlyDesc') || '$2.08/month'}</div></div>
+            <div style="font-weight:700;font-size:18px;color:var(--accent);">$${CONFIG.PRICE_YEARLY}</div>
+          </div>
+          <div class="upgrade-plan" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;" data-plan="lifetime">
+            <div><div style="font-weight:600;font-size:14px;">${t('planLifetime') || 'Lifetime'}</div><div style="font-size:12px;color:var(--text-tertiary);">${t('planLifetimeDesc') || 'One-time payment'}</div></div>
+            <div style="font-weight:700;font-size:18px;color:var(--accent);">$${CONFIG.PRICE_LIFETIME}</div>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-lg ripple upgrade-cta-btn" id="upgrade-buy-btn" style="width:100%;justify-content:center;gap:6px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           ${t('upgradeToPro')}
         </button>` : `
@@ -2255,19 +2289,33 @@ function showUpgradeModal() {
   document.body.appendChild(modal);
   setTimeout(() => modal.classList.add('visible'), 10);
   
-  // LemonSqueezy checkout
-document.getElementById('upgrade-buy-btn')?.addEventListener('click', () => {
-  const checkoutUrl = generateUniqueCheckoutUrl(
-    CONFIG.LEMONSQUEEZY_CHECKOUT_URL,
-    state.user?.email,
-    state.user?.id
-  );
+  // Plan selection highlighting
+  let selectedPlan = 'yearly'; // Default to best value
+  const plans = modal.querySelectorAll('.upgrade-plan');
+  plans.forEach(plan => {
+    plan.addEventListener('click', () => {
+      selectedPlan = plan.dataset.plan;
+      plans.forEach(p => {
+        p.style.borderColor = p.dataset.plan === selectedPlan ? 'var(--accent)' : 'var(--border)';
+        p.style.borderWidth = p.dataset.plan === selectedPlan ? '2px' : '1px';
+      });
+    });
+  });
   
-  console.log('🛒 Opening checkout:', checkoutUrl);
-  // Analytics: track checkout click
-  P.analyticsTrackCheckoutClick();
-  window.open(checkoutUrl, '_blank');
-});
+  // LemonSqueezy checkout
+  document.getElementById('upgrade-buy-btn')?.addEventListener('click', () => {
+    const checkoutUrl = generateUniqueCheckoutUrl(
+      CONFIG.LEMONSQUEEZY_CHECKOUT_URL,
+      state.user?.email,
+      state.user?.id
+    );
+    
+    console.log('🛒 Opening checkout:', checkoutUrl, 'Plan:', selectedPlan);
+    // Analytics: track checkout click
+    P.analyticsTrackCheckoutClick();
+    P.analyticsTrackProUpgradeClicked(selectedPlan);
+    window.open(checkoutUrl, '_blank');
+  });
   
   // Manage subscription portal
   document.getElementById('upgrade-manage-btn')?.addEventListener('click', () => {
@@ -2666,6 +2714,7 @@ async function init() {
 
   // Analytics: track popup open and identify user
   P.analyticsTrackPopupOpen();
+  P.analyticsTrackExtensionOpened();
   if (state.user) P.analyticsIdentify(state.user, state.isPremium);
 
   // Analytics: track popup close

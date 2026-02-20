@@ -13,10 +13,36 @@ const CONFIG = {
   LEMONSQUEEZY_PRODUCT_ID: '833592', // Pro subscription product ID  
   LEMONSQUEEZY_CHECKOUT_URL: 'https://promptory.lemonsqueezy.com/buy/', // IMPORTANT: Set to your LemonSqueezy variant buy URL (e.g., https://store.lemonsqueezy.com/buy/abc123)
   LEMONSQUEEZY_CUSTOMER_PORTAL: 'https://promptory.lemonsqueezy.com/billing', // Customer portal for managing subscriptions
-  
-  // Free tier limits
-  FREE_PROMPT_LIMIT: 25,
-  FREE_FOLDER_LIMIT: 5,
+
+  // ---------- PLAN LIMITS ----------
+  // Guest (local only, no account)
+  GUEST_PROMPT_LIMIT: 25,
+  GUEST_FOLDER_LIMIT: 5,
+  GUEST_QUICK_INSERT_SLOTS: 1,
+  GUEST_SYNC: false,
+  GUEST_LIBRARY: false,
+  GUEST_EXPORT_IMPORT: false,
+
+  // Google account (free, signed in)
+  FREE_PROMPT_LIMIT: 100,
+  FREE_FOLDER_LIMIT: 25,
+  FREE_QUICK_INSERT_SLOTS: 3,
+  FREE_SYNC: true,       // cloud sync
+  FREE_LIBRARY: true,
+  FREE_EXPORT_IMPORT: 'json', // JSON only
+
+  // Pro (paid subscription)
+  PRO_PROMPT_LIMIT: Infinity,
+  PRO_FOLDER_LIMIT: Infinity,
+  PRO_QUICK_INSERT_SLOTS: 3,
+  PRO_SYNC: true,        // priority sync
+  PRO_LIBRARY: true,
+  PRO_EXPORT_IMPORT: 'json_csv', // JSON + CSV
+
+  // ---------- PRICING (LemonSqueezy) ----------
+  PRICE_MONTHLY: 4.99,
+  PRICE_YEARLY: 24.99,
+  PRICE_LIFETIME: 39.99,
   
   // Performance caps
   MAX_ANIM_ITEMS: 8,
@@ -26,7 +52,42 @@ const CONFIG = {
   LIBRARY_PAGE_SIZE: 20,
   
   // App info
-  VERSION: '1.9.0'
+  VERSION: '1.10.0'
+};
+
+// Helper: get limits based on user tier
+CONFIG.getLimits = function(isPremium, isLoggedIn) {
+  if (isPremium) {
+    return {
+      prompts: CONFIG.PRO_PROMPT_LIMIT,
+      folders: CONFIG.PRO_FOLDER_LIMIT,
+      quickInsertSlots: CONFIG.PRO_QUICK_INSERT_SLOTS,
+      sync: CONFIG.PRO_SYNC,
+      library: CONFIG.PRO_LIBRARY,
+      exportImport: CONFIG.PRO_EXPORT_IMPORT,
+      tier: 'pro'
+    };
+  }
+  if (isLoggedIn) {
+    return {
+      prompts: CONFIG.FREE_PROMPT_LIMIT,
+      folders: CONFIG.FREE_FOLDER_LIMIT,
+      quickInsertSlots: CONFIG.FREE_QUICK_INSERT_SLOTS,
+      sync: CONFIG.FREE_SYNC,
+      library: CONFIG.FREE_LIBRARY,
+      exportImport: CONFIG.FREE_EXPORT_IMPORT,
+      tier: 'free'
+    };
+  }
+  return {
+    prompts: CONFIG.GUEST_PROMPT_LIMIT,
+    folders: CONFIG.GUEST_FOLDER_LIMIT,
+    quickInsertSlots: CONFIG.GUEST_QUICK_INSERT_SLOTS,
+    sync: CONFIG.GUEST_SYNC,
+    library: CONFIG.GUEST_LIBRARY,
+    exportImport: CONFIG.GUEST_EXPORT_IMPORT,
+    tier: 'guest'
+  };
 };
 
 // Make available in different contexts (popup, background, options)

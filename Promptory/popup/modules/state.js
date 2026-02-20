@@ -6,6 +6,8 @@ window.Promptory = window.Promptory || {};
 (function(P) {
 'use strict';
 
+// Tiered limits: Guest (25) < Free/Google (100) < Pro (unlimited)
+const GUEST_PROMPT_LIMIT = CONFIG.GUEST_PROMPT_LIMIT;
 const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT;
 
 // ==================== STATE ====================
@@ -22,7 +24,7 @@ P.state = {
   userLikes: new Set(),
   userReports: new Set(),
   isPremium: false,
-  promptLimit: FREE_PROMPT_LIMIT,
+  promptLimit: GUEST_PROMPT_LIMIT, // Default to guest until we know user state
   isAdmin: false,
   pendingReports: [],
   // Library pagination state
@@ -96,9 +98,37 @@ P.loadData = async function() {
   });
 };
 
-// ==================== FREE TIER LIMIT ====================
+// ==================== TIERED LIMIT SYSTEM ====================
+// Guest (no account): 25 prompts, 5 folders, 1 quick-insert slot
+// Free (Google account): 100 prompts, 25 folders, 3 quick-insert slots
+// Pro (paid): unlimited prompts & folders, 3 quick-insert slots
+
+P.getUserTier = function() {
+  if (P.state.isPremium) return 'pro';
+  if (P.state.user) return 'free';
+  return 'guest';
+};
+
+P.getTierLimits = function() {
+  return CONFIG.getLimits(P.state.isPremium, !!P.state.user);
+};
+
 P.getEffectiveLimit = function() {
-  return (P.state.promptLimit > 0 && P.state.promptLimit <= 1000) ? P.state.promptLimit : FREE_PROMPT_LIMIT;
+  if (P.state.isPremium) return Infinity;
+  // For server-synced limit, trust server value if it's reasonable
+  if (P.state.promptLimit > 0 && P.state.promptLimit <= 1000) return P.state.promptLimit;
+  // Fallback based on tier
+  return P.state.user ? FREE_PROMPT_LIMIT : GUEST_PROMPT_LIMIT;
+};
+
+P.getEffectiveFolderLimit = function() {
+  if (P.state.isPremium) return Infinity;
+  return P.state.user ? CONFIG.FREE_FOLDER_LIMIT : CONFIG.GUEST_FOLDER_LIMIT;
+};
+
+P.getQuickInsertSlots = function() {
+  if (P.state.isPremium || P.state.user) return CONFIG.FREE_QUICK_INSERT_SLOTS; // 3
+  return CONFIG.GUEST_QUICK_INSERT_SLOTS; // 1
 };
 
 P.canCreatePrompt = function() {
@@ -106,9 +136,24 @@ P.canCreatePrompt = function() {
   return P.state.prompts.length < P.getEffectiveLimit();
 };
 
+P.canCreateFolder = function() {
+  if (P.state.isPremium) return true;
+  return P.state.folders.length < P.getEffectiveFolderLimit();
+};
+
 P.getPromptsRemaining = function() {
   if (P.state.isPremium) return Infinity;
   return Math.max(0, P.getEffectiveLimit() - P.state.prompts.length);
+};
+
+P.canAccessLibrary = function() {
+  return P.state.isPremium || !!P.state.user;
+};
+
+P.canExportImport = function() {
+  if (P.state.isPremium) return 'json_csv';
+  if (P.state.user) return 'json';
+  return false;
 };
 
 // ==================== THEME ====================

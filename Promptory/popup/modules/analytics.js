@@ -491,4 +491,79 @@ P.analyticsTrackSyncComplete = function(promptCount, folderCount, isPremium) {
 // ==================== EXPOSE MIXPANEL TOKEN FOR OTHER PAGES ====================
 P.MIXPANEL_TOKEN = MIXPANEL_TOKEN;
 
+// ==================== CUSTOM EVENT TRACKING ====================
+// Specific events requested for analytics dashboard
+
+P.analyticsTrackExtensionOpened = function() {
+  _track('extension_opened', {
+    total_prompts: P.state?.prompts?.length || 0,
+    total_folders: P.state?.folders?.length || 0,
+    is_premium: P.state?.isPremium || false,
+    is_logged_in: !!P.state?.user,
+    tier: P.getUserTier ? P.getUserTier() : (P.state?.isPremium ? 'pro' : (P.state?.user ? 'free' : 'guest'))
+  });
+};
+
+// Fires alongside the existing Prompt Created tracking
+P.analyticsTrackPromptCreatedEvent = function(prompt) {
+  _track('prompt_created', {
+    prompt_id: prompt?.id || '',
+    has_tags: (prompt?.tags?.length || 0) > 0,
+    has_variables: (prompt?.variables?.length || 0) > 0,
+    platform: prompt?.platform || 'universal',
+    total_prompts: P.state?.prompts?.length || 0
+  });
+};
+
+P.analyticsTrackPromptDeletedEvent = function(promptId) {
+  _track('prompt_deleted', {
+    prompt_id: promptId || '',
+    total_prompts: P.state?.prompts?.length || 0
+  });
+};
+
+P.analyticsTrackPromptUsed = function(prompt, platform) {
+  _track('prompt_used', {
+    prompt_id: prompt?.id || '',
+    platform: platform || 'unknown',
+    has_variables: (prompt?.variables?.length || 0) > 0
+  });
+};
+
+P.analyticsTrackFolderCreatedEvent = function(folder) {
+  _track('folder_created', {
+    folder_id: folder?.id || '',
+    total_folders: P.state?.folders?.length || 0
+  });
+};
+
+P.analyticsTrackLimitHit = function(limitType) {
+  _track('limit_hit', {
+    limit_type: limitType || 'unknown', // 'prompts' or 'folders'
+    tier: P.getUserTier ? P.getUserTier() : (P.state?.isPremium ? 'pro' : (P.state?.user ? 'free' : 'guest')),
+    current_count: limitType === 'prompts' ? (P.state?.prompts?.length || 0) : (P.state?.folders?.length || 0),
+    limit: limitType === 'prompts' ? (P.getEffectiveLimit ? P.getEffectiveLimit() : 0) : (P.getEffectiveFolderLimit ? P.getEffectiveFolderLimit() : 0)
+  });
+};
+
+P.analyticsTrackProUpgradeClicked = function(planType) {
+  _track('pro_upgrade_clicked', {
+    plan_type: planType || 'unknown', // 'monthly', 'yearly', 'lifetime'
+    is_logged_in: !!P.state?.user,
+    tier: P.getUserTier ? P.getUserTier() : 'unknown'
+  });
+};
+
+P.analyticsTrackGoogleLoginClicked = function(source) {
+  _track('google_login_clicked', {
+    source: source || 'unknown' // 'welcome', 'settings', 'popup'
+  });
+};
+
+P.analyticsTrackAgeConfirmed = function(page) {
+  _track('age_confirmed', {
+    page: page || 'welcome'
+  });
+};
+
 })(window.Promptory);

@@ -147,7 +147,21 @@
   "freePlan": { "message": "Бесплатный план" },
   "promptsUsed": { "message": "$1 / $2 промптов использовано", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
   "upgradeInfo": { "message": "Перейдите на Premium для неограниченных промптов, приоритетного доступа и других возможностей." },
-  "folderLimitReached": { "message": "Бесплатный план: максимум 5 папок. Перейдите на Premium для неограниченных папок." },
+  "folderLimitReached": { "message": "Лимит папок достигнут. Обновите план для большего количества папок." },
+
+  "guestPlan": { "message": "Гостевой план" },
+  "signInForMore": { "message": "Войдите для большего" },
+  "signInForMoreInfo": { "message": "Войдите через Google для 100 промптов, или перейдите на Pro для безлимита." },
+  "signInToUnlock": { "message": "Войдите для разблокировки" },
+  "signInForExport": { "message": "Войдите через Google для экспорта/импорта данных" },
+
+  "planMonthly": { "message": "Месяц" },
+  "planMonthlyDesc": { "message": "Ежемесячная оплата" },
+  "planYearly": { "message": "Год" },
+  "planYearlyDesc": { "message": "$2.08/месяц" },
+  "planLifetime": { "message": "Навсегда" },
+  "planLifetimeDesc": { "message": "Одноразовый платёж" },
+  "bestValue": { "message": "ЛУЧШАЯ ЦЕНА" },
 
   "account": { "message": "Аккаунт" },
   "signedIn": { "message": "Вы вошли" },

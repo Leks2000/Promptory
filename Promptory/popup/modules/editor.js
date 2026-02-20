@@ -129,6 +129,7 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
 
   if (!promptId && canCreatePrompt && !canCreatePrompt()) {
     showToast(t('freeLimitReached', getEffectiveLimit()), 'error');
+    if (P.analyticsTrackLimitHit) P.analyticsTrackLimitHit('prompts');
     return;
   }
 
@@ -436,12 +437,13 @@ async function _savePrompt(editingId, opts) {
       P.analyticsTrackPromptUpdated(p);
     }
   } else {
-    if (canCreatePrompt && !canCreatePrompt()) { showToast(t('freeLimitReached', getEffectiveLimit()), 'error'); saveBtn.classList.remove('loading'); return; }
+    if (canCreatePrompt && !canCreatePrompt()) { showToast(t('freeLimitReached', getEffectiveLimit()), 'error'); if (P.analyticsTrackLimitHit) P.analyticsTrackLimitHit('prompts'); saveBtn.classList.remove('loading'); return; }
     const newP = { id: crypto.randomUUID(), title, text, description: desc, folderId, platform, tags, variables, imageUrl, isFavorite: false, useCount: 0, createdAt: Date.now(), updatedAt: Date.now() };
     state.prompts.unshift(newP);
     if (syncPromptToSupabase) syncPromptToSupabase(newP);
     // Analytics: track prompt created (only fires on successful save)
     P.analyticsTrackPromptCreated(newP);
+    P.analyticsTrackPromptCreatedEvent(newP);
   }
 
   if (setSuppressRender) setSuppressRender(true);

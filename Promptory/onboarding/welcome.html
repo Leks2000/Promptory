@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Promptory - Installed</title>
+  <title>Promptory - Welcome</title>
   <link rel="stylesheet" href="../styles/variables.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -19,7 +19,7 @@
       padding: 40px 20px;
     }
     .container {
-      max-width: 500px;
+      max-width: 440px;
       width: 100%;
       text-align: center;
     }
@@ -33,42 +33,111 @@
     }
     .logo svg { color: white; }
     h1 {
-      font-size: 32px; font-weight: 700; margin-bottom: 12px;
+      font-size: 28px; font-weight: 700; margin-bottom: 12px;
       background: linear-gradient(135deg, var(--accent), #6BB0D6);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .subtitle {
-      font-size: 16px; color: var(--text-secondary); margin-bottom: 32px;
+      font-size: 15px; color: var(--text-secondary); margin-bottom: 28px;
       line-height: 1.6;
     }
-    .hint-box {
-      padding: 24px;
+
+    /* Terms checkbox */
+    .terms-section {
+      text-align: left;
+      margin-bottom: 24px;
+      padding: 16px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: 12px;
-      text-align: center;
     }
-    .hint-box p {
-      font-size: 14px;
+    .terms-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+      font-size: 13px;
       color: var(--text-secondary);
-      line-height: 1.6;
+      line-height: 1.5;
     }
-    .hint-box .icon-hint {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 12px;
-      padding: 8px 16px;
-      background: var(--accent-light);
-      border-radius: 8px;
+    .terms-label input[type="checkbox"] {
+      margin-top: 3px;
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .terms-label a {
       color: var(--accent);
-      font-size: 14px;
+      text-decoration: none;
+    }
+    .terms-label a:hover {
+      text-decoration: underline;
+    }
+
+    /* Google Sign-in Button */
+    .btn-google {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 24px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 6px;
+    }
+    .btn-google:hover:not(:disabled) {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(82, 156, 202, 0.4);
+    }
+    .btn-google:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .btn-google svg { flex-shrink: 0; }
+    .btn-google-hint {
+      font-size: 12px;
+      color: var(--accent);
+      margin-bottom: 20px;
       font-weight: 500;
     }
-    .countdown {
-      margin-top: 24px;
-      font-size: 13px;
+
+    /* Start without account link */
+    .btn-skip {
+      display: inline-block;
+      background: none;
+      border: none;
       color: var(--text-tertiary);
+      font-size: 13px;
+      cursor: pointer;
+      padding: 8px 16px;
+      transition: color 0.2s ease;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .btn-skip:hover:not(:disabled) {
+      color: var(--text-secondary);
+    }
+    .btn-skip:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* Google icon */
+    .google-icon {
+      width: 18px;
+      height: 18px;
     }
   </style>
 </head>
@@ -84,19 +153,33 @@
       </svg>
     </div>
 
-    <h1 id="page-title">Promptory Installed!</h1>
-    <p class="subtitle" id="page-subtitle">The extension has been successfully installed. Click the Promptory icon in your browser toolbar to get started.</p>
+    <h1 id="page-title">Welcome to Promptory!</h1>
+    <p class="subtitle" id="page-subtitle">Your personal AI prompt manager. Save, organize, and instantly insert prompts into ChatGPT, Claude, Gemini, and more.</p>
 
-    <div class="hint-box">
-      <p id="hint-text">Look for the Promptory icon in your browser's extension toolbar (top-right corner).</p>
-      <div class="icon-hint">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-        <span id="hint-action">Click the icon to open Promptory</span>
-      </div>
+    <!-- Terms checkbox -->
+    <div class="terms-section">
+      <label class="terms-label" id="terms-label">
+        <input type="checkbox" id="age-terms-checkbox" />
+        <span id="terms-text">I am at least 13 years old and I accept the <a href="#" id="terms-link">Terms of Service</a> &amp; <a href="#" id="privacy-link">Privacy Policy</a></span>
+      </label>
     </div>
-    <div class="countdown" id="countdown-text">This tab will close automatically in <span id="countdown">5</span> seconds...</div>
+
+    <!-- Google Sign-in -->
+    <button class="btn-google" id="google-signin-btn" disabled>
+      <svg class="google-icon" viewBox="0 0 24 24" fill="none">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      <span id="google-btn-text">Sign in with Google</span>
+    </button>
+    <div class="btn-google-hint" id="google-hint-text">Get 100 prompts instead of 25</div>
+
+    <!-- Start without account -->
+    <button class="btn-skip" id="skip-btn" disabled>
+      <span id="skip-btn-text">Start without account</span>
+    </button>
   </div>
 
   <!-- Mixpanel Analytics for Welcome Page -->
@@ -127,54 +210,128 @@
       });
     }
 
-    // Detect language
+    function trackEvent(name, props) {
+      try {
+        if (typeof mixpanel !== 'undefined' && mixpanel.track) {
+          mixpanel.track(name, props || {});
+        }
+      } catch(e) { /* silent */ }
+    }
+
+    // Detect language & localize
     chrome.storage.local.get(['language'], (res) => {
       const lang = res.language || (navigator.language.startsWith('ru') ? 'ru' : 'en');
       if (lang === 'ru') {
-        document.getElementById('page-title').textContent = 'Promptory установлен!';
-        document.getElementById('page-subtitle').textContent = 'Расширение успешно установлено. Нажмите на иконку Promptory в панели браузера, чтобы начать.';
-        document.getElementById('hint-text').textContent = 'Найдите иконку Promptory в панели расширений браузера (правый верхний угол).';
-        document.getElementById('hint-action').textContent = 'Нажмите на иконку, чтобы открыть Promptory';
-        document.getElementById('countdown-text').innerHTML = 'Эта вкладка закроется автоматически через <span id="countdown">5</span> секунд...';
+        document.getElementById('page-title').textContent = 'Добро пожаловать в Promptory!';
+        document.getElementById('page-subtitle').textContent = 'Ваш персональный менеджер AI-промптов. Сохраняйте, организуйте и мгновенно вставляйте промпты в ChatGPT, Claude, Gemini и другие.';
+        document.getElementById('terms-text').innerHTML = 'Мне есть 13 лет, и я принимаю <a href="#" id="terms-link">Условия использования</a> &amp; <a href="#" id="privacy-link">Политику конфиденциальности</a>';
+        document.getElementById('google-btn-text').textContent = 'Войти через Google';
+        document.getElementById('google-hint-text').textContent = 'Получи 100 промптов вместо 25';
+        document.getElementById('skip-btn-text').textContent = 'Начать без аккаунта';
+        // Re-attach links after innerHTML change
+        attachTermsLinks();
       }
     });
 
-    // Don't mark as launched - the popup will do that after terms acceptance
-    // chrome.storage.local.set({ hasLaunched: true });
+    function attachTermsLinks() {
+      document.getElementById('terms-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        chrome.tabs.create({ url: chrome.runtime.getURL('terms.html') });
+      });
+      document.getElementById('privacy-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        chrome.tabs.create({ url: chrome.runtime.getURL('privacy.html') });
+      });
+    }
+    attachTermsLinks();
 
-    // Auto-close tab after 5 seconds
-    let seconds = 5;
-    const interval = setInterval(() => {
-      seconds--;
-      const el = document.getElementById('countdown');
-      if (el) el.textContent = seconds;
-      if (seconds <= 0) {
-        clearInterval(interval);
-        // Track page close (auto-close)
-        if (typeof mixpanel !== 'undefined') {
-          mixpanel.track('Page Close', {
-            page_url: 'chrome-extension://onboarding/welcome',
-            page_title: 'Promptory Welcome',
-            page_name: 'Welcome',
-            auto_closed: true
-          });
-        }
-        // Small delay to let the tracking event send before closing
-        setTimeout(() => window.close(), 200);
+    // Checkbox logic
+    const checkbox = document.getElementById('age-terms-checkbox');
+    const googleBtn = document.getElementById('google-signin-btn');
+    const skipBtn = document.getElementById('skip-btn');
+
+    checkbox.addEventListener('change', () => {
+      googleBtn.disabled = !checkbox.checked;
+      skipBtn.disabled = !checkbox.checked;
+      if (checkbox.checked) {
+        trackEvent('age_confirmed', { page: 'welcome' });
       }
-    }, 1000);
+    });
 
-    // Track manual close via beforeunload
+    // Google Sign-in button
+    googleBtn.addEventListener('click', async () => {
+      if (!checkbox.checked) return;
+
+      trackEvent('google_login_clicked', { page: 'welcome' });
+
+      googleBtn.disabled = true;
+      googleBtn.querySelector('#google-btn-text').textContent = 'Signing in...';
+
+      // Store acceptance
+      chrome.storage.local.set({
+        ageVerified: true,
+        ageVerifiedDate: Date.now(),
+        termsAccepted: true,
+        privacyAccepted: true,
+        hasLaunched: true
+      });
+
+      // Initiate Google sign-in via background
+      const result = await new Promise(resolve =>
+        chrome.runtime.sendMessage({ action: 'signInWithGoogle' }, resolve)
+      );
+
+      if (result?.success) {
+        trackEvent('google_login_clicked', { page: 'welcome', success: true });
+        // Open popup by closing tab (extension popup opens on next icon click)
+        closePage();
+      } else {
+        // Reset button on failure
+        googleBtn.disabled = false;
+        const lang = document.getElementById('page-title').textContent.includes('Добро') ? 'ru' : 'en';
+        googleBtn.querySelector('#google-btn-text').textContent = lang === 'ru' ? 'Войти через Google' : 'Sign in with Google';
+        trackEvent('google_login_clicked', { page: 'welcome', success: false, error: result?.error });
+      }
+    });
+
+    // Skip (start without account)
+    skipBtn.addEventListener('click', () => {
+      if (!checkbox.checked) return;
+
+      // Store acceptance
+      chrome.storage.local.set({
+        ageVerified: true,
+        ageVerifiedDate: Date.now(),
+        termsAccepted: true,
+        privacyAccepted: true,
+        hasLaunched: true
+      });
+
+      trackEvent('extension_opened', { page: 'welcome', method: 'skip_account' });
+      closePage();
+    });
+
+    function closePage() {
+      // Try to open popup by triggering extension action, then close tab
+      // Chrome doesn't allow programmatic popup opening, so we just close this tab
+      // User will see the extension icon and can click it
+      trackEvent('Page Close', {
+        page_url: 'chrome-extension://onboarding/welcome',
+        page_title: 'Promptory Welcome',
+        page_name: 'Welcome',
+        auto_closed: false
+      });
+      setTimeout(() => window.close(), 300);
+    }
+
+    // Track manual close
     window.addEventListener('beforeunload', () => {
-      if (seconds > 0 && typeof mixpanel !== 'undefined') {
-        mixpanel.track('Page Close', {
-          page_url: 'chrome-extension://onboarding/welcome',
-          page_title: 'Promptory Welcome',
-          page_name: 'Welcome',
-          auto_closed: false,
-          time_on_page_sec: 5 - seconds
-        });
-      }
+      trackEvent('Page Close', {
+        page_url: 'chrome-extension://onboarding/welcome',
+        page_title: 'Promptory Welcome',
+        page_name: 'Welcome',
+        auto_closed: false
+      });
     });
   </script>
 </body>

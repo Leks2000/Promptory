@@ -126,15 +126,22 @@ P.openSettingsModal = function(opts = {}) {
     <div class="form-group"><label class="form-label">${t('language')}</label><select id="settings-lang"><option value="en" ${P.getLang() === 'en' ? 'selected' : ''}>${t('langEnglish')}</option><option value="ru" ${P.getLang() === 'ru' ? 'selected' : ''}>${t('langRussian')}</option></select></div><div class="divider"></div>
     <div class="form-group"><label class="form-label">${t('keyboardShortcuts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('shortcutsHint')} <a href="#" id="open-shortcuts-link" style="color:var(--accent);">${t('chromeShortcuts')}</a></span><div class="hotkey-rebind-section" id="shortcuts-display"></div></div><div class="divider"></div>
     <div class="form-group"><label class="form-label">${t('quickInsertPrompts')}</label><span class="form-hint" style="margin-bottom:12px;display:block;">${t('quickInsertHint')}</span><span class="form-hint" style="margin-bottom:8px;display:block;">${state.prompts.length > SETTINGS_PROMPT_SELECT_LIMIT ? `Showing recent ${SETTINGS_PROMPT_SELECT_LIMIT} prompts for faster settings` : ''}</span><div class="hotkey-section" data-hotkey-section="true">
-      ${[1, 2, 3].map(n => {
+      ${(() => {
+        const maxSlots = P.getQuickInsertSlots ? P.getQuickInsertSlots() : 3;
+        return [1, 2, 3].map(n => {
         const slotId = `slot${n}`;
         const slot = hotkeys[slotId] || {};
         const assigned = slot.promptId ? state.prompts.find(p => p.id === slot.promptId) : null;
+        const isLocked = n > maxSlots;
+        if (isLocked) {
+          return `<div class="hotkey-item" style="opacity:0.5;"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)} 🔒</div><div class="hotkey-description">${t('signInToUnlock') || 'Sign in to unlock'}</div></div><div class="hotkey-key"><div class="hotkey-badge">Alt+${n}</div></div></div>`;
+        }
         return `<div class="hotkey-item"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)}</div><div class="hotkey-description">${assigned ? escapeHtml(P.truncate(assigned.title, 25)) : t('noPromptAssigned')}</div></div><div class="hotkey-key"><select class="hotkey-prompt-select" data-hotkey-slot="${slotId}"><option value="">${t('selectPrompt')}</option>${P.getSettingsPromptOptions(slot.promptId)}</select><div class="hotkey-badge">Alt+${n}</div></div></div>`;
-      }).join('')}
+      }).join('');
+      })()}
     </div></div><div class="divider"></div>
     <div class="form-group"><label class="form-label">${t('theme')}</label><select id="settings-theme"><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>${t('themeDark')}</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>${t('themeLight')}</option><option value="system" ${s.theme === 'system' ? 'selected' : ''}>${t('themeSystem')}</option></select></div><div class="divider"></div>
-    <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;"><button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button></div></div><div class="divider"></div>
+    <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;">${P.canExportImport && P.canExportImport() ? `<button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button>` : `<div style="font-size:var(--font-size-sm);color:var(--text-tertiary);padding:8px 0;">${t('signInForExport') || 'Sign in with Google to export/import data'}</div>`}</div></div><div class="divider"></div>
     <div class="form-group"><label class="form-label">${t('proSubscription')}</label>
       <div class="pro-settings-card">
         <div class="pro-settings-header">
@@ -232,12 +239,18 @@ P.openSettingsModal = function(opts = {}) {
   document.getElementById('settings-signin-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('settings-signin-btn');
     btn.classList.add('loading');
+    P.analyticsTrackGoogleLoginClicked('settings');
     const savedEmail = state.user?.email || '';
     const result = await new Promise(resolve => chrome.runtime.sendMessage({ action: 'signInWithGoogle', loginHint: savedEmail }, resolve));
     btn.classList.remove('loading');
     if (result?.success) {
       state.user = result.user;
       state.session = result.session;
+      // Update limit to free tier (100) immediately on sign-in
+      if (!state.isPremium) {
+        state.promptLimit = CONFIG.FREE_PROMPT_LIMIT;
+        await saveData('promptLimit', state.promptLimit);
+      }
       await saveData('user', state.user);
       await saveData('session', state.session);
       closeModal('settings-modal');
@@ -273,11 +286,11 @@ P.openSettingsModal = function(opts = {}) {
     state.prompts = []; state.folders = [];
     state.settings.hotkeys = { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } };
     state.libraryPrompts = []; state.userLikes = new Set(); state.userReports = new Set();
-    state.promptLimit = FREE_PROMPT_LIMIT; state.isAdmin = false; state.pendingReports = [];
+    state.promptLimit = CONFIG.GUEST_PROMPT_LIMIT; state.isAdmin = false; state.pendingReports = [];
     state.searchOriginalPrompts = null;
     if (setSuppressRender) setSuppressRender(true);
     await saveData('prompts', []); await saveData('folders', []); await saveData('settings', state.settings);
-    await saveData('isPremium', false); await saveData('promptLimit', FREE_PROMPT_LIMIT);
+    await saveData('isPremium', false); await saveData('promptLimit', CONFIG.GUEST_PROMPT_LIMIT);
     await saveData('libraryPromptsCache', []); await saveData('user', null); await saveData('session', null);
     if (setSuppressRender) setSuppressRender(false);
     if (btn) btn.classList.remove('loading');
@@ -293,7 +306,7 @@ P.openSettingsModal = function(opts = {}) {
   });
 
   // Export
-  document.getElementById('settings-export-btn').addEventListener('click', () => {
+  document.getElementById('settings-export-btn')?.addEventListener('click', () => {
     const data = { prompts: state.prompts, folders: state.folders, settings: state.settings, exportDate: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `promptory-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href);
@@ -312,7 +325,7 @@ P.openSettingsModal = function(opts = {}) {
   });
 
   // Import (with schema validation)
-  document.getElementById('settings-import-btn').addEventListener('click', () => {
+  document.getElementById('settings-import-btn')?.addEventListener('click', () => {
     _handleImport(opts);
   });
 
