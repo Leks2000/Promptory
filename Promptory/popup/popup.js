@@ -677,8 +677,24 @@ function showContextMenu(anchorEl, promptId) {
   document.body.appendChild(menu);
   const rect = anchorEl.getBoundingClientRect();
   menu.style.position = 'fixed';
-  menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${Math.min(rect.left, window.innerWidth - 200)}px`;
+  // Force layout calculation to get accurate menu dimensions
+  menu.style.visibility = 'hidden';
+  menu.style.display = 'block';
+  const menuHeight = menu.offsetHeight;
+  const menuWidth = menu.offsetWidth || 200;
+  menu.style.visibility = '';
+  
+  const spaceBelow = window.innerHeight - rect.bottom - 8;
+  const spaceAbove = rect.top - 8;
+  
+  // If not enough space below, show above the anchor
+  if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+    menu.style.top = `${Math.max(4, rect.top - menuHeight - 4)}px`;
+  } else {
+    // Show below, but clamp to viewport
+    menu.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - menuHeight - 4)}px`;
+  }
+  menu.style.left = `${Math.max(4, Math.min(rect.left, window.innerWidth - menuWidth - 4))}px`;
   activeContextMenu = menu;
 
   menu.querySelectorAll('.context-menu-item').forEach(item => {
@@ -1050,6 +1066,8 @@ function openFolderEditor(folderId = null) {
   document.getElementById('fe-save-btn').addEventListener('click', async () => {
     const name = document.getElementById('fe-name').value.trim();
     if (!name) { document.getElementById('fe-name-err').style.display = 'block'; return; }
+    // Clear folder draft on save
+    try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
     if (folderId) { const f = state.folders.find(x => x.id === folderId); if (f) { f.name = name; f.updatedAt = Date.now(); syncFolderToSupabase(f); } }
     else { const newF = { id: crypto.randomUUID(), name, createdAt: Date.now(), updatedAt: Date.now() }; state.folders.push(newF); syncFolderToSupabase(newF); }
     _suppressStorageRender = true;
@@ -1067,8 +1085,34 @@ function openFolderEditor(folderId = null) {
     }
     // Don't re-render prompts list here - it causes visible flicker on folders tab
   });
-  modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('folder-editor-modal')));
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('folder-editor-modal'); });
+  
+  // Save folder draft on input and confirm before closing if changed
+  const nameInput = document.getElementById('fe-name');
+  const saveFolderDraft = () => {
+    const val = nameInput?.value || '';
+    if (val) {
+      try { chrome.storage.local.set({ folderEditorDraft: { folderId: folderId || null, name: val, savedAt: Date.now() } }); } catch (e) { /* silent */ }
+    }
+  };
+  nameInput?.addEventListener('input', debounce(saveFolderDraft, 500));
+  
+  const confirmAndCloseFolder = () => {
+    const currentName = nameInput?.value?.trim() || '';
+    const originalName = folder ? folder.name : '';
+    if (currentName && currentName !== originalName) {
+      const msg = P.getLang() === 'ru'
+        ? 'У вас есть несохранённые изменения. Закрыть без сохранения? (черновик будет сохранён)'
+        : 'You have unsaved changes. Close without saving? (draft will be saved)';
+      if (!confirm(msg)) return;
+      saveFolderDraft();
+    } else {
+      try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
+    }
+    closeModal('folder-editor-modal');
+  };
+  
+  modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', confirmAndCloseFolder));
+  modal.addEventListener('click', (e) => { if (e.target === modal) confirmAndCloseFolder(); });
 }
 
 // ==================== FAVORITES (optimized with RAF batching) ====================
@@ -2534,6 +2578,20 @@ async function init() {
   } else {
     welcomeScreen.style.display = 'none';
     mainApp.style.display = 'flex';
+    
+    // Resume onboarding tutorial if it was interrupted (popup was closed mid-tutorial)
+    chrome.storage.local.get(['tutorialCurrentStep', 'onboardingTutorialComplete'], (stored) => {
+      if (!stored.onboardingTutorialComplete && typeof stored.tutorialCurrentStep === 'number' && stored.tutorialCurrentStep > 0) {
+        setTimeout(() => {
+          if (window.OnboardingTutorial) {
+            const tutorial = new window.OnboardingTutorial();
+            tutorial.start(() => {
+              console.log('✅ Onboarding resumed and complete');
+            });
+          }
+        }, 500);
+      }
+    });
   }
 
   // Initialize tabs and search BEFORE any rendering
@@ -2570,6 +2628,49 @@ async function init() {
   document.getElementById('new-prompt-btn').addEventListener('click', () => openPromptEditor());
   document.getElementById('new-folder-btn').addEventListener('click', () => openFolderEditor());
   document.getElementById('settings-btn').addEventListener('click', openSettings);
+
+  // Check for unsaved prompt/folder drafts from previous session
+  chrome.storage.local.get(['editorDraft', 'folderEditorDraft'], (drafts) => {
+    const promptDraft = drafts.editorDraft;
+    const folderDraft = drafts.folderEditorDraft;
+    // Prompt draft check (max 1 hour old)
+    if (promptDraft && promptDraft.savedAt && (Date.now() - promptDraft.savedAt < 3600000) && (promptDraft.title || promptDraft.text)) {
+      setTimeout(() => {
+        if (P.checkAndRestoreDraft) {
+          P.checkAndRestoreDraft({
+            canCreatePrompt,
+            getEffectiveLimit,
+            resolveImageUrl,
+            isSupabaseStorageUrl,
+            syncPromptToSupabase,
+            uploadImageToStorage: P.uploadImageToStorage,
+            deletePrompt,
+            setSuppressRender: (v) => { _suppressStorageRender = v; },
+            afterSave: (editingId, prevFolderId, newFolderId) => {
+              requestAnimationFrame(() => { renderPrompts(); renderFavorites(); });
+            }
+          });
+        }
+      }, 300);
+    }
+    // Folder draft check (max 1 hour old)
+    else if (folderDraft && folderDraft.savedAt && (Date.now() - folderDraft.savedAt < 3600000) && folderDraft.name) {
+      setTimeout(() => {
+        const msg = P.getLang() === 'ru'
+          ? 'У вас есть несохранённый черновик папки. Восстановить?'
+          : 'You have an unsaved folder draft. Restore it?';
+        if (confirm(msg)) {
+          openFolderEditor(folderDraft.folderId || null);
+          setTimeout(() => {
+            const nameInput = document.getElementById('fe-name');
+            if (nameInput && folderDraft.name) nameInput.value = folderDraft.name;
+          }, 100);
+        } else {
+          try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
+        }
+      }, 300);
+    }
+  });
 
   chrome.storage.onChanged.addListener((changes) => {
     // Skip re-renders when the change was triggered by our own saves (prevents flicker)
