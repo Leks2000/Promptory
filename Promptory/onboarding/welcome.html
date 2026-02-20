@@ -99,7 +99,34 @@
     <div class="countdown" id="countdown-text">This tab will close automatically in <span id="countdown">5</span> seconds...</div>
   </div>
 
+  <!-- Mixpanel Analytics for Welcome Page -->
+  <script src="../mixpanel.min.js"></script>
+  <script src="../config.js"></script>
   <script>
+    // Initialize Mixpanel on welcome page
+    const MIXPANEL_TOKEN = 'c86143cd74824a2d516134f860745000';
+    if (typeof mixpanel !== 'undefined') {
+      mixpanel.init(MIXPANEL_TOKEN, {
+        debug: false,
+        track_pageview: false,
+        persistence: 'localStorage',
+        api_host: 'https://api-js.mixpanel.com'
+      });
+
+      // Track welcome page view (install event)
+      mixpanel.track('Extension Installed', {
+        app_version: CONFIG.VERSION || '1.9.0',
+        page_url: 'chrome-extension://onboarding/welcome',
+        page_name: 'Welcome'
+      });
+
+      mixpanel.track('Page View', {
+        page_url: 'chrome-extension://onboarding/welcome',
+        page_title: 'Promptory Welcome',
+        page_name: 'Welcome'
+      });
+    }
+
     // Detect language
     chrome.storage.local.get(['language'], (res) => {
       const lang = res.language || (navigator.language.startsWith('ru') ? 'ru' : 'en');
@@ -123,9 +150,32 @@
       if (el) el.textContent = seconds;
       if (seconds <= 0) {
         clearInterval(interval);
-        window.close();
+        // Track page close (auto-close)
+        if (typeof mixpanel !== 'undefined') {
+          mixpanel.track('Page Close', {
+            page_url: 'chrome-extension://onboarding/welcome',
+            page_title: 'Promptory Welcome',
+            page_name: 'Welcome',
+            auto_closed: true
+          });
+        }
+        // Small delay to let the tracking event send before closing
+        setTimeout(() => window.close(), 200);
       }
     }, 1000);
+
+    // Track manual close via beforeunload
+    window.addEventListener('beforeunload', () => {
+      if (seconds > 0 && typeof mixpanel !== 'undefined') {
+        mixpanel.track('Page Close', {
+          page_url: 'chrome-extension://onboarding/welcome',
+          page_title: 'Promptory Welcome',
+          page_name: 'Welcome',
+          auto_closed: false,
+          time_on_page_sec: 5 - seconds
+        });
+      }
+    });
   </script>
 </body>
 </html>

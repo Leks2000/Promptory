@@ -242,7 +242,7 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
   });
 
   document.getElementById('pe-tag-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); _addTag(e.target.value.trim()); e.target.value = ''; }
+    if (e.key === 'Enter') { e.preventDefault(); _addTag(e.target.value.trim()); e.target.value = ''; P.analyticsTrackPromptFieldEdit('tags', !!promptId, promptId); }
   });
   document.getElementById('pe-tags-list').addEventListener('click', (e) => {
     const removeTag = e.target.dataset.removeTag || e.target.closest('[data-remove-tag]')?.dataset.removeTag;
@@ -254,15 +254,17 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
     // Analytics: track draft save during editing
     P.analyticsTrackPromptDraftSave(!!promptId, promptId);
   }, 1000);
-  document.getElementById('pe-title')?.addEventListener('input', draftSave);
-  document.getElementById('pe-text')?.addEventListener('input', draftSave);
-  document.getElementById('pe-desc')?.addEventListener('input', draftSave);
-  document.getElementById('pe-folder')?.addEventListener('change', draftSave);
-  document.getElementById('pe-platform')?.addEventListener('change', draftSave);
+  // Field-level analytics tracking + draft save
+  document.getElementById('pe-title')?.addEventListener('input', () => { draftSave(); P.analyticsTrackPromptFieldEdit('title', !!promptId, promptId); });
+  document.getElementById('pe-text')?.addEventListener('input', () => { draftSave(); P.analyticsTrackPromptFieldEdit('text', !!promptId, promptId); });
+  document.getElementById('pe-desc')?.addEventListener('input', () => { draftSave(); P.analyticsTrackPromptFieldEdit('description', !!promptId, promptId); });
+  document.getElementById('pe-folder')?.addEventListener('change', () => { draftSave(); P.analyticsTrackPromptFieldEdit('folder', !!promptId, promptId); });
+  document.getElementById('pe-platform')?.addEventListener('change', () => { draftSave(); P.analyticsTrackPromptFieldEdit('platform', !!promptId, promptId); });
 
   // Close with confirmation if there are unsaved changes
   const confirmAndClose = () => {
-    if (_hasDraftChanges(promptId, prompt)) {
+    const hadChanges = _hasDraftChanges(promptId, prompt);
+    if (hadChanges) {
       const msg = P.getLang() === 'ru'
         ? 'У вас есть несохранённые изменения. Закрыть без сохранения? (черновик будет сохранён)'
         : 'You have unsaved changes. Close without saving? (draft will be saved)';
@@ -271,6 +273,8 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
     } else {
       _clearDraft(); // No changes, clear any old draft
     }
+    // Analytics: track editor close without saving
+    P.analyticsTrackPromptEditorClose(!!promptId, promptId, hadChanges);
     closeModal('prompt-editor-modal');
   };
 

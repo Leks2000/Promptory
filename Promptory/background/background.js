@@ -7,6 +7,32 @@ const SUPABASE_URL = CONFIG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
 const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT || 25;
 
+// ---------- Mixpanel HTTP API (lightweight, for service worker) ----------
+const MIXPANEL_TOKEN = 'c86143cd74824a2d516134f860745000';
+
+function _trackEventHTTP(eventName, properties) {
+  try {
+    const payload = {
+      event: eventName,
+      properties: {
+        token: MIXPANEL_TOKEN,
+        distinct_id: 'anonymous_' + (Date.now().toString(36)),
+        time: Math.floor(Date.now() / 1000),
+        $insert_id: crypto.randomUUID(),
+        app_version: CONFIG.VERSION || '1.9.0',
+        source: 'background_service_worker',
+        ...(properties || {})
+      }
+    };
+    const data = btoa(JSON.stringify([payload]));
+    fetch(`https://api.mixpanel.com/track?ip=1&verbose=1`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${data}`
+    }).catch(() => { /* silent */ });
+  } catch (e) { /* silent */ }
+}
+
 // Word-boundary-aware truncation (handles multi-byte/CJK characters)
 function _truncateAtWordBoundary(text, max = 50) {
   if (!text || text.length <= max) return text || '';
@@ -33,6 +59,13 @@ const REDIRECT_URL = chrome.identity.getRedirectURL();
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     console.log('Promptory installed');
+    
+    // Analytics: track install via HTTP API
+    _trackEventHTTP('Extension Installed', {
+      install_reason: 'fresh_install',
+      app_version: CONFIG.VERSION || '1.9.0'
+    });
+    
     chrome.storage.local.set({
       prompts: [],
       folders: [],
@@ -57,6 +90,12 @@ chrome.runtime.onInstalled.addListener((details) => {
     chrome.tabs.create({
       url: chrome.runtime.getURL('onboarding/welcome.html'),
       active: true
+    });
+  } else if (details.reason === 'update') {
+    // Analytics: track extension update
+    _trackEventHTTP('Extension Updated', {
+      previous_version: details.previousVersion || 'unknown',
+      new_version: CONFIG.VERSION || '1.9.0'
     });
   }
 });

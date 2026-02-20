@@ -796,6 +796,8 @@ function showFolderContextMenu(anchorEl, folderId) {
         await saveData('prompts', state.prompts);
         _suppressStorageRender = false;
         showToast(t('folderDeleted'), 'success');
+        // Analytics: track folder deletion
+        P.analyticsTrackFolderDeleted(folderId);
         renderFolders();
         renderPrompts();
         syncFolderDeleteToSupabase(folderId);
@@ -1196,7 +1198,8 @@ function openFolderEditor(folderId = null) {
   const confirmAndCloseFolder = () => {
     const currentName = nameInput?.value?.trim() || '';
     const originalName = folder ? folder.name : '';
-    if (currentName && currentName !== originalName) {
+    const hadChanges = currentName && currentName !== originalName;
+    if (hadChanges) {
       const msg = P.getLang() === 'ru'
         ? 'У вас есть несохранённые изменения. Закрыть без сохранения? (черновик будет сохранён)'
         : 'You have unsaved changes. Close without saving? (draft will be saved)';
@@ -1205,6 +1208,8 @@ function openFolderEditor(folderId = null) {
     } else {
       try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
     }
+    // Analytics: track folder editor close without saving
+    P.analyticsTrackFolderEditorClose(!!folderId, folderId, hadChanges);
     closeModal('folder-editor-modal');
   };
   
@@ -2555,6 +2560,9 @@ async function syncAllData() {
     });
     
     console.log('✅ Sync complete! Prompts:', state.prompts.length, 'Folders:', state.folders.length, 'Premium:', state.isPremium);
+    
+    // Analytics: track sync completion
+    P.analyticsTrackSyncComplete(state.prompts.length, state.folders.length, state.isPremium);
     
     // After full sync, try to drain any offline queue items that may have accumulated
     if (P.processQueue) {

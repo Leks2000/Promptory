@@ -17,8 +17,10 @@ if (typeof mixpanel !== 'undefined') {
     track_pageview: false,        // We track manually in extension context
     persistence: 'localStorage',
     autocapture: true,
-    record_sessions_percent: 100
+    record_sessions_percent: 100,
+    api_host: 'https://api-js.mixpanel.com'
   });
+  console.log('[Analytics] Mixpanel initialized with token:', MIXPANEL_TOKEN.substring(0, 8) + '...');
 } else {
   console.warn('[Analytics] Mixpanel SDK not loaded');
 }
@@ -51,14 +53,34 @@ function _reset() {
   } catch (e) { /* silent */ }
 }
 
+// ==================== SUPER PROPERTIES (set once, sent with every event) ====================
+P.analyticsSetSuperProperties = function() {
+  try {
+    if (typeof mixpanel !== 'undefined' && mixpanel.register) {
+      mixpanel.register({
+        'app_version': CONFIG.VERSION || '1.9.0',
+        'extension_type': 'chrome',
+        'plan': P.state?.isPremium ? 'Premium' : 'Free',
+        'total_prompts': P.state?.prompts?.length || 0,
+        'total_folders': P.state?.folders?.length || 0
+      });
+    }
+  } catch (e) { /* silent */ }
+};
+
 // ==================== POPUP LIFECYCLE ====================
 const _popupOpenTime = Date.now();
 
 P.analyticsTrackPopupOpen = function() {
+  P.analyticsSetSuperProperties();
   _track('Page View', {
     page_url: 'chrome-extension://popup',
     page_title: 'Promptory Popup',
-    page_name: 'Popup'
+    page_name: 'Popup',
+    total_prompts: P.state?.prompts?.length || 0,
+    total_folders: P.state?.folders?.length || 0,
+    is_premium: P.state?.isPremium || false,
+    is_logged_in: !!P.state?.user
   });
 };
 
@@ -77,7 +99,9 @@ P.analyticsIdentify = function(user, isPremium) {
   _identify(user.id, {
     '$name': user.name || user.email?.split('@')[0] || '',
     '$email': user.email || '',
-    'plan': isPremium ? 'Premium' : 'Free'
+    'plan': isPremium ? 'Premium' : 'Free',
+    'total_prompts': P.state?.prompts?.length || 0,
+    'total_folders': P.state?.folders?.length || 0
   });
 };
 
@@ -112,11 +136,34 @@ P.analyticsTrackSignOut = function() {
   _reset();
 };
 
-// ==================== PROMPT EVENTS ====================
+// ==================== PROMPT EDITOR STEP TRACKING ====================
+// Tracks the full editing lifecycle: open → field edits → draft save → save/cancel
+
+let _promptEditorOpenTime = 0;
+let _promptEditorFieldsEdited = new Set();
 
 // Track when user STARTS creating/editing a prompt (opens editor)
 P.analyticsTrackPromptEditorOpen = function(isEdit, promptId) {
+  _promptEditorOpenTime = Date.now();
+  _promptEditorFieldsEdited = new Set();
   _track('Prompt Editor Opened', {
+    is_edit: isEdit,
+    prompt_id: promptId || null,
+    total_prompts: P.state?.prompts?.length || 0
+  });
+};
+
+// Track individual field changes during editing (throttled per field)
+let _fieldEditTimers = {};
+P.analyticsTrackPromptFieldEdit = function(fieldName, isEdit, promptId) {
+  _promptEditorFieldsEdited.add(fieldName);
+  // Throttle: max once per 30 seconds per field
+  const key = `${fieldName}_${promptId || 'new'}`;
+  const now = Date.now();
+  if (_fieldEditTimers[key] && (now - _fieldEditTimers[key]) < 30000) return;
+  _fieldEditTimers[key] = now;
+  _track('Prompt Field Edited', {
+    field_name: fieldName, // title, text, description, folder, platform, tags, image
     is_edit: isEdit,
     prompt_id: promptId || null
   });
@@ -131,12 +178,30 @@ P.analyticsTrackPromptDraftSave = function(isEdit, promptId) {
   _lastDraftTrackTime = now;
   _track('Prompt Draft Saved', {
     is_edit: isEdit,
-    prompt_id: promptId || null
+    prompt_id: promptId || null,
+    fields_edited: Array.from(_promptEditorFieldsEdited),
+    editing_duration_sec: _promptEditorOpenTime ? Math.round((now - _promptEditorOpenTime) / 1000) : 0
   });
+};
+
+// Track when user closes editor WITHOUT saving (cancel/abandon)
+P.analyticsTrackPromptEditorClose = function(isEdit, promptId, hadChanges) {
+  const duration = _promptEditorOpenTime ? Math.round((Date.now() - _promptEditorOpenTime) / 1000) : 0;
+  _track('Prompt Editor Closed', {
+    is_edit: isEdit,
+    prompt_id: promptId || null,
+    had_unsaved_changes: hadChanges,
+    fields_edited: Array.from(_promptEditorFieldsEdited),
+    editing_duration_sec: duration,
+    outcome: hadChanges ? 'abandoned_with_changes' : 'closed_clean'
+  });
+  _promptEditorOpenTime = 0;
+  _promptEditorFieldsEdited = new Set();
 };
 
 // Track when a prompt is SUCCESSFULLY created
 P.analyticsTrackPromptCreated = function(prompt) {
+  const duration = _promptEditorOpenTime ? Math.round((Date.now() - _promptEditorOpenTime) / 1000) : 0;
   _track('Prompt Created', {
     prompt_id: prompt?.id || '',
     has_tags: (prompt?.tags?.length || 0) > 0,
@@ -145,30 +210,43 @@ P.analyticsTrackPromptCreated = function(prompt) {
     has_folder: !!prompt?.folderId,
     platform: prompt?.platform || 'universal',
     tags_count: prompt?.tags?.length || 0,
-    variables_count: prompt?.variables?.length || 0
+    variables_count: prompt?.variables?.length || 0,
+    editing_duration_sec: duration,
+    fields_edited: Array.from(_promptEditorFieldsEdited),
+    total_prompts: (P.state?.prompts?.length || 0)
   });
   _track('Conversion', {
     'Conversion Type': 'prompt_created',
     'Conversion Value': null
   });
+  // Reset editor tracking state
+  _promptEditorOpenTime = 0;
+  _promptEditorFieldsEdited = new Set();
 };
 
 // Track when a prompt is SUCCESSFULLY updated
 P.analyticsTrackPromptUpdated = function(prompt) {
+  const duration = _promptEditorOpenTime ? Math.round((Date.now() - _promptEditorOpenTime) / 1000) : 0;
   _track('Prompt Updated', {
     prompt_id: prompt?.id || '',
     has_tags: (prompt?.tags?.length || 0) > 0,
     has_variables: (prompt?.variables?.length || 0) > 0,
     has_image: !!prompt?.imageUrl,
     has_folder: !!prompt?.folderId,
-    platform: prompt?.platform || 'universal'
+    platform: prompt?.platform || 'universal',
+    editing_duration_sec: duration,
+    fields_edited: Array.from(_promptEditorFieldsEdited)
   });
+  // Reset editor tracking state
+  _promptEditorOpenTime = 0;
+  _promptEditorFieldsEdited = new Set();
 };
 
 // Track prompt deletion
 P.analyticsTrackPromptDeleted = function(promptId) {
   _track('Prompt Deleted', {
-    prompt_id: promptId || ''
+    prompt_id: promptId || '',
+    total_prompts: (P.state?.prompts?.length || 0)
   });
 };
 
@@ -196,13 +274,17 @@ P.analyticsTrackPromptFavoriteToggle = function(promptId, isFavorite) {
   });
 };
 
-// ==================== FOLDER EVENTS ====================
+// ==================== FOLDER EDITOR STEP TRACKING ====================
+
+let _folderEditorOpenTime = 0;
 
 // Track when user opens folder editor
 P.analyticsTrackFolderEditorOpen = function(isEdit, folderId) {
+  _folderEditorOpenTime = Date.now();
   _track('Folder Editor Opened', {
     is_edit: isEdit,
-    folder_id: folderId || null
+    folder_id: folderId || null,
+    total_folders: P.state?.folders?.length || 0
   });
 };
 
@@ -214,32 +296,54 @@ P.analyticsTrackFolderDraftSave = function(isEdit, folderId) {
   _lastFolderDraftTrackTime = now;
   _track('Folder Draft Saved', {
     is_edit: isEdit,
-    folder_id: folderId || null
+    folder_id: folderId || null,
+    editing_duration_sec: _folderEditorOpenTime ? Math.round((now - _folderEditorOpenTime) / 1000) : 0
   });
+};
+
+// Track when user closes folder editor WITHOUT saving
+P.analyticsTrackFolderEditorClose = function(isEdit, folderId, hadChanges) {
+  const duration = _folderEditorOpenTime ? Math.round((Date.now() - _folderEditorOpenTime) / 1000) : 0;
+  _track('Folder Editor Closed', {
+    is_edit: isEdit,
+    folder_id: folderId || null,
+    had_unsaved_changes: hadChanges,
+    editing_duration_sec: duration,
+    outcome: hadChanges ? 'abandoned_with_changes' : 'closed_clean'
+  });
+  _folderEditorOpenTime = 0;
 };
 
 // Track folder created
 P.analyticsTrackFolderCreated = function(folder) {
+  const duration = _folderEditorOpenTime ? Math.round((Date.now() - _folderEditorOpenTime) / 1000) : 0;
   _track('Folder Created', {
-    folder_id: folder?.id || ''
+    folder_id: folder?.id || '',
+    editing_duration_sec: duration,
+    total_folders: (P.state?.folders?.length || 0)
   });
   _track('Conversion', {
     'Conversion Type': 'folder_created',
     'Conversion Value': null
   });
+  _folderEditorOpenTime = 0;
 };
 
 // Track folder updated
 P.analyticsTrackFolderUpdated = function(folder) {
+  const duration = _folderEditorOpenTime ? Math.round((Date.now() - _folderEditorOpenTime) / 1000) : 0;
   _track('Folder Updated', {
-    folder_id: folder?.id || ''
+    folder_id: folder?.id || '',
+    editing_duration_sec: duration
   });
+  _folderEditorOpenTime = 0;
 };
 
 // Track folder deleted
 P.analyticsTrackFolderDeleted = function(folderId) {
   _track('Folder Deleted', {
-    folder_id: folderId || ''
+    folder_id: folderId || '',
+    total_folders: (P.state?.folders?.length || 0)
   });
 };
 
@@ -279,7 +383,10 @@ P.analyticsTrackLibraryPublish = function(promptId) {
 
 // ==================== UPGRADE / PURCHASE ====================
 P.analyticsTrackUpgradeModalOpen = function() {
-  _track('Upgrade Modal Opened', {});
+  _track('Upgrade Modal Opened', {
+    total_prompts: P.state?.prompts?.length || 0,
+    is_logged_in: !!P.state?.user
+  });
 };
 
 P.analyticsTrackCheckoutClick = function() {
@@ -341,11 +448,47 @@ P.analyticsTrackTermsAccepted = function() {
   _track('Terms Accepted', {});
 };
 
+// ==================== INSTALL / WELCOME PAGE ====================
+P.analyticsTrackInstall = function() {
+  _track('Extension Installed', {
+    app_version: CONFIG.VERSION || '1.9.0'
+  });
+};
+
+P.analyticsTrackWelcomePageView = function() {
+  _track('Page View', {
+    page_url: 'chrome-extension://onboarding/welcome',
+    page_title: 'Promptory Welcome',
+    page_name: 'Welcome'
+  });
+};
+
+P.analyticsTrackWelcomePageClose = function(autoClose) {
+  _track('Page Close', {
+    page_url: 'chrome-extension://onboarding/welcome',
+    page_title: 'Promptory Welcome',
+    page_name: 'Welcome',
+    auto_closed: !!autoClose
+  });
+};
+
 // ==================== DRAFT RESTORE ====================
 P.analyticsTrackDraftRestored = function(type) {
   _track('Draft Restored', {
     draft_type: type || 'prompt' // 'prompt' or 'folder'
   });
 };
+
+// ==================== SYNC ====================
+P.analyticsTrackSyncComplete = function(promptCount, folderCount, isPremium) {
+  _track('Cloud Sync Completed', {
+    prompt_count: promptCount || 0,
+    folder_count: folderCount || 0,
+    is_premium: isPremium || false
+  });
+};
+
+// ==================== EXPOSE MIXPANEL TOKEN FOR OTHER PAGES ====================
+P.MIXPANEL_TOKEN = MIXPANEL_TOKEN;
 
 })(window.Promptory);
