@@ -84,7 +84,8 @@ chrome.runtime.onInstalled.addListener((details) => {
       hasLaunched: false,
       isPremium: false,
       promptLimit: GUEST_PROMPT_LIMIT,
-      language: null
+      language: null,
+      installDate: Date.now()
     });
 
     // Open a brief install confirmation page (terms are accepted in the popup)

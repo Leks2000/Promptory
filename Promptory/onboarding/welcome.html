@@ -182,34 +182,148 @@
     </button>
   </div>
 
-  <!-- Mixpanel Analytics for Welcome Page -->
-  <script src="../mixpanel.min.js"></script>
-  <script src="../config.js"></script>
+  <!-- 
+    CRITICAL: Checkbox listener & core UI logic MUST be in its own script tag
+    that runs BEFORE analytics, so a failure in mixpanel/config cannot break
+    the buttons. Each <script> tag is an independent execution unit.
+  -->
   <script>
-    // Initialize Mixpanel on welcome page
-    const MIXPANEL_TOKEN = 'c86143cd74824a2d516134f860745000';
-    if (typeof mixpanel !== 'undefined') {
-      mixpanel.init(MIXPANEL_TOKEN, {
-        debug: false,
-        track_pageview: false,
-        persistence: 'localStorage',
-        api_host: 'https://api-js.mixpanel.com'
-      });
+    // ============================================================
+    // PHASE 1 — Core UI (no external dependencies, cannot crash)
+    // ============================================================
 
-      // Track welcome page view (install event)
-      mixpanel.track('Extension Installed', {
-        app_version: CONFIG.VERSION || '1.9.0',
-        page_url: 'chrome-extension://onboarding/welcome',
-        page_name: 'Welcome'
-      });
+    // Checkbox logic — attached FIRST so buttons always work
+    const checkbox = document.getElementById('age-terms-checkbox');
+    const googleBtn = document.getElementById('google-signin-btn');
+    const skipBtn = document.getElementById('skip-btn');
 
-      mixpanel.track('Page View', {
-        page_url: 'chrome-extension://onboarding/welcome',
-        page_title: 'Promptory Welcome',
-        page_name: 'Welcome'
-      });
+    checkbox.addEventListener('change', () => {
+      googleBtn.disabled = !checkbox.checked;
+      skipBtn.disabled = !checkbox.checked;
+      // trackEvent is defined later; call it safely
+      if (checkbox.checked && typeof trackEvent === 'function') {
+        trackEvent('age_confirmed', { page: 'welcome' });
+      }
+    });
+
+    function attachTermsLinks() {
+      try {
+        document.getElementById('terms-link')?.addEventListener('click', (e) => {
+          e.preventDefault();
+          chrome.tabs.create({ url: chrome.runtime.getURL('terms.html') });
+        });
+        document.getElementById('privacy-link')?.addEventListener('click', (e) => {
+          e.preventDefault();
+          chrome.tabs.create({ url: chrome.runtime.getURL('privacy.html') });
+        });
+      } catch (e) { console.warn('[Promptory] attachTermsLinks error:', e); }
+    }
+    attachTermsLinks();
+
+    function closePage() {
+      if (typeof trackEvent === 'function') {
+        trackEvent('Page Close', {
+          page_url: 'chrome-extension://onboarding/welcome',
+          page_title: 'Promptory Welcome',
+          page_name: 'Welcome',
+          auto_closed: false
+        });
+      }
+      setTimeout(() => window.close(), 300);
     }
 
+    // Google Sign-in button
+    googleBtn.addEventListener('click', async () => {
+      if (!checkbox.checked) return;
+
+      if (typeof trackEvent === 'function') {
+        trackEvent('google_login_clicked', { page: 'welcome' });
+      }
+
+      googleBtn.disabled = true;
+      googleBtn.querySelector('#google-btn-text').textContent = 'Signing in...';
+
+      // Store acceptance
+      try {
+        chrome.storage.local.set({
+          ageVerified: true,
+          ageVerifiedDate: Date.now(),
+          termsAccepted: true,
+          privacyAccepted: true,
+          hasLaunched: true
+        });
+      } catch (e) { console.warn('[Promptory] storage.set error:', e); }
+
+      try {
+        // Initiate Google sign-in via background
+        const result = await new Promise(resolve =>
+          chrome.runtime.sendMessage({ action: 'signInWithGoogle' }, resolve)
+        );
+
+        if (result?.success) {
+          if (typeof trackEvent === 'function') {
+            trackEvent('google_login_clicked', { page: 'welcome', success: true });
+          }
+          closePage();
+        } else {
+          // Reset button on failure
+          googleBtn.disabled = false;
+          const lang = document.getElementById('page-title').textContent.includes('Добро') ? 'ru' : 'en';
+          googleBtn.querySelector('#google-btn-text').textContent = lang === 'ru' ? 'Войти через Google' : 'Sign in with Google';
+          if (typeof trackEvent === 'function') {
+            trackEvent('google_login_clicked', { page: 'welcome', success: false, error: result?.error });
+          }
+        }
+      } catch (e) {
+        console.warn('[Promptory] Google sign-in error:', e);
+        googleBtn.disabled = false;
+        googleBtn.querySelector('#google-btn-text').textContent = 'Sign in with Google';
+      }
+    });
+
+    // Skip (start without account)
+    skipBtn.addEventListener('click', () => {
+      if (!checkbox.checked) return;
+
+      try {
+        chrome.storage.local.set({
+          ageVerified: true,
+          ageVerifiedDate: Date.now(),
+          termsAccepted: true,
+          privacyAccepted: true,
+          hasLaunched: true
+        });
+      } catch (e) { console.warn('[Promptory] storage.set error:', e); }
+
+      if (typeof trackEvent === 'function') {
+        trackEvent('extension_opened', { page: 'welcome', method: 'skip_account' });
+      }
+      closePage();
+    });
+
+    // Track manual close
+    window.addEventListener('beforeunload', () => {
+      if (typeof trackEvent === 'function') {
+        trackEvent('Page Close', {
+          page_url: 'chrome-extension://onboarding/welcome',
+          page_title: 'Promptory Welcome',
+          page_name: 'Welcome',
+          auto_closed: false
+        });
+      }
+    });
+  </script>
+
+  <!-- External dependencies loaded AFTER core UI is ready -->
+  <script src="../mixpanel.min.js" onerror="console.warn('[Promptory] mixpanel.min.js failed to load')"></script>
+  <script src="../config.js" onerror="console.warn('[Promptory] config.js failed to load')"></script>
+
+  <script>
+    // ============================================================
+    // PHASE 2 — Analytics & Localization (may safely fail)
+    // ============================================================
+
+    // Safe trackEvent — available globally for Phase 1 callers
     function trackEvent(name, props) {
       try {
         if (typeof mixpanel !== 'undefined' && mixpanel.track) {
@@ -218,121 +332,57 @@
       } catch(e) { /* silent */ }
     }
 
-    // Detect language & localize
-    chrome.storage.local.get(['language'], (res) => {
-      const lang = res.language || (navigator.language.startsWith('ru') ? 'ru' : 'en');
-      if (lang === 'ru') {
-        document.getElementById('page-title').textContent = 'Добро пожаловать в Promptory!';
-        document.getElementById('page-subtitle').textContent = 'Ваш персональный менеджер AI-промптов. Сохраняйте, организуйте и мгновенно вставляйте промпты в ChatGPT, Claude, Gemini и другие.';
-        document.getElementById('terms-text').innerHTML = 'Мне есть 13 лет, и я принимаю <a href="#" id="terms-link">Условия использования</a> &amp; <a href="#" id="privacy-link">Политику конфиденциальности</a>';
-        document.getElementById('google-btn-text').textContent = 'Войти через Google';
-        document.getElementById('google-hint-text').textContent = 'Получи 100 промптов вместо 25';
-        document.getElementById('skip-btn-text').textContent = 'Начать без аккаунта';
-        // Re-attach links after innerHTML change
-        attachTermsLinks();
+    // Initialize Mixpanel on welcome page
+    try {
+      const MIXPANEL_TOKEN = 'c86143cd74824a2d516134f860745000';
+      if (typeof mixpanel !== 'undefined') {
+        mixpanel.init(MIXPANEL_TOKEN, {
+          debug: false,
+          track_pageview: false,
+          persistence: 'localStorage',
+          api_host: 'https://api-js.mixpanel.com'
+        });
+
+        const appVersion = (typeof CONFIG !== 'undefined' && CONFIG.VERSION) ? CONFIG.VERSION : '1.10.0';
+
+        mixpanel.track('Extension Installed', {
+          app_version: appVersion,
+          page_url: 'chrome-extension://onboarding/welcome',
+          page_name: 'Welcome'
+        });
+
+        mixpanel.track('Page View', {
+          page_url: 'chrome-extension://onboarding/welcome',
+          page_title: 'Promptory Welcome',
+          page_name: 'Welcome'
+        });
       }
-    });
-
-    function attachTermsLinks() {
-      document.getElementById('terms-link')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        chrome.tabs.create({ url: chrome.runtime.getURL('terms.html') });
-      });
-      document.getElementById('privacy-link')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        chrome.tabs.create({ url: chrome.runtime.getURL('privacy.html') });
-      });
-    }
-    attachTermsLinks();
-
-    // Checkbox logic
-    const checkbox = document.getElementById('age-terms-checkbox');
-    const googleBtn = document.getElementById('google-signin-btn');
-    const skipBtn = document.getElementById('skip-btn');
-
-    checkbox.addEventListener('change', () => {
-      googleBtn.disabled = !checkbox.checked;
-      skipBtn.disabled = !checkbox.checked;
-      if (checkbox.checked) {
-        trackEvent('age_confirmed', { page: 'welcome' });
-      }
-    });
-
-    // Google Sign-in button
-    googleBtn.addEventListener('click', async () => {
-      if (!checkbox.checked) return;
-
-      trackEvent('google_login_clicked', { page: 'welcome' });
-
-      googleBtn.disabled = true;
-      googleBtn.querySelector('#google-btn-text').textContent = 'Signing in...';
-
-      // Store acceptance
-      chrome.storage.local.set({
-        ageVerified: true,
-        ageVerifiedDate: Date.now(),
-        termsAccepted: true,
-        privacyAccepted: true,
-        hasLaunched: true
-      });
-
-      // Initiate Google sign-in via background
-      const result = await new Promise(resolve =>
-        chrome.runtime.sendMessage({ action: 'signInWithGoogle' }, resolve)
-      );
-
-      if (result?.success) {
-        trackEvent('google_login_clicked', { page: 'welcome', success: true });
-        // Open popup by closing tab (extension popup opens on next icon click)
-        closePage();
-      } else {
-        // Reset button on failure
-        googleBtn.disabled = false;
-        const lang = document.getElementById('page-title').textContent.includes('Добро') ? 'ru' : 'en';
-        googleBtn.querySelector('#google-btn-text').textContent = lang === 'ru' ? 'Войти через Google' : 'Sign in with Google';
-        trackEvent('google_login_clicked', { page: 'welcome', success: false, error: result?.error });
-      }
-    });
-
-    // Skip (start without account)
-    skipBtn.addEventListener('click', () => {
-      if (!checkbox.checked) return;
-
-      // Store acceptance
-      chrome.storage.local.set({
-        ageVerified: true,
-        ageVerifiedDate: Date.now(),
-        termsAccepted: true,
-        privacyAccepted: true,
-        hasLaunched: true
-      });
-
-      trackEvent('extension_opened', { page: 'welcome', method: 'skip_account' });
-      closePage();
-    });
-
-    function closePage() {
-      // Try to open popup by triggering extension action, then close tab
-      // Chrome doesn't allow programmatic popup opening, so we just close this tab
-      // User will see the extension icon and can click it
-      trackEvent('Page Close', {
-        page_url: 'chrome-extension://onboarding/welcome',
-        page_title: 'Promptory Welcome',
-        page_name: 'Welcome',
-        auto_closed: false
-      });
-      setTimeout(() => window.close(), 300);
+    } catch (e) {
+      console.warn('[Promptory] Mixpanel init error:', e);
     }
 
-    // Track manual close
-    window.addEventListener('beforeunload', () => {
-      trackEvent('Page Close', {
-        page_url: 'chrome-extension://onboarding/welcome',
-        page_title: 'Promptory Welcome',
-        page_name: 'Welcome',
-        auto_closed: false
+    // Detect language & localize (wrapped in try/catch)
+    try {
+      chrome.storage.local.get(['language'], (res) => {
+        try {
+          const lang = res.language || (navigator.language.startsWith('ru') ? 'ru' : 'en');
+          if (lang === 'ru') {
+            document.getElementById('page-title').textContent = 'Добро пожаловать в Promptory!';
+            document.getElementById('page-subtitle').textContent = 'Ваш персональный менеджер AI-промптов. Сохраняйте, организуйте и мгновенно вставляйте промпты в ChatGPT, Claude, Gemini и другие.';
+            document.getElementById('terms-text').innerHTML = 'Мне есть 13 лет, и я принимаю <a href="#" id="terms-link">Условия использования</a> &amp; <a href="#" id="privacy-link">Политику конфиденциальности</a>';
+            document.getElementById('google-btn-text').textContent = 'Войти через Google';
+            document.getElementById('google-hint-text').textContent = 'Получи 100 промптов вместо 25';
+            document.getElementById('skip-btn-text').textContent = 'Начать без аккаунта';
+            // Re-attach links after innerHTML change
+            attachTermsLinks();
+          }
+        } catch (e) {
+          console.warn('[Promptory] Localization callback error:', e);
+        }
       });
-    });
+    } catch (e) {
+      console.warn('[Promptory] chrome.storage.local.get error:', e);
+    }
   </script>
 </body>
 </html>
