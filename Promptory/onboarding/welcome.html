@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to Promptory</title>
+  <title>Promptory - Installed</title>
   <link rel="stylesheet" href="../styles/variables.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -19,7 +19,7 @@
       padding: 40px 20px;
     }
     .container {
-      max-width: 700px;
+      max-width: 500px;
       width: 100%;
       text-align: center;
     }
@@ -33,130 +33,46 @@
     }
     .logo svg { color: white; }
     h1 {
-      font-size: 36px; font-weight: 700; margin-bottom: 8px;
+      font-size: 32px; font-weight: 700; margin-bottom: 12px;
       background: linear-gradient(135deg, var(--accent), #6BB0D6);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .subtitle {
-      font-size: 18px; color: var(--text-secondary); margin-bottom: 48px;
+      font-size: 16px; color: var(--text-secondary); margin-bottom: 32px;
+      line-height: 1.6;
     }
-    .features {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
-      margin-bottom: 48px; text-align: left;
-    }
-    .feature {
-      padding: 24px; background: var(--bg-secondary);
-      border: 1px solid var(--border); border-radius: 12px;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .feature:hover {
-      transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-    }
-    .feature-icon {
-      width: 40px; height: 40px; border-radius: 10px;
-      background: var(--accent-light); display: flex;
-      align-items: center; justify-content: center;
-      margin-bottom: 12px; color: var(--accent);
-    }
-    .feature h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
-    .feature p { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
-    .actions {
-      display: flex; flex-direction: column; align-items: center; gap: 16px;
-    }
-    .btn-primary {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 14px 32px; background: var(--accent); color: white;
-      border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
-      cursor: pointer; transition: background 0.15s;
-    }
-    .btn-primary:hover { background: var(--accent-hover); }
-    .btn-link {
-      background: none; border: none; color: var(--text-tertiary);
-      font-size: 14px; cursor: pointer; text-decoration: underline;
-    }
-    .btn-link:hover { color: var(--text-secondary); }
-    .setup-hint {
-      margin-top: 40px; padding: 20px; background: var(--bg-secondary);
-      border: 1px solid var(--border); border-radius: 12px;
-      text-align: left; max-width: 500px;
-    }
-    .setup-hint h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-    .setup-hint p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
-    .setup-hint code {
-      background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;
-      font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px;
-    }
-    .lang-switch {
-      position: fixed; top: 20px; right: 20px;
-      display: flex; gap: 8px;
-    }
-    .lang-btn {
-      padding: 6px 12px; background: var(--bg-secondary); border: 1px solid var(--border);
-      border-radius: 8px; color: var(--text-secondary); font-size: 13px;
-      cursor: pointer; font-family: inherit;
-    }
-    .lang-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
-
-    /* Age Verification & Terms */
-    .age-verification {
-      margin: 32px 0;
-      padding: 20px;
+    .hint-box {
+      padding: 24px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: 12px;
-      text-align: left;
+      text-align: center;
     }
-    .age-verification label {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      cursor: pointer;
+    .hint-box p {
       font-size: 14px;
       color: var(--text-secondary);
-      line-height: 1.5;
+      line-height: 1.6;
     }
-    .age-verification input[type="checkbox"] {
-      margin-top: 3px;
-      width: 18px;
-      height: 18px;
-      accent-color: var(--accent);
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-    .age-verification a {
+    .hint-box .icon-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: var(--accent-light);
+      border-radius: 8px;
       color: var(--accent);
-      text-decoration: none;
+      font-size: 14px;
       font-weight: 500;
     }
-    .age-verification a:hover {
-      text-decoration: underline;
-    }
-    .age-error {
-      color: #ef4444;
+    .countdown {
+      margin-top: 24px;
       font-size: 13px;
-      margin-top: 8px;
-      display: none;
-    }
-    .age-error.visible {
-      display: block;
-    }
-    .btn-primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    @media (max-width: 600px) {
-      .features { grid-template-columns: 1fr; }
-      h1 { font-size: 28px; }
+      color: var(--text-tertiary);
     }
   </style>
 </head>
 <body>
-  <div class="lang-switch">
-    <button class="lang-btn active" data-lang="en">EN</button>
-    <button class="lang-btn" data-lang="ru">RU</button>
-  </div>
-
   <div class="container">
     <div class="logo">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -168,249 +84,48 @@
       </svg>
     </div>
 
-    <h1 id="ob-title">Welcome to Promptory</h1>
-    <p class="subtitle" id="ob-subtitle">Your AI Prompt Manager</p>
+    <h1 id="page-title">Promptory Installed!</h1>
+    <p class="subtitle" id="page-subtitle">The extension has been successfully installed. Click the Promptory icon in your browser toolbar to get started.</p>
 
-    <div class="features">
-      <div class="feature">
-        <div class="feature-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        </div>
-        <h3 id="ob-f1t">Save & Organize</h3>
-        <p id="ob-f1d">Store all your AI prompts in one place with folders and tags</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-        </div>
-        <h3 id="ob-f2t">Instant Insert</h3>
-        <p id="ob-f2d">Insert prompts into ChatGPT, Claude, Gemini with one click or hotkey</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
-        <h3 id="ob-f3t">Cloud Sync</h3>
-        <p id="ob-f3d">Sign in with Google to sync prompts across devices</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        </div>
-        <h3 id="ob-f4t">Explore Library</h3>
-        <p id="ob-f4d">Discover and save prompts shared by the community</p>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn-primary" id="open-ext-btn" disabled>
+    <div class="hint-box">
+      <p id="hint-text">Look for the Promptory icon in your browser's extension toolbar (top-right corner).</p>
+      <div class="icon-hint">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
-        <span id="ob-open">Open Extension</span>
-      </button>
-      <button class="btn-link" id="skip-btn"><span id="ob-skip">Skip to extension</span></button>
-    </div>
-
-    <!-- Age Verification & Terms Acceptance -->
-    <div class="age-verification">
-      <label>
-        <input type="checkbox" id="age-terms-checkbox" />
-        <span>
-          <span id="age-text">Мне есть 13 лет, и я принимаю</span>
-          <a href="../terms.html" target="_blank" id="terms-link">Terms of Service</a>
-          <span> и </span>
-          <a href="../privacy.html" target="_blank" id="privacy-link">Privacy Policy</a>
-        </span>
-      </label>
-      <div class="age-error" id="age-error">
-        <span id="age-error-text">Необходимо подтвердить возраст и согласие с условиями</span>
+        <span id="hint-action">Click the icon to open Promptory</span>
       </div>
-      <button class="btn-primary" id="confirm-age-btn" style="margin-top: 16px; width: 100%;" disabled>
-        <span id="confirm-btn-text">Подтверждаю</span>
-      </button>
     </div>
-
-    <div class="setup-hint">
-      <h4>Google Sign-In Setup (Free)</h4>
-      <p>
-        To enable Google sign-in, you need to configure Supabase:<br><br>
-        1. Go to <strong>Supabase Dashboard</strong> &rarr; Authentication &rarr; Providers &rarr; Google<br>
-        2. Create a project in <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--accent);">Google Cloud Console</a><br>
-        3. Enable <strong>OAuth consent screen</strong> (External, Testing mode = free)<br>
-        4. Create <strong>OAuth 2.0 Client ID</strong> (Web application)<br>
-        5. Add Authorized redirect URI: <code>https://vofgfvlgchqheksvlibl.supabase.co/auth/v1/callback</code><br>
-        6. Copy <strong>Client ID</strong> and <strong>Client Secret</strong> to Supabase Google provider settings<br>
-        7. Also add your extension's redirect URL: <code id="redirect-url">Loading...</code><br><br>
-        <em>All free! Google Cloud Console in Testing mode allows up to 100 test users at no cost.</em>
-      </p>
-    </div>
+    <div class="countdown" id="countdown-text">This tab will close automatically in <span id="countdown">5</span> seconds...</div>
   </div>
 
   <script>
-    // Language switching
-    const texts = {
-      en: {
-        title: 'Welcome to Promptory', subtitle: 'Your AI Prompt Manager',
-        f1t: 'Save & Organize', f1d: 'Store all your AI prompts in one place with folders and tags',
-        f2t: 'Instant Insert', f2d: 'Insert prompts into ChatGPT, Claude, Gemini with one click or hotkey',
-        f3t: 'Cloud Sync', f3d: 'Sign in with Google to sync prompts across devices',
-        f4t: 'Explore Library', f4d: 'Discover and save prompts shared by the community',
-        open: 'Open Extension', skip: 'Skip to extension',
-        ageText: 'I am at least 13 years old and I accept the',
-        termsLink: 'Terms of Service',
-        privacyLink: 'Privacy Policy',
-        ageError: 'You must confirm your age and accept the terms',
-        confirmBtn: 'I Confirm'
-      },
-      ru: {
-        title: 'Добро пожаловать в Promptory', subtitle: 'Ваш AI Менеджер промптов',
-        f1t: 'Сохраняйте и организуйте', f1d: 'Храните все AI промпты в одном месте с папками и тегами',
-        f2t: 'Мгновенная вставка', f2d: 'Вставляйте промпты в ChatGPT, Claude, Gemini одним кликом или горячей клавишей',
-        f3t: 'Облачная синхронизация', f3d: 'Войдите через Google для синхронизации промптов между устройствами',
-        f4t: 'Библиотека промптов', f4d: 'Открывайте и сохраняйте промпты, которыми делится сообщество',
-        open: 'Открыть расширение', skip: 'Перейти к расширению',
-        ageText: 'Мне есть 13 лет, и я принимаю',
-        termsLink: 'Terms of Service',
-        privacyLink: 'Privacy Policy',
-        ageError: 'Необходимо подтвердить возраст и согласие с условиями',
-        confirmBtn: 'Подтверждаю'
-      }
-    };
-
-    function setLang(lang) {
-      _currentLang = lang;
-      const t = texts[lang];
-      document.getElementById('ob-title').textContent = t.title;
-      document.getElementById('ob-subtitle').textContent = t.subtitle;
-      document.getElementById('ob-f1t').textContent = t.f1t;
-      document.getElementById('ob-f1d').textContent = t.f1d;
-      document.getElementById('ob-f2t').textContent = t.f2t;
-      document.getElementById('ob-f2d').textContent = t.f2d;
-      document.getElementById('ob-f3t').textContent = t.f3t;
-      document.getElementById('ob-f3d').textContent = t.f3d;
-      document.getElementById('ob-f4t').textContent = t.f4t;
-      document.getElementById('ob-f4d').textContent = t.f4d;
-      document.getElementById('ob-open').textContent = t.open;
-      document.getElementById('ob-skip').textContent = t.skip;
-      document.getElementById('age-text').textContent = t.ageText;
-      document.getElementById('terms-link').textContent = t.termsLink;
-      document.getElementById('privacy-link').textContent = t.privacyLink;
-      document.getElementById('age-error-text').textContent = t.ageError;
-      document.getElementById('confirm-btn-text').textContent = t.confirmBtn;
-      document.querySelectorAll('.lang-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.lang === lang);
-      });
-      chrome.storage.local.set({ language: lang });
-    }
-
-    document.querySelectorAll('.lang-btn').forEach(btn => {
-      btn.addEventListener('click', () => setLang(btn.dataset.lang));
-    });
-
-    // Show redirect URL
-    if (chrome.identity && chrome.identity.getRedirectURL) {
-      document.getElementById('redirect-url').textContent = chrome.identity.getRedirectURL();
-    }
-
     // Detect language
     chrome.storage.local.get(['language'], (res) => {
-      if (res.language) setLang(res.language);
-      else if (navigator.language.startsWith('ru')) setLang('ru');
-    });
-
-    // Age Verification & Terms Acceptance
-    const ageCheckbox = document.getElementById('age-terms-checkbox');
-    const confirmBtn = document.getElementById('confirm-age-btn');
-    const ageError = document.getElementById('age-error');
-    const openExtBtn = document.getElementById('open-ext-btn');
-
-    // Check if already verified (e.g. page reload)
-    chrome.storage.local.get(['ageVerified'], (res) => {
-      if (res.ageVerified) {
-        openExtBtn.disabled = false;
-        ageCheckbox.checked = true;
-        confirmBtn.disabled = true;
-        confirmBtn.style.display = 'none';
+      const lang = res.language || (navigator.language.startsWith('ru') ? 'ru' : 'en');
+      if (lang === 'ru') {
+        document.getElementById('page-title').textContent = 'Promptory установлен!';
+        document.getElementById('page-subtitle').textContent = 'Расширение успешно установлено. Нажмите на иконку Promptory в панели браузера, чтобы начать.';
+        document.getElementById('hint-text').textContent = 'Найдите иконку Promptory в панели расширений браузера (правый верхний угол).';
+        document.getElementById('hint-action').textContent = 'Нажмите на иконку, чтобы открыть Promptory';
+        document.getElementById('countdown-text').innerHTML = 'Эта вкладка закроется автоматически через <span id="countdown">5</span> секунд...';
       }
     });
 
-    // Enable/disable confirm button based on checkbox state
-    ageCheckbox.addEventListener('change', () => {
-      confirmBtn.disabled = !ageCheckbox.checked;
-      if (ageCheckbox.checked) {
-        ageError.classList.remove('visible');
-      }
-    });
+    // Don't mark as launched - the popup will do that after terms acceptance
+    // chrome.storage.local.set({ hasLaunched: true });
 
-    // Confirm button handler
-    confirmBtn.addEventListener('click', () => {
-      if (!ageCheckbox.checked) {
-        ageError.classList.add('visible');
-        return;
-      }
-      // Store age verification in chrome.storage
-      chrome.storage.local.set({ 
-        ageVerified: true,
-        ageVerifiedDate: Date.now(),
-        termsAccepted: true,
-        privacyAccepted: true
-      }, () => {
-        // Enable the main button and hide age verification section
-        openExtBtn.disabled = false;
-        confirmBtn.style.display = 'none';
-        ageError.classList.remove('visible');
-        showToast('✓ ' + (getCurrentLang() === 'ru' ? 'Подтверждено!' : 'Confirmed!'));
-      });
-    });
-
-    // Toast notification helper
-    function showToast(message) {
-      const toast = document.createElement('div');
-      toast.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: var(--accent);
-        color: white;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 500;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 9999;
-        animation: slideUp 0.3s ease;
-      `;
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 2000);
-    }
-
-    let _currentLang = 'en';
-    function getCurrentLang() {
-      return _currentLang;
-    }
-
-    // Button handlers - close tab and open extension popup
-    document.getElementById('open-ext-btn').addEventListener('click', () => {
-      chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true }, () => {
-        // Try to open the extension popup by calling the action API
-        // In MV3, we can't programmatically open the popup, 
-        // but we can close this tab so the user naturally clicks the icon
-        // Show a brief toast then close
-        showToast(getCurrentLang() === 'ru' 
-          ? 'Нажмите на иконку Promptory в панели браузера!' 
-          : 'Click the Promptory icon in your browser toolbar!');
-        setTimeout(() => {
-          window.close();
-        }, 1500);
-      });
-    });
-    document.getElementById('skip-btn').addEventListener('click', () => {
-      chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true }, () => {
+    // Auto-close tab after 5 seconds
+    let seconds = 5;
+    const interval = setInterval(() => {
+      seconds--;
+      const el = document.getElementById('countdown');
+      if (el) el.textContent = seconds;
+      if (seconds <= 0) {
+        clearInterval(interval);
         window.close();
-      });
-    });
+      }
+    }, 1000);
   </script>
 </body>
 </html>

@@ -2,9 +2,9 @@
    Promptory Search Filters Styles
    ============================================ */
 
-/* Filter button */
+/* Filter button - hidden for now (future feature) */
 .search-filter-btn {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 6px;
   padding: 8px 12px;

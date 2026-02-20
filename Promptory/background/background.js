@@ -53,7 +53,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       language: null
     });
 
-    // Open onboarding page on first install
+    // Open a brief install confirmation page (terms are accepted in the popup)
     chrome.tabs.create({
       url: chrome.runtime.getURL('onboarding/welcome.html'),
       active: true

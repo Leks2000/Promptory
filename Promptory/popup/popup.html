@@ -20,7 +20,20 @@
       <p class="welcome-text" id="welcome-text">
         Your personal AI prompt manager. Save, organize, and instantly insert prompts into ChatGPT, Claude, Gemini, and more.
       </p>
-      <button class="btn btn-primary btn-lg ripple" id="get-started-btn">
+      <!-- Age & Terms Verification -->
+      <div class="welcome-terms" id="welcome-terms">
+        <label class="welcome-terms-label" id="welcome-terms-label">
+          <input type="checkbox" id="age-terms-checkbox" />
+          <span id="age-terms-text">I am at least 13 years old and I accept the</span>
+          <a href="#" id="welcome-terms-link" class="welcome-link">Terms of Service</a>
+          <span>&</span>
+          <a href="#" id="welcome-privacy-link" class="welcome-link">Privacy Policy</a>
+        </label>
+        <div class="welcome-terms-error" id="age-terms-error" style="display:none;">
+          <span id="age-terms-error-text">You must confirm your age and accept the terms</span>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-lg ripple" id="get-started-btn" disabled>
         Get Started
       </button>
     </div>
