@@ -164,7 +164,7 @@ function initTabs() {
       if (target) target.classList.add('active');
       if (btn.dataset.tab === 'stats') renderStats();
       
-      // Update search filters for current tab
+      // Update search filters for current tab (if enabled)
       if (searchFilters) {
         searchFilters.setCurrentTab(btn.dataset.tab);
       }
@@ -732,6 +732,98 @@ function closeContextMenu() {
   if (activeContextMenu) { activeContextMenu.remove(); activeContextMenu = null; }
 }
 
+// ==================== FOLDER CONTEXT MENU ====================
+function showFolderContextMenu(anchorEl, folderId) {
+  closeContextMenu();
+  const folder = state.folders.find(f => f.id === folderId);
+  if (!folder) return;
+  
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.innerHTML = `
+    <div class="context-menu-item" data-ctx="create-prompt"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>${t('createPrompt') || 'Create Prompt'}</div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-ctx="edit-folder"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>${t('edit')}</div>
+    <div class="context-menu-item danger" data-ctx="delete-folder"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>${t('delete')}</div>`;
+  document.body.appendChild(menu);
+  
+  const rect = anchorEl.getBoundingClientRect();
+  menu.style.position = 'fixed';
+  menu.style.visibility = 'hidden';
+  menu.style.display = 'block';
+  const menuHeight = menu.offsetHeight;
+  const menuWidth = menu.offsetWidth || 200;
+  menu.style.visibility = '';
+  
+  const spaceBelow = window.innerHeight - rect.bottom - 8;
+  const spaceAbove = rect.top - 8;
+  
+  if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+    menu.style.top = `${Math.max(4, rect.top - menuHeight - 4)}px`;
+  } else {
+    menu.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - menuHeight - 4)}px`;
+  }
+  menu.style.left = `${Math.max(4, Math.min(rect.left, window.innerWidth - menuWidth - 4))}px`;
+  activeContextMenu = menu;
+  
+  menu.querySelectorAll('.context-menu-item').forEach(item => {
+    item.addEventListener('click', async () => {
+      const action = item.dataset.ctx;
+      closeContextMenu();
+      if (action === 'create-prompt') {
+        // Open prompt editor with this folder pre-selected
+        openPromptEditorInFolder(folderId);
+      } else if (action === 'edit-folder') {
+        openFolderEditor(folderId);
+      } else if (action === 'delete-folder') {
+        const f = state.folders.find(x => x.id === folderId);
+        if (!f) return;
+        const count = state.prompts.filter(p => p.folderId === folderId).length;
+        if (!confirm(t('deleteFolderConfirm', f.name) + (count ? '\n' + t('promptsMovedToUncategorized', count) : ''))) return;
+        state.folders = state.folders.filter(x => x.id !== folderId);
+        state.prompts.forEach(p => { if (p.folderId === folderId) p.folderId = null; });
+        _suppressStorageRender = true;
+        await saveData('folders', state.folders);
+        await saveData('prompts', state.prompts);
+        _suppressStorageRender = false;
+        showToast(t('folderDeleted'), 'success');
+        renderFolders();
+        renderPrompts();
+        syncFolderDeleteToSupabase(folderId);
+      }
+    });
+  });
+  
+  const clickOutsideHandler = (e) => {
+    if (activeContextMenu && !activeContextMenu.contains(e.target)) {
+      closeContextMenu();
+    }
+  };
+  setTimeout(() => document.addEventListener('click', clickOutsideHandler, { once: true }), 10);
+}
+
+// Open prompt editor with folder pre-selected
+function openPromptEditorInFolder(folderId) {
+  P.openPromptEditor(null, {
+    canCreatePrompt,
+    getEffectiveLimit,
+    resolveImageUrl,
+    isSupabaseStorageUrl,
+    syncPromptToSupabase,
+    uploadImageToStorage: P.uploadImageToStorage,
+    deletePrompt,
+    setSuppressRender: (v) => { _suppressStorageRender = v; },
+    afterSave: (editingId, prevFolderId, newFolderId) => {
+      requestAnimationFrame(() => { renderPrompts(); renderFavorites(); renderFolders(); });
+    }
+  });
+  // Pre-select the folder in the editor after it opens
+  setTimeout(() => {
+    const folderSelect = document.getElementById('pe-folder');
+    if (folderSelect) folderSelect.value = folderId;
+  }, 50);
+}
+
 async function deletePrompt(id) {
   if (!confirm(t('deletePromptConfirm'))) return;
   state.prompts = state.prompts.filter(p => p.id !== id);
@@ -965,7 +1057,7 @@ function _renderFoldersImmediate() {
     const enterClass = _isFirstRender || !_renderedCardIds.has('folder-' + f.id) ? ' card-entering' : '';
     const delay = enterClass && i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : '';
     _renderedCardIds.add('folder-' + f.id);
-    return `<div class="folder-card${enterClass}" data-folder-id="${f.id}" data-folder-click="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn" data-edit-folder="${f.id}" title="${t('edit')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="prompt-action-btn" data-delete-folder="${f.id}" title="${t('delete')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div>`;
+    return `<div class="folder-card${enterClass}" data-folder-id="${f.id}" data-folder-click="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn folder-menu-btn" data-folder-menu="${f.id}" title="${t('more') || 'More'}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>`;
   }).join('');
 
   // Click on folder card to navigate to prompts in that folder
@@ -1016,27 +1108,11 @@ function _renderFoldersImmediate() {
     });
   });
 
-  document.querySelectorAll('[data-edit-folder]').forEach(btn => {
-    btn.addEventListener('click', (e) => { e.stopPropagation(); openFolderEditor(btn.dataset.editFolder); });
-  });
-  document.querySelectorAll('[data-delete-folder]').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+  // Three-dot menu for folders
+  document.querySelectorAll('[data-folder-menu]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const fId = btn.dataset.deleteFolder;
-      const f = state.folders.find(x => x.id === fId);
-      if (!f) return;
-      const count = state.prompts.filter(p => p.folderId === fId).length;
-      if (!confirm(t('deleteFolderConfirm', f.name) + (count ? '\n' + t('promptsMovedToUncategorized', count) : ''))) return;
-      state.folders = state.folders.filter(x => x.id !== fId);
-      state.prompts.forEach(p => { if (p.folderId === fId) p.folderId = null; });
-      _suppressStorageRender = true;
-      await saveData('folders', state.folders);
-      await saveData('prompts', state.prompts);
-      _suppressStorageRender = false;
-      showToast(t('folderDeleted'), 'success');
-      renderFolders();
-      renderPrompts();
-      syncFolderDeleteToSupabase(fId);
+      showFolderContextMenu(btn, btn.dataset.folderMenu);
     });
   });
 }
@@ -1080,10 +1156,13 @@ function openFolderEditor(folderId = null) {
       if (!updateFolderNameInPlace(folderId, name)) {
         renderFolders();
       }
+      // Also update folder name in prompts list
+      renderPrompts();
     } else {
       renderFolders();
+      // Also re-render prompts so new folder section appears immediately
+      renderPrompts();
     }
-    // Don't re-render prompts list here - it causes visible flicker on folders tab
   });
   
   // Save folder draft on input and confirm before closing if changed
@@ -2559,7 +2638,61 @@ async function init() {
     document.getElementById('welcome-title').textContent = t('welcomeTitle');
     document.getElementById('welcome-text').textContent = t('welcomeText');
     document.getElementById('get-started-btn').textContent = t('getStarted');
-    document.getElementById('get-started-btn').addEventListener('click', async () => {
+    
+    // Terms acceptance texts
+    const lang = P.getLang();
+    const ageTermsText = document.getElementById('age-terms-text');
+    const ageTermsErrorText = document.getElementById('age-terms-error-text');
+    const termsLink = document.getElementById('welcome-terms-link');
+    const privacyLink = document.getElementById('welcome-privacy-link');
+    if (ageTermsText) ageTermsText.textContent = lang === 'ru' ? 'Мне есть 13 лет, и я принимаю' : 'I am at least 13 years old and I accept the';
+    if (ageTermsErrorText) ageTermsErrorText.textContent = lang === 'ru' ? 'Необходимо подтвердить возраст и согласие с условиями' : 'You must confirm your age and accept the terms';
+    if (termsLink) termsLink.textContent = 'Terms of Service';
+    if (privacyLink) privacyLink.textContent = 'Privacy Policy';
+    
+    // Terms links open in new tab
+    termsLink?.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: chrome.runtime.getURL('terms.html') });
+    });
+    privacyLink?.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: chrome.runtime.getURL('privacy.html') });
+    });
+    
+    // Checkbox enables/disables Get Started button
+    const ageCheckbox = document.getElementById('age-terms-checkbox');
+    const getStartedBtn = document.getElementById('get-started-btn');
+    const ageError = document.getElementById('age-terms-error');
+    
+    // Check if already verified (maybe page refreshed)
+    chrome.storage.local.get(['ageVerified'], (res) => {
+      if (res.ageVerified) {
+        ageCheckbox.checked = true;
+        getStartedBtn.disabled = false;
+      }
+    });
+    
+    ageCheckbox?.addEventListener('change', () => {
+      getStartedBtn.disabled = !ageCheckbox.checked;
+      if (ageCheckbox.checked && ageError) ageError.style.display = 'none';
+    });
+    
+    getStartedBtn.addEventListener('click', async () => {
+      if (!ageCheckbox.checked) {
+        if (ageError) ageError.style.display = 'block';
+        return;
+      }
+      
+      // Store acceptance
+      chrome.storage.local.set({
+        ageVerified: true,
+        ageVerifiedDate: Date.now(),
+        termsAccepted: true,
+        privacyAccepted: true,
+        hasLaunched: true
+      });
+      
       welcomeScreen.style.display = 'none';
       mainApp.style.display = 'flex';
       state.isFirstLaunch = false;
@@ -2613,18 +2746,17 @@ async function init() {
   initTabs();
   initSearch();
   
-  // Initialize search filters
-  if (window.SearchFilters) {
-    searchFilters = new window.SearchFilters();
-    searchFilters.init({
-      currentTab: 'prompts',
-      onFilterChange: (filters) => {
-        console.log('Filters changed:', filters);
-        // Apply filters to search results
-        applySearchFilters(filters);
-      }
-    });
-  }
+  // Search filters hidden for now (future feature)
+  // if (window.SearchFilters) {
+  //   searchFilters = new window.SearchFilters();
+  //   searchFilters.init({
+  //     currentTab: 'prompts',
+  //     onFilterChange: (filters) => {
+  //       console.log('Filters changed:', filters);
+  //       applySearchFilters(filters);
+  //     }
+  //   });
+  // }
 
   // Update static text from i18n — this also does the FIRST render of all tabs
   updateStaticTexts();

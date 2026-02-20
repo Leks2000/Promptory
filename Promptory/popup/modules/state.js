@@ -87,7 +87,7 @@ P.loadData = async function() {
       if (result.libraryPromptsCache && Array.isArray(result.libraryPromptsCache)) P.state.libraryPrompts = result.libraryPromptsCache;
       if (!result.hasLaunched) {
         P.state.isFirstLaunch = true;
-        chrome.storage.local.set({ hasLaunched: true });
+        // Don't set hasLaunched here - it will be set after terms acceptance in popup.js
       }
       if (result.language) P.setLang(result.language);
       else if (chrome.i18n.getUILanguage().startsWith('ru')) P.setLang('ru');
