@@ -279,6 +279,7 @@
     };
 
     function setLang(lang) {
+      _currentLang = lang;
       const t = texts[lang];
       document.getElementById('ob-title').textContent = t.title;
       document.getElementById('ob-subtitle').textContent = t.subtitle;
@@ -324,6 +325,16 @@
     const ageError = document.getElementById('age-error');
     const openExtBtn = document.getElementById('open-ext-btn');
 
+    // Check if already verified (e.g. page reload)
+    chrome.storage.local.get(['ageVerified'], (res) => {
+      if (res.ageVerified) {
+        openExtBtn.disabled = false;
+        ageCheckbox.checked = true;
+        confirmBtn.disabled = true;
+        confirmBtn.style.display = 'none';
+      }
+    });
+
     // Enable/disable confirm button based on checkbox state
     ageCheckbox.addEventListener('change', () => {
       confirmBtn.disabled = !ageCheckbox.checked;
@@ -345,7 +356,7 @@
         termsAccepted: true,
         privacyAccepted: true
       }, () => {
-        // Enable the main button and hide age verification
+        // Enable the main button and hide age verification section
         openExtBtn.disabled = false;
         confirmBtn.style.display = 'none';
         ageError.classList.remove('visible');
@@ -375,34 +386,24 @@
       setTimeout(() => toast.remove(), 2000);
     }
 
+    let _currentLang = 'en';
     function getCurrentLang() {
-      return chrome.storage.local.get(['language']).then(r => r.language || 'en');
+      return _currentLang;
     }
 
-    // Button handlers - guide user to click extension icon
+    // Button handlers - close tab and open extension popup
     document.getElementById('open-ext-btn').addEventListener('click', () => {
       chrome.storage.local.set({ hasLaunched: true, onboardingComplete: true }, () => {
-        // Show helpful instruction instead of just closing
-        document.querySelector('.container').innerHTML = `
-          <div style="text-align:center;padding:60px 20px;">
-            <div class="logo" style="margin:0 auto 24px;">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-            </div>
-            <h1 style="font-size:24px;margin-bottom:12px;background:linear-gradient(135deg, var(--accent), #6BB0D6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Setup Complete!</h1>
-            <p style="color:var(--text-secondary);font-size:16px;margin-bottom:24px;line-height:1.6;">
-              Click the <strong style="color:var(--text-primary);">Promptory extension icon</strong> in your browser toolbar to get started.
-            </p>
-            <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:20px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;max-width:400px;margin:0 auto;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-              <span style="font-size:14px;color:var(--text-secondary);text-align:left;">Look for the puzzle piece icon (Extensions) in the top-right corner of Chrome, then click <strong style="color:var(--text-primary);">Promptory</strong>.</span>
-            </div>
-            <p style="color:var(--text-tertiary);font-size:13px;margin-top:16px;">Tip: Pin the extension for quick access!</p>
-            <button class="btn-primary" onclick="window.close()" style="margin-top:24px;padding:12px 24px;font-size:15px;">Got it!</button>
-          </div>
-        `;
+        // Try to open the extension popup by calling the action API
+        // In MV3, we can't programmatically open the popup, 
+        // but we can close this tab so the user naturally clicks the icon
+        // Show a brief toast then close
+        showToast(getCurrentLang() === 'ru' 
+          ? 'Нажмите на иконку Promptory в панели браузера!' 
+          : 'Click the Promptory icon in your browser toolbar!');
+        setTimeout(() => {
+          window.close();
+        }, 1500);
       });
     });
     document.getElementById('skip-btn').addEventListener('click', () => {

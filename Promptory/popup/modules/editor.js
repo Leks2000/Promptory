@@ -17,6 +17,102 @@ const supabaseMsg = P.supabaseMsg;
 
 let pendingImageFile = null;
 
+const DRAFT_KEY = 'editorDraft';
+const FOLDER_DRAFT_KEY = 'folderEditorDraft';
+
+// Save prompt editor draft to chrome.storage.local
+function _saveDraft(editingId) {
+  try {
+    const title = document.getElementById('pe-title')?.value || '';
+    const text = document.getElementById('pe-text')?.value || '';
+    const desc = document.getElementById('pe-desc')?.value || '';
+    const folderId = document.getElementById('pe-folder')?.value || '';
+    const platform = document.getElementById('pe-platform')?.value || 'universal';
+    const tags = Array.from(document.querySelectorAll('#pe-tags-list [data-tag]')).map(el => el.dataset.tag);
+    const imageUrl = document.getElementById('pe-image-url')?.value || '';
+    // Only save if there's meaningful content
+    if (title || text) {
+      chrome.storage.local.set({ [DRAFT_KEY]: { editingId: editingId || null, title, text, desc, folderId, platform, tags, imageUrl, savedAt: Date.now() } });
+    }
+  } catch (e) { /* silent */ }
+}
+
+function _clearDraft() {
+  try { chrome.storage.local.remove(DRAFT_KEY); } catch (e) { /* silent */ }
+}
+
+function _hasDraftChanges(editingId, prompt) {
+  const title = document.getElementById('pe-title')?.value?.trim() || '';
+  const text = document.getElementById('pe-text')?.value?.trim() || '';
+  if (editingId && prompt) {
+    // Editing: check if anything changed from original
+    return title !== (prompt.title || '') || text !== (prompt.text || '');
+  }
+  // New prompt: check if user typed anything
+  return title.length > 0 || text.length > 0;
+}
+
+// Restore draft into editor fields
+function _restoreDraft(draft) {
+  if (!draft) return;
+  const titleEl = document.getElementById('pe-title');
+  const textEl = document.getElementById('pe-text');
+  const descEl = document.getElementById('pe-desc');
+  const folderEl = document.getElementById('pe-folder');
+  const platformEl = document.getElementById('pe-platform');
+  const imageUrlEl = document.getElementById('pe-image-url');
+  if (titleEl && draft.title) titleEl.value = draft.title;
+  if (textEl && draft.text) textEl.value = draft.text;
+  if (descEl && draft.desc) descEl.value = draft.desc;
+  if (folderEl && draft.folderId) folderEl.value = draft.folderId;
+  if (platformEl && draft.platform) platformEl.value = draft.platform;
+  if (imageUrlEl && draft.imageUrl) imageUrlEl.value = draft.imageUrl;
+  // Restore tags
+  if (draft.tags && draft.tags.length > 0) {
+    const tagsList = document.getElementById('pe-tags-list');
+    if (tagsList) {
+      tagsList.innerHTML = '';
+      draft.tags.forEach(tag => {
+        const el = document.createElement('span');
+        el.className = 'tag tag-removable';
+        el.dataset.tag = tag;
+        el.innerHTML = `#${escapeHtml(tag)} <span class="tag-remove" data-remove-tag="${escapeHtml(tag)}">&times;</span>`;
+        tagsList.appendChild(el);
+      });
+    }
+  }
+}
+
+// Check for saved draft and offer to restore
+P.checkAndRestoreDraft = async function(opts) {
+  return new Promise(resolve => {
+    chrome.storage.local.get([DRAFT_KEY], (result) => {
+      const draft = result[DRAFT_KEY];
+      if (!draft || !draft.savedAt) { resolve(false); return; }
+      // Drafts older than 1 hour are discarded
+      if (Date.now() - draft.savedAt > 3600000) { _clearDraft(); resolve(false); return; }
+      if (draft.title || draft.text) {
+        // Ask user if they want to restore
+        const msg = P.getLang() === 'ru'
+          ? 'У вас есть несохранённый черновик. Восстановить?'
+          : 'You have an unsaved draft. Restore it?';
+        if (confirm(msg)) {
+          P.openPromptEditor(draft.editingId, opts);
+          // Restore draft values after modal opens
+          setTimeout(() => _restoreDraft(draft), 100);
+          resolve(true);
+        } else {
+          _clearDraft();
+          resolve(false);
+        }
+      } else {
+        _clearDraft();
+        resolve(false);
+      }
+    });
+  });
+};
+
 // ==================== OPEN PROMPT EDITOR ====================
 P.openPromptEditor = function(promptId = null, opts = {}) {
   const {
@@ -148,14 +244,40 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
     const removeTag = e.target.dataset.removeTag || e.target.closest('[data-remove-tag]')?.dataset.removeTag;
     if (removeTag) document.querySelector(`#pe-tags-list [data-tag="${removeTag}"]`)?.remove();
   });
-  document.getElementById('pe-save-btn').addEventListener('click', () => _savePrompt(promptId, opts));
+  // Auto-save draft periodically and on input
+  const draftSave = debounce(() => _saveDraft(promptId), 1000);
+  document.getElementById('pe-title')?.addEventListener('input', draftSave);
+  document.getElementById('pe-text')?.addEventListener('input', draftSave);
+  document.getElementById('pe-desc')?.addEventListener('input', draftSave);
+  document.getElementById('pe-folder')?.addEventListener('change', draftSave);
+  document.getElementById('pe-platform')?.addEventListener('change', draftSave);
+
+  // Close with confirmation if there are unsaved changes
+  const confirmAndClose = () => {
+    if (_hasDraftChanges(promptId, prompt)) {
+      const msg = P.getLang() === 'ru'
+        ? 'У вас есть несохранённые изменения. Закрыть без сохранения? (черновик будет сохранён)'
+        : 'You have unsaved changes. Close without saving? (draft will be saved)';
+      if (!confirm(msg)) return;
+      _saveDraft(promptId); // Save draft before closing
+    } else {
+      _clearDraft(); // No changes, clear any old draft
+    }
+    closeModal('prompt-editor-modal');
+  };
+
+  document.getElementById('pe-save-btn').addEventListener('click', () => {
+    _clearDraft(); // Clear draft on successful save
+    _savePrompt(promptId, opts);
+  });
   document.getElementById('pe-delete-btn')?.addEventListener('click', async () => {
     if (opts.deletePrompt) await opts.deletePrompt(promptId);
+    _clearDraft();
     closeModal('prompt-editor-modal');
   });
-  modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => closeModal('prompt-editor-modal')));
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('prompt-editor-modal'); });
-  const escHandler = (e) => { if (e.key === 'Escape') { closeModal('prompt-editor-modal'); document.removeEventListener('keydown', escHandler); } };
+  modal.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', confirmAndClose));
+  modal.addEventListener('click', (e) => { if (e.target === modal) confirmAndClose(); });
+  const escHandler = (e) => { if (e.key === 'Escape') { confirmAndClose(); document.removeEventListener('keydown', escHandler); } };
   document.addEventListener('keydown', escHandler);
 };
 

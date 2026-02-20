@@ -301,8 +301,28 @@ class OnboardingTutorial {
   // ==================== START ====================
   async start(onComplete) {
     this.onComplete = onComplete;
-    this.currentStep = 0;
     this.steps = buildSteps();
+
+    // Resume from saved step if popup was closed mid-tutorial
+    let resumeStep = 0;
+    try {
+      const stored = await new Promise(resolve => {
+        chrome.storage.local.get(['tutorialCurrentStep', 'onboardingTutorialComplete'], resolve);
+      });
+      if (stored.onboardingTutorialComplete) {
+        // Tutorial already completed — don't restart
+        log('Tutorial already completed, skipping');
+        if (this.onComplete) this.onComplete();
+        return;
+      }
+      if (typeof stored.tutorialCurrentStep === 'number' && stored.tutorialCurrentStep > 0) {
+        resumeStep = stored.tutorialCurrentStep;
+        log('Resuming tutorial from step', resumeStep);
+      }
+    } catch (e) {
+      log('Could not read tutorial state:', e);
+    }
+    this.currentStep = resumeStep;
 
     log('=== STARTING TUTORIAL v12 (9 steps) ===');
 
@@ -344,7 +364,16 @@ class OnboardingTutorial {
     this._resizeObserver = new ResizeObserver(() => this._repositionCurrent());
     this._resizeObserver.observe(document.body);
 
-    await this._showStep(0);
+    await this._showStep(resumeStep);
+  }
+
+  // ==================== SAVE TUTORIAL PROGRESS ====================
+  _saveProgress(stepIndex) {
+    try {
+      chrome.storage.local.set({ tutorialCurrentStep: stepIndex });
+    } catch (e) {
+      log('Failed to save tutorial progress:', e);
+    }
   }
 
   // ==================== SHOW STEP ====================
@@ -356,6 +385,7 @@ class OnboardingTutorial {
 
     const step = this.steps[index];
     this.currentStep = index;
+    this._saveProgress(index);
     log(`Step ${step.id}/${this.steps.length}: ${step.title.en}`);
 
     // Cleanup previous step
@@ -519,6 +549,36 @@ class OnboardingTutorial {
           <button class="tut-btn-next" id="tut-next">${lang === 'ru' ? 'Далее' : 'Next'}</button>
         ` : ''}
         ${!isFinal ? `<div class="tut-progress"><div class="tut-progress-bar" style="width:${(step.id / total) * 100}%"></div></div>` : ''}
+      </div>
+    `;
+  }
+
+  // ==================== RENDER FINAL STEP ====================
+  _renderFinalStep(lang, total) {
+    const isRu = lang === 'ru';
+    return `
+      <div class="tut-content tut-final-content">
+        <div class="tut-step-num">${total}/${total}</div>
+        <div class="tut-icon tut-icon-primary">${ICONS.finish}</div>
+        <div class="tut-badge tut-badge-primary">${isRu ? 'ГОТОВО' : 'COMPLETE'}</div>
+        <div class="tut-title">${isRu ? 'Вы готовы!' : "You're Ready!"}</div>
+        <div class="tut-desc">
+          ${isRu
+            ? 'Вы настроили Promptory! Вот что вы умеете:<br><br>' +
+              '• <strong>Alt+1/2/3</strong> — мгновенная вставка промптов<br>' +
+              '• <strong>Alt+S</strong> — быстрый поиск на любом AI-сайте<br>' +
+              '• <strong>Папки и теги</strong> — организация промптов<br>' +
+              '• <strong>Библиотека</strong> — промпты от сообщества<br><br>' +
+              'Удачной работы с AI!'
+            : "You've set up Promptory! Here's what you can do:<br><br>" +
+              '• <strong>Alt+1/2/3</strong> — instant prompt insertion<br>' +
+              '• <strong>Alt+S</strong> — quick search on any AI site<br>' +
+              '• <strong>Folders & tags</strong> — organize your prompts<br>' +
+              '• <strong>Library</strong> — community prompts<br><br>' +
+              'Happy prompting!'}
+        </div>
+        <button class="tut-btn-next tut-btn-finish" id="tut-finish">${isRu ? 'Начать работу' : 'Get Started'}</button>
+        <div class="tut-progress"><div class="tut-progress-bar" style="width:100%"></div></div>
       </div>
     `;
   }
@@ -995,13 +1055,35 @@ class OnboardingTutorial {
       });
     }, 400);
 
-    // Save completion
+    // Save completion and clear progress
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.set({ onboardingTutorialComplete: true });
+      chrome.storage.local.set({ onboardingTutorialComplete: true, tutorialCurrentStep: 0 });
     }
 
     if (this.onComplete) this.onComplete();
     log('Tutorial saved as complete');
+  }
+
+  // ==================== RENDER FINAL STEP ====================
+  _renderFinalStep(lang, total) {
+    const title = lang === 'ru' ? 'Вы готовы!' : "You're Ready!";
+    const desc = lang === 'ru'
+      ? 'Вы освоили все основные функции Promptory!\n\n• Создание и организация промптов\n• Быстрая вставка горячими клавишами\n• Поиск и библиотека\n\nПриятного использования!'
+      : 'You\'ve learned all the core features of Promptory!\n\n• Creating & organizing prompts\n• Quick Insert via hotkeys\n• Search & Library\n\nEnjoy using Promptory!';
+    const btnText = lang === 'ru' ? 'Начать работу' : 'Get Started';
+
+    return `
+      <div class="tut-content tut-final-content">
+        <div class="tut-header">
+          <div class="tut-step-num">${total}/${total}</div>
+        </div>
+        <div class="tut-icon tut-icon-primary">${ICONS.finish}</div>
+        <div class="tut-title">${title}</div>
+        <div class="tut-desc">${desc.replace(/\n/g, '<br>')}</div>
+        <button class="tut-btn-next tut-btn-finish" id="tut-finish">${btnText}</button>
+        <div class="tut-progress"><div class="tut-progress-bar" style="width:100%"></div></div>
+      </div>
+    `;
   }
 
   // ==================== UTILITIES ====================
