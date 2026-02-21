@@ -2725,76 +2725,13 @@ async function init() {
   const welcomeScreen = document.getElementById('welcome-screen');
   const mainApp = document.getElementById('main-app');
 
-  if (state.isFirstLaunch) {
-    welcomeScreen.style.display = 'flex';
-    mainApp.style.display = 'none';
-    // Update welcome screen texts
-    document.getElementById('welcome-title').textContent = t('welcomeTitle');
-    document.getElementById('welcome-text').textContent = t('welcomeText');
-    document.getElementById('get-started-btn').textContent = t('getStarted');
-    
-    // Terms acceptance texts
-    const lang = P.getLang();
-    const ageTermsText = document.getElementById('age-terms-text');
-    const ageTermsErrorText = document.getElementById('age-terms-error-text');
-    const termsLink = document.getElementById('welcome-terms-link');
-    const privacyLink = document.getElementById('welcome-privacy-link');
-    if (ageTermsText) ageTermsText.textContent = lang === 'ru' ? 'Мне есть 13 лет, и я принимаю' : 'I am at least 13 years old and I accept the';
-    if (ageTermsErrorText) ageTermsErrorText.textContent = lang === 'ru' ? 'Необходимо подтвердить возраст и согласие с условиями' : 'You must confirm your age and accept the terms';
-    if (termsLink) termsLink.textContent = 'Terms of Service';
-    if (privacyLink) privacyLink.textContent = 'Privacy Policy';
-    
-    // Terms links open in new tab
-    termsLink?.addEventListener('click', (e) => {
-      e.preventDefault();
-      chrome.tabs.create({ url: chrome.runtime.getURL('terms.html') });
-    });
-    privacyLink?.addEventListener('click', (e) => {
-      e.preventDefault();
-      chrome.tabs.create({ url: chrome.runtime.getURL('privacy.html') });
-    });
-    
-    // Checkbox enables/disables Get Started button
-    const ageCheckbox = document.getElementById('age-terms-checkbox');
-    const getStartedBtn = document.getElementById('get-started-btn');
-    const ageError = document.getElementById('age-terms-error');
-    
-    // Check if already verified (maybe page refreshed)
-    chrome.storage.local.get(['ageVerified'], (res) => {
-      if (res.ageVerified) {
-        ageCheckbox.checked = true;
-        getStartedBtn.disabled = false;
-      }
-    });
-    
-    ageCheckbox?.addEventListener('change', () => {
-      getStartedBtn.disabled = !ageCheckbox.checked;
-      if (ageCheckbox.checked && ageError) ageError.style.display = 'none';
-    });
-    
-    getStartedBtn.addEventListener('click', async () => {
-      if (!ageCheckbox.checked) {
-        if (ageError) ageError.style.display = 'block';
-        return;
-      }
-      
-      // Store acceptance
-      chrome.storage.local.set({
-        ageVerified: true,
-        ageVerifiedDate: Date.now(),
-        termsAccepted: true,
-        privacyAccepted: true,
-        hasLaunched: true
-      });
-      
-      // Analytics: terms accepted
-      P.analyticsTrackTermsAccepted();
+  // Helper: activate main app, skip welcome entirely
+  async function activateMainApp(startTutorial = false) {
+    welcomeScreen.style.display = 'none';
+    mainApp.style.display = 'flex';
+    state.isFirstLaunch = false;
 
-      welcomeScreen.style.display = 'none';
-      mainApp.style.display = 'flex';
-      state.isFirstLaunch = false;
-      await saveData('isFirstLaunch', false);
-      
+    if (startTutorial) {
       // Start onboarding tutorial after a short delay
       setTimeout(() => {
         if (window.OnboardingTutorial) {
@@ -2806,39 +2743,91 @@ async function init() {
           });
         }
       }, 300);
-    });
-  } else {
-    welcomeScreen.style.display = 'none';
-    mainApp.style.display = 'flex';
-    
-    // Resume onboarding tutorial if it was interrupted (popup was closed mid-tutorial)
-    // Uses tutorialLastCompletedStep (v13) with fallback to tutorialCurrentStep (v12)
-    chrome.storage.local.get(['tutorialLastCompletedStep', 'tutorialCurrentStep', 'onboardingTutorialComplete'], (stored) => {
-      if (stored.onboardingTutorialComplete) return; // Already done
-      
-      // v13: resume from last completed step
-      const hasV13Progress = typeof stored.tutorialLastCompletedStep === 'number' && stored.tutorialLastCompletedStep >= 0;
-      // v12 fallback: migrate old key
-      const hasV12Progress = !hasV13Progress && typeof stored.tutorialCurrentStep === 'number' && stored.tutorialCurrentStep > 0;
-      
-      if (hasV13Progress || hasV12Progress) {
-        // Migrate v12 key to v13 format if needed
-        if (hasV12Progress) {
-          const migratedStep = Math.max(0, stored.tutorialCurrentStep - 1);
-          chrome.storage.local.set({ tutorialLastCompletedStep: migratedStep });
-          chrome.storage.local.remove('tutorialCurrentStep');
-        }
-        
-        setTimeout(() => {
-          if (window.OnboardingTutorial) {
-            const tutorial = new window.OnboardingTutorial();
-            tutorial.start(() => {
-              console.log('✅ Onboarding resumed and complete');
-            });
+    } else {
+      // Resume onboarding tutorial if it was interrupted (popup was closed mid-tutorial)
+      chrome.storage.local.get(['tutorialLastCompletedStep', 'tutorialCurrentStep', 'onboardingTutorialComplete'], (stored) => {
+        if (stored.onboardingTutorialComplete) return;
+        const hasV13Progress = typeof stored.tutorialLastCompletedStep === 'number' && stored.tutorialLastCompletedStep >= 0;
+        const hasV12Progress = !hasV13Progress && typeof stored.tutorialCurrentStep === 'number' && stored.tutorialCurrentStep > 0;
+        if (hasV13Progress || hasV12Progress) {
+          if (hasV12Progress) {
+            const migratedStep = Math.max(0, stored.tutorialCurrentStep - 1);
+            chrome.storage.local.set({ tutorialLastCompletedStep: migratedStep });
+            chrome.storage.local.remove('tutorialCurrentStep');
           }
-        }, 500);
+          setTimeout(() => {
+            if (window.OnboardingTutorial) {
+              const tutorial = new window.OnboardingTutorial();
+              tutorial.start(() => { console.log('✅ Onboarding resumed and complete'); });
+            }
+          }, 500);
+        }
+      });
+    }
+  }
+
+  if (state.isFirstLaunch) {
+    // Check if the user already confirmed age/terms on welcome.html
+    // (which sets ageVerified + hasLaunched). If so, skip the in-popup welcome entirely.
+    const stored = await new Promise(r => chrome.storage.local.get(['ageVerified', 'hasLaunched'], r));
+    if (stored.ageVerified || stored.hasLaunched) {
+      // User already went through welcome.html — go straight to main app
+      console.log('[Promptory] Age already verified on welcome page, skipping popup welcome');
+      if (!stored.hasLaunched) {
+        chrome.storage.local.set({ hasLaunched: true });
       }
-    });
+      await activateMainApp(true);
+    } else {
+      // Edge case: popup opened before welcome.html was completed.
+      // Show the in-popup welcome screen with checkbox + Get Started
+      welcomeScreen.style.display = 'flex';
+      mainApp.style.display = 'none';
+      document.getElementById('welcome-title').textContent = t('welcomeTitle');
+      document.getElementById('welcome-text').textContent = t('welcomeText');
+      document.getElementById('get-started-btn').textContent = t('getStarted');
+
+      const lang = P.getLang();
+      const ageTermsText = document.getElementById('age-terms-text');
+      const ageTermsErrorText = document.getElementById('age-terms-error-text');
+      const termsLink = document.getElementById('welcome-terms-link');
+      const privacyLink = document.getElementById('welcome-privacy-link');
+      if (ageTermsText) ageTermsText.textContent = lang === 'ru' ? 'Мне есть 13 лет, и я принимаю' : 'I am at least 13 years old and I accept the';
+      if (ageTermsErrorText) ageTermsErrorText.textContent = lang === 'ru' ? 'Необходимо подтвердить возраст и согласие с условиями' : 'You must confirm your age and accept the terms';
+      if (termsLink) termsLink.textContent = 'Terms of Service';
+      if (privacyLink) privacyLink.textContent = 'Privacy Policy';
+
+      termsLink?.addEventListener('click', (e) => { e.preventDefault(); chrome.tabs.create({ url: chrome.runtime.getURL('terms.html') }); });
+      privacyLink?.addEventListener('click', (e) => { e.preventDefault(); chrome.tabs.create({ url: chrome.runtime.getURL('privacy.html') }); });
+
+      const ageCheckbox = document.getElementById('age-terms-checkbox');
+      const getStartedBtn = document.getElementById('get-started-btn');
+      const ageError = document.getElementById('age-terms-error');
+
+      ageCheckbox?.addEventListener('change', () => {
+        getStartedBtn.disabled = !ageCheckbox.checked;
+        if (ageCheckbox.checked && ageError) ageError.style.display = 'none';
+      });
+
+      getStartedBtn.addEventListener('click', async () => {
+        if (!ageCheckbox.checked) {
+          if (ageError) ageError.style.display = 'block';
+          return;
+        }
+        chrome.storage.local.set({
+          ageVerified: true,
+          ageVerifiedDate: Date.now(),
+          termsAccepted: true,
+          privacyAccepted: true,
+          hasLaunched: true
+        });
+        P.analyticsTrackTermsAccepted();
+        await saveData('isFirstLaunch', false);
+        await activateMainApp(true);
+      });
+    }
+  } else {
+    // Not first launch — go straight to main app
+    await activateMainApp(false);
   }
 
   // Initialize tabs and search BEFORE any rendering
