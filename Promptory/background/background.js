@@ -88,7 +88,9 @@ chrome.runtime.onInstalled.addListener((details) => {
       installDate: Date.now()
     });
 
-    // Open a brief install confirmation page (terms are accepted in the popup)
+    // Open the welcome/onboarding page where user confirms age, terms
+    // and chooses to sign in with Google or start without account.
+    // On completion, welcome.html sets hasLaunched: true and closes itself.
     chrome.tabs.create({
       url: chrome.runtime.getURL('onboarding/welcome.html'),
       active: true
