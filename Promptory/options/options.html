@@ -339,22 +339,7 @@
   
   <script src="../mixpanel.min.js"></script>
   <script src="../config.js"></script>
-  <script>
-    // Mixpanel for Options page (lightweight page view tracking)
-    if (typeof mixpanel !== 'undefined') {
-      mixpanel.init('c86143cd74824a2d516134f860745000', {
-        debug: false,
-        track_pageview: false,
-        persistence: 'localStorage',
-        api_host: 'https://api-js.mixpanel.com'
-      });
-      mixpanel.track('Page View', {
-        page_url: 'chrome-extension://options',
-        page_title: 'Promptory Options',
-        page_name: 'Options'
-      });
-    }
-  </script>
+  <script src="options-analytics.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

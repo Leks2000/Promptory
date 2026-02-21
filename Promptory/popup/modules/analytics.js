@@ -16,9 +16,10 @@ if (typeof mixpanel !== 'undefined') {
     debug: false,
     track_pageview: false,        // We track manually in extension context
     persistence: 'localStorage',
-    autocapture: true,
-    record_sessions_percent: 100,
     api_host: 'https://api-js.mixpanel.com'
+    // NOTE: autocapture and record_sessions_percent are intentionally DISABLED.
+    // They require loading an external script from cdn.mxpnl.com which is blocked
+    // by Manifest V3 CSP (script-src 'self' does not allow external JS).
   });
   console.log('[Analytics] Mixpanel initialized with token:', MIXPANEL_TOKEN.substring(0, 8) + '...');
 } else {
