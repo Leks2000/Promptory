@@ -2722,12 +2722,13 @@ async function init() {
     P.analyticsTrackPopupClose();
   });
 
-  const welcomeScreen = document.getElementById('welcome-screen');
   const mainApp = document.getElementById('main-app');
 
-  // Helper: activate main app, skip welcome entirely
+  // Age/terms verification is handled ONLY on welcome.html (onboarding page).
+  // The popup always shows the main app directly — no duplicate verification here.
+
+  // Helper: activate main app
   async function activateMainApp(startTutorial = false) {
-    welcomeScreen.style.display = 'none';
     mainApp.style.display = 'flex';
     state.isFirstLaunch = false;
 
@@ -2767,64 +2768,13 @@ async function init() {
   }
 
   if (state.isFirstLaunch) {
-    // Check if the user already confirmed age/terms on welcome.html
-    // (which sets ageVerified + hasLaunched). If so, skip the in-popup welcome entirely.
-    const stored = await new Promise(r => chrome.storage.local.get(['ageVerified', 'hasLaunched'], r));
-    if (stored.ageVerified || stored.hasLaunched) {
-      // User already went through welcome.html — go straight to main app
-      console.log('[Promptory] Age already verified on welcome page, skipping popup welcome');
-      if (!stored.hasLaunched) {
-        chrome.storage.local.set({ hasLaunched: true });
-      }
-      await activateMainApp(true);
-    } else {
-      // Edge case: popup opened before welcome.html was completed.
-      // Show the in-popup welcome screen with checkbox + Get Started
-      welcomeScreen.style.display = 'flex';
-      mainApp.style.display = 'none';
-      document.getElementById('welcome-title').textContent = t('welcomeTitle');
-      document.getElementById('welcome-text').textContent = t('welcomeText');
-      document.getElementById('get-started-btn').textContent = t('getStarted');
-
-      const lang = P.getLang();
-      const ageTermsText = document.getElementById('age-terms-text');
-      const ageTermsErrorText = document.getElementById('age-terms-error-text');
-      const termsLink = document.getElementById('welcome-terms-link');
-      const privacyLink = document.getElementById('welcome-privacy-link');
-      if (ageTermsText) ageTermsText.textContent = lang === 'ru' ? 'Мне есть 13 лет, и я принимаю' : 'I am at least 13 years old and I accept the';
-      if (ageTermsErrorText) ageTermsErrorText.textContent = lang === 'ru' ? 'Необходимо подтвердить возраст и согласие с условиями' : 'You must confirm your age and accept the terms';
-      if (termsLink) termsLink.textContent = 'Terms of Service';
-      if (privacyLink) privacyLink.textContent = 'Privacy Policy';
-
-      termsLink?.addEventListener('click', (e) => { e.preventDefault(); chrome.tabs.create({ url: chrome.runtime.getURL('terms.html') }); });
-      privacyLink?.addEventListener('click', (e) => { e.preventDefault(); chrome.tabs.create({ url: chrome.runtime.getURL('privacy.html') }); });
-
-      const ageCheckbox = document.getElementById('age-terms-checkbox');
-      const getStartedBtn = document.getElementById('get-started-btn');
-      const ageError = document.getElementById('age-terms-error');
-
-      ageCheckbox?.addEventListener('change', () => {
-        getStartedBtn.disabled = !ageCheckbox.checked;
-        if (ageCheckbox.checked && ageError) ageError.style.display = 'none';
-      });
-
-      getStartedBtn.addEventListener('click', async () => {
-        if (!ageCheckbox.checked) {
-          if (ageError) ageError.style.display = 'block';
-          return;
-        }
-        chrome.storage.local.set({
-          ageVerified: true,
-          ageVerifiedDate: Date.now(),
-          termsAccepted: true,
-          privacyAccepted: true,
-          hasLaunched: true
-        });
-        P.analyticsTrackTermsAccepted();
-        await saveData('isFirstLaunch', false);
-        await activateMainApp(true);
-      });
-    }
+    // First launch: mark as launched and start the tutorial.
+    // Age/terms verification already happened on welcome.html (opened by background.js on install).
+    // If user somehow opens popup before welcome.html, we still let them in —
+    // welcome.html tab is already open and they can complete it there.
+    chrome.storage.local.set({ hasLaunched: true });
+    await saveData('isFirstLaunch', false);
+    await activateMainApp(true);
   } else {
     // Not first launch — go straight to main app
     await activateMainApp(false);
@@ -2966,8 +2916,6 @@ async function init() {
     console.error('❌ Promptory init error:', err);
     P.analyticsTrackError('init', err?.message || String(err));
     const mainApp = document.getElementById('main-app');
-    const welcomeScreen = document.getElementById('welcome-screen');
-    if (welcomeScreen) welcomeScreen.style.display = 'none';
     if (mainApp) {
       mainApp.style.display = 'flex';
       mainApp.innerHTML = `
