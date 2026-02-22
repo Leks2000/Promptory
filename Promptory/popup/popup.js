@@ -251,15 +251,25 @@ function _renderPromptsImmediate() {
     else uncategorized.push(p);
   });
 
+  // Sort folders: folders with prompts first (by count desc), empty folders last
+  const sortedFolders = [...folders].sort((a, b) => {
+    const countA = (grouped[a.id] || []).length;
+    const countB = (grouped[b.id] || []).length;
+    return countB - countA;
+  });
+
   // Build with DocumentFragment for performance
   const frag = document.createDocumentFragment();
-  folders.forEach(f => {
-    const fp = grouped[f.id] || [];
-    frag.appendChild(buildFolderSection(f, fp));
-  });
+  
+  // Uncategorized (My prompts) always first if it has prompts
   if (uncategorized.length > 0) {
     frag.appendChild(buildFolderSection({ id: null, name: t('uncategorized') }, uncategorized));
   }
+  
+  sortedFolders.forEach(f => {
+    const fp = grouped[f.id] || [];
+    frag.appendChild(buildFolderSection(f, fp));
+  });
 
   list.innerHTML = '';
   list.appendChild(frag);
@@ -269,7 +279,11 @@ function _renderPromptsImmediate() {
 
 function buildFolderSection(folder, prompts) {
   const fId = folder.id || 'uncategorized';
-  const expanded = localStorage.getItem(`pv-folder-${fId}`) !== 'false';
+  const storedState = localStorage.getItem(`pv-folder-${fId}`);
+  // Empty folders are collapsed by default (unless user explicitly expanded them)
+  const expanded = prompts.length === 0 
+    ? storedState === 'true'  // Only expand if explicitly set to true
+    : storedState !== 'false'; // Non-empty folders expand unless explicitly collapsed
   const section = document.createElement('div');
   section.className = `folder-section ${expanded ? 'expanded' : ''}`;
   section.dataset.folderId = fId;
@@ -353,6 +367,12 @@ function _movePromptCardInDOM(promptId, targetSection, targetFolderId) {
     card.removeEventListener('animationend', onExit);
     card.classList.remove('card-exiting');
     
+    // Clear empty-folder hint from target if it exists
+    const emptyHint = targetContent.querySelector('div[style*="text-align:center"]');
+    if (emptyHint && !emptyHint.classList.contains('prompt-card')) {
+      emptyHint.remove();
+    }
+    
     // Move card to target folder content
     targetContent.appendChild(card);
     
@@ -365,15 +385,15 @@ function _movePromptCardInDOM(promptId, targetSection, targetFolderId) {
       card.style.animationDelay = '';
     }, { once: true });
     
-    // Update source folder section: update count, hide if empty
+    // Update source folder section: update count, show empty hint if no prompts left
     if (sourceSectionEl) {
       const sourceContent = sourceSectionEl.querySelector('.folder-content');
       const sourceCount = sourceSectionEl.querySelector('.folder-count');
       const remaining = sourceContent ? sourceContent.querySelectorAll('.prompt-card').length : 0;
       if (sourceCount) sourceCount.textContent = remaining;
-      // Remove empty folder section (except uncategorized which may still have 0)
-      if (remaining === 0) {
-        sourceSectionEl.remove();
+      // Show empty hint if folder has no more prompts (don't remove the folder!)
+      if (remaining === 0 && sourceContent && sourceSectionEl.classList.contains('expanded')) {
+        sourceContent.innerHTML = `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:var(--space-3) var(--space-2);text-align:center;">${t('noPromptsInFolder') || 'No prompts in this folder'}</div>`;
       }
     }
     
@@ -488,8 +508,8 @@ function attachPromptCardListeners() {
     showToast(`Moved to ${folderName}`, 'success');
     // Smart DOM update: move card between folder sections instead of full re-render
     _movePromptCardInDOM(promptId, folderSection, targetFolderId);
-    // Also update folder counts on the Folders tab
-    _updateFolderCounts();
+    // Re-render Folders tab to ensure counts are always correct
+    renderFolders();
     syncPromptToSupabase(prompt);
   });
   
@@ -1082,10 +1102,18 @@ function _renderFoldersImmediate() {
     list.innerHTML = `<div class="empty-state"><div class="empty-state-title">${t('noFoldersTitle')}</div><div class="empty-state-text">${t('noFoldersText')}</div></div>`;
     return;
   }
-  list.innerHTML = folders.map((f, i) => {
+  list.innerHTML = '';
+  
+  // Show uncategorized prompts count at the top of the Folders tab
+  const uncategorizedCount = state.prompts.filter(p => !p.folderId).length;
+  const uncatEnterClass = _isFirstRender || !_renderedCardIds.has('folder-uncategorized') ? ' card-entering' : '';
+  _renderedCardIds.add('folder-uncategorized');
+  list.innerHTML += `<div class="folder-card${uncatEnterClass}" data-folder-click="uncategorized"><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${t('uncategorized')}</div><div class="folder-card-count">${uncategorizedCount} ${uncategorizedCount !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn folder-menu-btn" style="visibility:hidden;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>`;
+  
+  list.innerHTML += folders.map((f, i) => {
     const count = state.prompts.filter(p => p.folderId === f.id).length;
     const enterClass = _isFirstRender || !_renderedCardIds.has('folder-' + f.id) ? ' card-entering' : '';
-    const delay = enterClass && i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : '';
+    const delay = enterClass && (i + 1) < MAX_ANIM_ITEMS ? `style="animation-delay:${(i + 1) * 30}ms"` : '';
     _renderedCardIds.add('folder-' + f.id);
     return `<div class="folder-card${enterClass}" data-folder-id="${f.id}" data-folder-click="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn folder-menu-btn" data-folder-menu="${f.id}" title="${t('more') || 'More'}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>`;
   }).join('');
@@ -1553,6 +1581,7 @@ function renderExplore() {
   };
   
   // Lazy load images from private Supabase Storage using IntersectionObserver
+  // Use large rootMargin to preload images well before they scroll into view
   const imageElements = list.querySelectorAll('.explore-card-thumbnail.needs-image-load');
   if (imageElements.length > 0 && 'IntersectionObserver' in window) {
     const imgObserver = new IntersectionObserver((entries) => {
@@ -1570,8 +1599,24 @@ function renderExplore() {
           }
         }
       });
-    }, { rootMargin: '100px' });
+    }, { rootMargin: '400px' });
     imageElements.forEach(el => imgObserver.observe(el));
+    
+    // Eagerly preload first 4 images immediately (visible without scrolling)
+    const eagerLoadCount = Math.min(4, imageElements.length);
+    for (let i = 0; i < eagerLoadCount; i++) {
+      const el = imageElements[i];
+      imgObserver.unobserve(el);
+      const imageUrl = el.dataset.imageUrl;
+      if (imageUrl) {
+        resolveImageUrl(imageUrl).then(resolvedUrl => {
+          if (resolvedUrl) {
+            el.style.cssText = `background-image: url('${resolvedUrl}'); background-size: cover; background-position: center;`;
+            el.classList.remove('needs-image-load');
+          }
+        }).catch(() => {});
+      }
+    }
   } else {
     imageElements.forEach(async (el) => {
       const imageUrl = el.dataset.imageUrl;
@@ -2795,9 +2840,15 @@ async function init() {
     const wTitle = document.getElementById('welcome-title');
     const wText = document.getElementById('welcome-text');
     const wBtn = document.getElementById('get-started-btn');
+    const wFeat1 = document.getElementById('welcome-feat-1');
+    const wFeat2 = document.getElementById('welcome-feat-2');
+    const wFeat3 = document.getElementById('welcome-feat-3');
     if (wTitle) wTitle.textContent = t('welcomeTitle');
     if (wText) wText.textContent = t('welcomeText');
     if (wBtn) wBtn.textContent = t('getStarted');
+    if (wFeat1) wFeat1.textContent = t('welcomeFeat1') || 'Create & organize prompts in folders';
+    if (wFeat2) wFeat2.textContent = t('welcomeFeat2') || 'Instantly insert into any AI chat';
+    if (wFeat3) wFeat3.textContent = t('welcomeFeat3') || 'Share & discover community prompts';
 
     if (wBtn) {
       wBtn.addEventListener('click', async () => {

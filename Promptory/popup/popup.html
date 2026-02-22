@@ -16,10 +16,33 @@
   <!-- Welcome Screen (first launch — shown only if welcome.html wasn't completed yet) -->
   <div id="welcome-screen" class="welcome-screen" style="display: none;">
     <div class="welcome-content">
+      <div class="welcome-logo" id="welcome-logo">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <line x1="10" y1="9" x2="8" y2="9"/>
+        </svg>
+      </div>
       <h1 class="welcome-title" id="welcome-title">Welcome to Promptory</h1>
       <p class="welcome-text" id="welcome-text">
         Your personal AI prompt manager. Save, organize, and instantly insert prompts into ChatGPT, Claude, Gemini, and more.
       </p>
+      <div class="welcome-features" id="welcome-features">
+        <div class="welcome-feature">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          <span id="welcome-feat-1">Create &amp; organize prompts in folders</span>
+        </div>
+        <div class="welcome-feature">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          <span id="welcome-feat-2">Instantly insert into any AI chat</span>
+        </div>
+        <div class="welcome-feature">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          <span id="welcome-feat-3">Share &amp; discover community prompts</span>
+        </div>
+      </div>
       <button class="btn btn-primary btn-lg ripple" id="get-started-btn">
         Get Started
       </button>
