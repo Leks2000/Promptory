@@ -11,16 +11,43 @@ const GUEST_PROMPT_LIMIT = CONFIG.GUEST_PROMPT_LIMIT || 25;
 // ---------- Mixpanel HTTP API (lightweight, for service worker) ----------
 const MIXPANEL_TOKEN = 'c86143cd74824a2d516134f860745000';
 
-function _trackEventHTTP(eventName, properties) {
+// Persistent anonymous ID for Mixpanel (consistent across events for the same install)
+let _cachedDistinctId = null;
+async function _getDistinctId() {
+  if (_cachedDistinctId) return _cachedDistinctId;
   try {
+    const result = await chrome.storage.local.get(['mixpanelDistinctId', 'user']);
+    // If user is logged in, use their Supabase user ID for cross-context identity
+    if (result.user && result.user.id) {
+      _cachedDistinctId = result.user.id;
+      return _cachedDistinctId;
+    }
+    // Otherwise use or create a persistent anonymous ID
+    if (result.mixpanelDistinctId) {
+      _cachedDistinctId = result.mixpanelDistinctId;
+    } else {
+      _cachedDistinctId = 'anon_' + crypto.randomUUID();
+      await chrome.storage.local.set({ mixpanelDistinctId: _cachedDistinctId });
+    }
+    return _cachedDistinctId;
+  } catch (e) {
+    // Fallback: generate a session-level ID (better than per-event)
+    if (!_cachedDistinctId) _cachedDistinctId = 'anon_' + crypto.randomUUID();
+    return _cachedDistinctId;
+  }
+}
+
+async function _trackEventHTTP(eventName, properties) {
+  try {
+    const distinctId = await _getDistinctId();
     const payload = {
       event: eventName,
       properties: {
         token: MIXPANEL_TOKEN,
-        distinct_id: 'anonymous_' + (Date.now().toString(36)),
+        distinct_id: distinctId,
         time: Math.floor(Date.now() / 1000),
         $insert_id: crypto.randomUUID(),
-        app_version: CONFIG.VERSION || '1.9.0',
+        app_version: CONFIG.VERSION || '1.10.0',
         source: 'background_service_worker',
         ...(properties || {})
       }
@@ -64,7 +91,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     // Analytics: track install via HTTP API
     _trackEventHTTP('Extension Installed', {
       install_reason: 'fresh_install',
-      app_version: CONFIG.VERSION || '1.9.0'
+      app_version: CONFIG.VERSION || '1.10.0'
     });
     
     chrome.storage.local.set({
@@ -99,7 +126,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     // Analytics: track extension update
     _trackEventHTTP('Extension Updated', {
       previous_version: details.previousVersion || 'unknown',
-      new_version: CONFIG.VERSION || '1.9.0'
+      new_version: CONFIG.VERSION || '1.10.0'
     });
   }
 });

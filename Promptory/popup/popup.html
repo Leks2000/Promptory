@@ -13,8 +13,21 @@
   <link rel="stylesheet" href="search-filters.css">
 </head>
 <body>
+  <!-- Welcome Screen (first launch — shown only if welcome.html wasn't completed yet) -->
+  <div id="welcome-screen" class="welcome-screen" style="display: none;">
+    <div class="welcome-content">
+      <h1 class="welcome-title" id="welcome-title">Welcome to Promptory</h1>
+      <p class="welcome-text" id="welcome-text">
+        Your personal AI prompt manager. Save, organize, and instantly insert prompts into ChatGPT, Claude, Gemini, and more.
+      </p>
+      <button class="btn btn-primary btn-lg ripple" id="get-started-btn">
+        Get Started
+      </button>
+    </div>
+  </div>
+
   <!-- Main App -->
-  <div id="main-app" class="main-app" style="display: flex;">
+  <div id="main-app" class="main-app" style="display: none;">
     <!-- Header -->
     <header class="header" role="banner">
       <div class="header-left">

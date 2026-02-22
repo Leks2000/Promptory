@@ -59,7 +59,7 @@ P.analyticsSetSuperProperties = function() {
   try {
     if (typeof mixpanel !== 'undefined' && mixpanel.register) {
       mixpanel.register({
-        'app_version': CONFIG.VERSION || '1.9.0',
+        'app_version': CONFIG.VERSION || '1.10.0',
         'extension_type': 'chrome',
         'plan': P.state?.isPremium ? 'Premium' : 'Free',
         'total_prompts': P.state?.prompts?.length || 0,
@@ -452,7 +452,7 @@ P.analyticsTrackTermsAccepted = function() {
 // ==================== INSTALL / WELCOME PAGE ====================
 P.analyticsTrackInstall = function() {
   _track('Extension Installed', {
-    app_version: CONFIG.VERSION || '1.9.0'
+    app_version: CONFIG.VERSION || '1.10.0'
   });
 };
 

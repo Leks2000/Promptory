@@ -2723,12 +2723,20 @@ async function init() {
   });
 
   const mainApp = document.getElementById('main-app');
+  const welcomeScreen = document.getElementById('welcome-screen');
 
-  // Age/terms verification is handled ONLY on welcome.html (onboarding page).
-  // The popup always shows the main app directly — no duplicate verification here.
+  // ==================== TUTORIAL / WELCOME FLOW ====================
+  // Flow:
+  //   1. On install: background.js opens onboarding/welcome.html (age+terms+Google sign-in).
+  //      welcome.html sets hasLaunched=true when complete, then closes itself.
+  //   2. First popup open: if hasLaunched=false (user opened popup before completing welcome.html),
+  //      show the in-popup welcome screen with "Get Started" button.
+  //   3. If hasLaunched=true BUT onboardingTutorialComplete is NOT true, start the tutorial.
+  //   4. If tutorial was interrupted (popup closed mid-tutorial), resume from last completed step.
 
   // Helper: activate main app
   async function activateMainApp(startTutorial = false) {
+    if (welcomeScreen) welcomeScreen.style.display = 'none';
     mainApp.style.display = 'flex';
     state.isFirstLaunch = false;
 
@@ -2767,16 +2775,47 @@ async function init() {
     }
   }
 
-  if (state.isFirstLaunch) {
-    // First launch: mark as launched and start the tutorial.
-    // Age/terms verification already happened on welcome.html (opened by background.js on install).
-    // If user somehow opens popup before welcome.html, we still let them in —
-    // welcome.html tab is already open and they can complete it there.
+  // Determine whether to show welcome screen, start tutorial, or go straight to app
+  const tutorialState = await new Promise(resolve => {
+    chrome.storage.local.get(['hasLaunched', 'ageVerified', 'onboardingTutorialComplete', 'tutorialLastCompletedStep', 'tutorialCurrentStep'], resolve);
+  });
+
+  const hasCompletedWelcome = !!(tutorialState.hasLaunched && tutorialState.ageVerified);
+  const isTutorialDone = !!tutorialState.onboardingTutorialComplete;
+  const hasTutorialProgress = typeof tutorialState.tutorialLastCompletedStep === 'number' || typeof tutorialState.tutorialCurrentStep === 'number';
+
+  if (state.isFirstLaunch && !hasCompletedWelcome) {
+    // Case 1: User opened popup BEFORE completing welcome.html.
+    // Show in-popup welcome screen with "Get Started" button.
+    // welcome.html is already open in a tab (opened by background.js on install).
+    welcomeScreen.style.display = 'flex';
+    mainApp.style.display = 'none';
+
+    // Update welcome screen texts from i18n
+    const wTitle = document.getElementById('welcome-title');
+    const wText = document.getElementById('welcome-text');
+    const wBtn = document.getElementById('get-started-btn');
+    if (wTitle) wTitle.textContent = t('welcomeTitle');
+    if (wText) wText.textContent = t('welcomeText');
+    if (wBtn) wBtn.textContent = t('getStarted');
+
+    if (wBtn) {
+      wBtn.addEventListener('click', async () => {
+        welcomeScreen.style.display = 'none';
+        chrome.storage.local.set({ hasLaunched: true });
+        await saveData('isFirstLaunch', false);
+        await activateMainApp(true);
+      });
+    }
+  } else if (!isTutorialDone && !hasTutorialProgress) {
+    // Case 2: Welcome was completed (hasLaunched=true) but tutorial never started.
+    // This is the normal flow: user completed welcome.html, then opens popup for the first time.
     chrome.storage.local.set({ hasLaunched: true });
     await saveData('isFirstLaunch', false);
     await activateMainApp(true);
   } else {
-    // Not first launch — go straight to main app
+    // Case 3: Not first launch OR tutorial already done/in-progress.
+    // Go to main app; activateMainApp will handle tutorial resume if needed.
     await activateMainApp(false);
   }
 
