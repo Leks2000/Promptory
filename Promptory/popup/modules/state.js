@@ -14,7 +14,7 @@ const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT;
 P.state = {
   prompts: [],
   folders: [],
-  settings: { theme: 'dark', hotkeys: { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } }, defaultFolder: null },
+  settings: { theme: 'dark', showPromptImages: false, hotkeys: { slot1: { promptId: null }, slot2: { promptId: null }, slot3: { promptId: null } }, defaultFolder: null },
   user: null,
   session: null,
   isFirstLaunch: false,

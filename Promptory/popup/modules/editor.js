@@ -307,6 +307,7 @@ function _handleImageSelect(file) {
     const zone = document.getElementById('pe-image-zone');
     preview.innerHTML = `
       <img src="${dataUrl}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.style.display='none';">
+      <div class="image-upload-success" style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:rgba(46,204,113,0.12);border-radius:var(--radius-sm);margin-top:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:12px;color:#2ecc71;font-weight:500;">${t('imageUploaded') || 'Image loaded'}</span></div>
       <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
     preview.style.display = 'block';
     preview.style.position = 'relative';
