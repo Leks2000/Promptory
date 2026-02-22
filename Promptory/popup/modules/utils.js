@@ -48,16 +48,29 @@ P.escapeHtml = function(text) {
   return div.innerHTML;
 };
 
+let _toastTimer = null;
+let _toastHideTimer = null;
+
 P.showToast = function(message, type = 'default') {
   const toast = document.getElementById('toast');
+  if (!toast) return;
+  
+  // Clear any existing timers
+  if (_toastTimer) clearTimeout(_toastTimer);
+  if (_toastHideTimer) clearTimeout(_toastHideTimer);
+  
   toast.textContent = message;
   toast.className = 'toast visible';
   if (type === 'success') toast.classList.add('success');
   else if (type === 'error') toast.classList.add('error');
-  setTimeout(() => {
+  
+  // Error toasts stay slightly longer for readability
+  const duration = type === 'error' ? 3500 : 2500;
+  
+  _toastTimer = setTimeout(() => {
     toast.classList.remove('visible');
-    setTimeout(() => { toast.className = 'toast'; }, 250);
-  }, 2500);
+    _toastHideTimer = setTimeout(() => { toast.className = 'toast'; }, 250);
+  }, duration);
 };
 
 P.saveData = function(key, value) {

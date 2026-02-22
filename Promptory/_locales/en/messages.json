@@ -342,5 +342,9 @@
   "adminTopLibrary": { "message": "Top Library Prompts" },
   "adminMigrationNeeded": { "message": "SQL migration required" },
   "adminMigrationHint": { "message": "Run supabase-admin-analytics.sql in Supabase SQL Editor to unlock global admin stats (total users, premium users, library stats). Currently showing your personal usage only." },
-  "noPromptsInFolder": { "message": "No prompts in this folder" }
+  "noPromptsInFolder": { "message": "No prompts in this folder" },
+
+  "welcomeFeat1": { "message": "Create & organize prompts in folders" },
+  "welcomeFeat2": { "message": "Instantly insert into any AI chat" },
+  "welcomeFeat3": { "message": "Share & discover community prompts" }
 }

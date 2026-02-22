@@ -342,5 +342,9 @@
   "adminTopLibrary": { "message": "Топ библиотечных промптов" },
   "adminMigrationNeeded": { "message": "Требуется SQL миграция" },
   "adminMigrationHint": { "message": "Запустите supabase-admin-analytics.sql в Supabase SQL Editor для полной админ-статистики (все пользователи, премиум, библиотека). Сейчас показана только ваша личная статистика." },
-  "noPromptsInFolder": { "message": "В этой папке пока нет промптов" }
+  "noPromptsInFolder": { "message": "В этой папке пока нет промптов" },
+
+  "welcomeFeat1": { "message": "Создавайте и организуйте промпты в папках" },
+  "welcomeFeat2": { "message": "Мгновенная вставка в любой AI чат" },
+  "welcomeFeat3": { "message": "Делитесь и находите промпты сообщества" }
 }

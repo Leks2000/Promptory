@@ -34,6 +34,49 @@ body {
   max-width: 320px; 
 }
 
+.welcome-logo {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--space-5);
+  background: var(--accent-gradient);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 8px 32px rgba(var(--accent-rgb), 0.3);
+  animation: welcomeLogoFloat 3s ease-in-out infinite;
+}
+
+@keyframes welcomeLogoFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.welcome-features {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  text-align: left;
+}
+
+.welcome-feature {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.welcome-feature svg {
+  flex-shrink: 0;
+}
+
 .welcome-title { 
   font-size: var(--font-size-2xl); 
   font-weight: var(--font-weight-bold); 
@@ -49,7 +92,7 @@ body {
   font-size: var(--font-size-sm); 
   color: var(--text-secondary); 
   line-height: var(--line-height-relaxed); 
-  margin-bottom: var(--space-8); 
+  margin-bottom: var(--space-4); 
 }
 
 .btn-lg { 
