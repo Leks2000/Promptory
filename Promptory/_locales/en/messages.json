@@ -147,7 +147,7 @@
   "freePlan": { "message": "Free Plan" },
   "promptsUsed": { "message": "$1 / $2 prompts used", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
   "upgradeInfo": { "message": "Upgrade to Premium for unlimited prompts, priority library access, and more." },
-  "folderLimitReached": { "message": "Folder limit reached. Upgrade for more folders." },
+  "folderLimitReached": { "message": "Folder limit reached. Upgrade to Pro for unlimited folders." },
 
   "guestPlan": { "message": "Guest Plan" },
   "signInForMore": { "message": "Sign in for more" },

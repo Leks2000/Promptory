@@ -5,9 +5,43 @@
 (function() {
 'use strict';
 
+// ==================== STYLED CONFIRM MODAL ====================
+// Replaces native confirm() with a beautiful styled modal
+function showStyledConfirm(title, message, confirmText, cancelText) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-modal-overlay';
+    overlay.innerHTML = `
+      <div class="confirm-modal">
+        <div class="confirm-modal-title">${title}</div>
+        <div class="confirm-modal-text">${message}</div>
+        <div class="confirm-modal-actions">
+          <button class="btn btn-primary ripple" id="styled-confirm-ok">${confirmText || 'OK'}</button>
+          <button class="btn btn-ghost" id="styled-confirm-cancel">${cancelText || (P?.getLang?.() === 'ru' ? '\u041e\u0442\u043c\u0435\u043d\u0430' : 'Cancel')}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+    
+    const cleanup = (result) => {
+      overlay.classList.remove('visible');
+      setTimeout(() => overlay.remove(), 200);
+      resolve(result);
+    };
+    
+    overlay.querySelector('#styled-confirm-ok').addEventListener('click', () => cleanup(true));
+    overlay.querySelector('#styled-confirm-cancel').addEventListener('click', () => cleanup(false));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+  });
+}
+
 // ==================== MODULE ALIASES (single source of truth: popup/modules/*) ====================
 const P = window.Promptory;
 const state = P.state; // Shared state object — modules and popup.js reference the SAME object
+
+// Expose showStyledConfirm on P so modules can use it
+P.showStyledConfirm = showStyledConfirm;
 
 // Config constants
 const SUPABASE_URL = CONFIG.SUPABASE_URL;
@@ -137,8 +171,9 @@ function renderLimitBanner() {
   banner.innerHTML = remaining === 0
     ? `<div class="limit-banner-content"><span class="limit-banner-text">${t('freeLimitBanner')}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${effectiveLimit}</span>${upgradeBtn}</div>`
     : `<div class="limit-banner-content"><span class="limit-banner-text">${t('remainingOnFree', remaining)}</span></div><div class="limit-banner-actions"><span class="limit-banner-count">${state.prompts.length}/${effectiveLimit}</span>${upgradeBtn}</div>`;
-  const content = document.querySelector('.content');
-  if (content) content.insertBefore(banner, content.firstChild);
+  // Insert limit banner only in the Prompts tab
+  const promptsTab = document.getElementById('prompts-tab');
+  if (promptsTab) promptsTab.insertBefore(banner, promptsTab.firstChild);
   
   // Add click handler for upgrade button
   document.getElementById('limit-upgrade-btn')?.addEventListener('click', () => {
@@ -296,10 +331,8 @@ function _renderPromptsImmediate() {
 function buildFolderSection(folder, prompts) {
   const fId = folder.id || 'uncategorized';
   const storedState = localStorage.getItem(`pv-folder-${fId}`);
-  // Empty folders are collapsed by default (unless user explicitly expanded them)
-  const expanded = prompts.length === 0 
-    ? storedState === 'true'  // Only expand if explicitly set to true
-    : storedState !== 'false'; // Non-empty folders expand unless explicitly collapsed
+  // All folders collapsed by default unless user explicitly expanded them
+  const expanded = storedState === 'true';
   const section = document.createElement('div');
   section.className = `folder-section ${expanded ? 'expanded' : ''}`;
   section.dataset.folderId = fId;
@@ -1146,12 +1179,6 @@ function _renderFoldersImmediate() {
   }
   list.innerHTML = '';
   
-  // Show uncategorized prompts count at the top of the Folders tab
-  const uncategorizedCount = state.prompts.filter(p => !p.folderId).length;
-  const uncatEnterClass = _isFirstRender || !_renderedCardIds.has('folder-uncategorized') ? ' card-entering' : '';
-  _renderedCardIds.add('folder-uncategorized');
-  list.innerHTML += `<div class="folder-card${uncatEnterClass}" data-folder-click="uncategorized"><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${t('uncategorized')}</div><div class="folder-card-count">${uncategorizedCount} ${uncategorizedCount !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn folder-menu-btn" style="visibility:hidden;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>`;
-  
   // Sort folders by prompt count (descending) — folders with more prompts first
   const sortedFoldersForTab = [...folders].sort((a, b) => {
     const countA = state.prompts.filter(p => p.folderId === a.id).length;
@@ -1162,7 +1189,7 @@ function _renderFoldersImmediate() {
   list.innerHTML += sortedFoldersForTab.map((f, i) => {
     const count = state.prompts.filter(p => p.folderId === f.id).length;
     const enterClass = _isFirstRender || !_renderedCardIds.has('folder-' + f.id) ? ' card-entering' : '';
-    const delay = enterClass && (i + 1) < MAX_ANIM_ITEMS ? `style="animation-delay:${(i + 1) * 30}ms"` : '';
+    const delay = enterClass && i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : '';
     _renderedCardIds.add('folder-' + f.id);
     return `<div class="folder-card${enterClass}" data-folder-id="${f.id}" data-folder-click="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn folder-menu-btn" data-folder-menu="${f.id}" title="${t('more') || 'More'}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>`;
   }).join('');
@@ -1296,15 +1323,19 @@ function openFolderEditor(folderId = null) {
   };
   nameInput?.addEventListener('input', debounce(saveFolderDraft, 500));
   
-  const confirmAndCloseFolder = () => {
+  const confirmAndCloseFolder = async () => {
     const currentName = nameInput?.value?.trim() || '';
     const originalName = folder ? folder.name : '';
     const hadChanges = currentName && currentName !== originalName;
     if (hadChanges) {
+      const titleText = P.getLang() === 'ru' ? 'Несохранённые изменения' : 'Unsaved Changes';
       const msg = P.getLang() === 'ru'
         ? 'У вас есть несохранённые изменения. Закрыть без сохранения? (черновик будет сохранён)'
         : 'You have unsaved changes. Close without saving? (draft will be saved)';
-      if (!confirm(msg)) return;
+      const okText = P.getLang() === 'ru' ? 'Закрыть' : 'Close';
+      const cancelBtnText = P.getLang() === 'ru' ? 'Отмена' : 'Cancel';
+      const confirmed = await showStyledConfirm(titleText, msg, okText, cancelBtnText);
+      if (!confirmed) return;
       saveFolderDraft();
     } else {
       try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
@@ -2985,11 +3016,17 @@ async function init() {
     }
     // Folder draft check (max 1 hour old)
     else if (folderDraft && folderDraft.savedAt && (Date.now() - folderDraft.savedAt < 3600000) && folderDraft.name) {
-      setTimeout(() => {
+      setTimeout(async () => {
+        const titleText = P.getLang() === 'ru'
+          ? 'Оповещение расширения "Promptory"'
+          : 'Promptory Notification';
         const msg = P.getLang() === 'ru'
           ? 'У вас есть несохранённый черновик папки. Восстановить?'
           : 'You have an unsaved folder draft. Restore it?';
-        if (confirm(msg)) {
+        const okText = 'OK';
+        const cancelBtnText = P.getLang() === 'ru' ? 'Отмена' : 'Cancel';
+        const confirmed = await showStyledConfirm(titleText, msg, okText, cancelBtnText);
+        if (confirmed) {
           P.analyticsTrackDraftRestored('folder');
           openFolderEditor(folderDraft.folderId || null);
           setTimeout(() => {
@@ -3097,10 +3134,15 @@ function showReviewBanner() {
   banner.className = 'review-banner';
   banner.innerHTML = `
     <div class="review-banner-content">
-      <span class="review-banner-text">${bannerText}</span>
-      <div class="review-banner-actions">
-        <button class="btn btn-primary btn-sm ripple" id="review-rate-btn">${rateText}</button>
-        <button class="btn btn-ghost btn-sm" id="review-later-btn">${laterText}</button>
+      <div class="review-banner-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      </div>
+      <div class="review-banner-body">
+        <div class="review-banner-text">${bannerText}</div>
+        <div class="review-banner-actions">
+          <button class="btn btn-primary btn-sm ripple" id="review-rate-btn">${rateText}</button>
+          <button class="btn btn-ghost btn-sm" id="review-later-btn">${laterText}</button>
+        </div>
       </div>
     </div>
   `;
