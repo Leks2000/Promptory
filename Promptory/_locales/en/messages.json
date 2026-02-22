@@ -346,5 +346,10 @@
 
   "welcomeFeat1": { "message": "Create & organize prompts in folders" },
   "welcomeFeat2": { "message": "Instantly insert into any AI chat" },
-  "welcomeFeat3": { "message": "Share & discover community prompts" }
+  "welcomeFeat3": { "message": "Share & discover community prompts" },
+
+  "display": { "message": "Display" },
+  "showPromptImages": { "message": "Show images in prompts" },
+  "showPromptImagesHint": { "message": "Display mini thumbnail if prompt has an image" },
+  "imageUploaded": { "message": "Image loaded" }
 }

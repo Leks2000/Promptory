@@ -346,5 +346,10 @@
 
   "welcomeFeat1": { "message": "Создавайте и организуйте промпты в папках" },
   "welcomeFeat2": { "message": "Мгновенная вставка в любой AI чат" },
-  "welcomeFeat3": { "message": "Делитесь и находите промпты сообщества" }
+  "welcomeFeat3": { "message": "Делитесь и находите промпты сообщества" },
+
+  "display": { "message": "Отображение" },
+  "showPromptImages": { "message": "Показывать картинки в промптах" },
+  "showPromptImagesHint": { "message": "Мини-иконка если у промпта есть картинка" },
+  "imageUploaded": { "message": "Картинка загружена" }
 }

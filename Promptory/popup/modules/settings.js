@@ -141,6 +141,15 @@ P.openSettingsModal = function(opts = {}) {
       })()}
     </div></div><div class="divider"></div>
     <div class="form-group"><label class="form-label">${t('theme')}</label><select id="settings-theme"><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>${t('themeDark')}</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>${t('themeLight')}</option><option value="system" ${s.theme === 'system' ? 'selected' : ''}>${t('themeSystem')}</option></select></div><div class="divider"></div>
+    <div class="form-group"><label class="form-label">${t('display') || 'Display'}</label>
+      <label class="settings-toggle-row" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;">
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <span style="font-size:var(--font-size-sm);color:var(--text-primary);font-weight:500;">${t('showPromptImages') || 'Show images in prompts'}</span>
+          <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">${t('showPromptImagesHint') || 'Display mini thumbnail if prompt has an image'}</span>
+        </div>
+        <input type="checkbox" id="settings-show-images" ${s.showPromptImages ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+      </label>
+    </div><div class="divider"></div>
     <div class="form-group"><label class="form-label">${t('dataManagement')}</label><div style="display:flex;flex-direction:column;gap:8px;">${P.canExportImport && P.canExportImport() ? `<button class="btn btn-secondary" id="settings-export-btn">${t('exportAllData')}</button><button class="btn btn-secondary" id="settings-import-btn">${t('importData')}</button>` : `<div style="font-size:var(--font-size-sm);color:var(--text-tertiary);padding:8px 0;">${t('signInForExport') || 'Sign in with Google to export/import data'}</div>`}</div></div><div class="divider"></div>
     <div class="form-group"><label class="form-label">${t('proSubscription')}</label>
       <div class="pro-settings-card">
@@ -332,6 +341,7 @@ P.openSettingsModal = function(opts = {}) {
   // Save
   document.getElementById('settings-save-btn').addEventListener('click', async () => {
     state.settings.theme = document.getElementById('settings-theme').value;
+    state.settings.showPromptImages = !!document.getElementById('settings-show-images')?.checked;
     const newLang = document.getElementById('settings-lang').value;
     document.querySelectorAll('[data-hotkey-slot]').forEach(sel => {
       const slotId = sel.dataset.hotkeySlot;

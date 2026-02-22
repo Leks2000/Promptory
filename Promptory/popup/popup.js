@@ -177,6 +177,15 @@ function initTabs() {
       if (target) target.classList.add('active');
       if (btn.dataset.tab === 'stats') renderStats();
       
+      // When switching to folders tab, re-render to sort by prompt count and hide empty
+      if (btn.dataset.tab === 'folders') {
+        renderFolders();
+      }
+      // When switching to prompts tab, re-render to sort folders and hide empty
+      if (btn.dataset.tab === 'prompts') {
+        renderPrompts();
+      }
+      
       // Analytics: track tab switch
       P.analyticsTrackTabSwitch(btn.dataset.tab);
       
@@ -251,7 +260,7 @@ function _renderPromptsImmediate() {
     else uncategorized.push(p);
   });
 
-  // Sort folders: folders with prompts first (by count desc), empty folders last
+  // Sort folders: folders with prompts first (by count desc), empty folders hidden
   const sortedFolders = [...folders].sort((a, b) => {
     const countA = (grouped[a.id] || []).length;
     const countB = (grouped[b.id] || []).length;
@@ -268,6 +277,8 @@ function _renderPromptsImmediate() {
   
   sortedFolders.forEach(f => {
     const fp = grouped[f.id] || [];
+    // Hide empty folders in prompts tab (they are still visible in folders tab)
+    if (fp.length === 0) return;
     frag.appendChild(buildFolderSection(f, fp));
   });
 
@@ -275,6 +286,11 @@ function _renderPromptsImmediate() {
   list.appendChild(frag);
   attachPromptCardListeners();
   renderLimitBanner();
+  
+  // Load prompt card thumbnails if showPromptImages is enabled
+  if (state.settings.showPromptImages) {
+    _loadPromptCardThumbnails(list);
+  }
 }
 
 function buildFolderSection(folder, prompts) {
@@ -318,6 +334,25 @@ function buildFolderSection(folder, prompts) {
 const _renderedCardIds = new Set();
 let _isFirstRender = true;
 
+// Load mini thumbnails for prompt cards with images (async, non-blocking)
+function _loadPromptCardThumbnails(container) {
+  const thumbEls = container.querySelectorAll('.prompt-card-thumbnail[data-prompt-img]');
+  thumbEls.forEach(el => {
+    const imageUrl = el.dataset.promptImg;
+    if (!imageUrl) return;
+    
+    if (imageUrl.startsWith('data:') || (!isSupabaseStorageUrl(imageUrl) && imageUrl.startsWith('http'))) {
+      el.style.backgroundImage = `url('${imageUrl}')`;
+    } else if (isSupabaseStorageUrl(imageUrl)) {
+      resolveImageUrl(imageUrl).then(resolvedUrl => {
+        if (resolvedUrl) {
+          el.style.backgroundImage = `url('${resolvedUrl}')`;
+        }
+      }).catch(() => {});
+    }
+  });
+}
+
 function renderPromptCard(prompt, idx) {
   const isNew = _isFirstRender || !_renderedCardIds.has(prompt.id);
   const enterClass = isNew && idx < MAX_ANIM_ITEMS ? ' card-entering' : '';
@@ -326,11 +361,18 @@ function renderPromptCard(prompt, idx) {
   const tagsHtml = prompt.tags?.length
     ? `<div class="tags">${prompt.tags.slice(0, 3).map(tg => `<span class="tag">#${escapeHtml(tg)}</span>`).join('')}${prompt.tags.length > 3 ? `<span class="tag">+${prompt.tags.length - 3}</span>` : ''}</div>`
     : '';
+  // Show mini image thumbnail if setting is enabled and prompt has an image
+  const showImages = state.settings.showPromptImages;
+  const hasImage = showImages && prompt.imageUrl;
+  const imageHtml = hasImage 
+    ? `<div class="prompt-card-thumbnail" data-prompt-img="${escapeHtml(prompt.imageUrl)}"></div>`
+    : '';
   // Card click = copy. Actions: fav, edit, insert, menu. Added glare-card for premium hover effect
   // Keyboard: tabindex + role for accessibility; draggable for drag-and-drop
   return `
     <div class="prompt-card glare-card${enterClass}" data-prompt-id="${prompt.id}" ${delay} title="${t('clickToCopy') || 'Click to copy'}" tabindex="0" role="button" aria-label="${escapeHtml(prompt.title)} - ${t('clickToCopy')}" draggable="true">
       <div class="prompt-card-header">
+        ${imageHtml}
         <div class="prompt-title">${escapeHtml(truncate(prompt.title, 60))}</div>
         <div class="prompt-actions">
           <button class="prompt-action-btn ${prompt.isFavorite ? 'active' : ''}" data-action="toggle-fav" data-id="${prompt.id}" title="${prompt.isFavorite ? t('removeFromFavorites') : t('addToFavorites')}" aria-label="${prompt.isFavorite ? t('removeFromFavorites') : t('addToFavorites')}">
@@ -1110,13 +1152,26 @@ function _renderFoldersImmediate() {
   _renderedCardIds.add('folder-uncategorized');
   list.innerHTML += `<div class="folder-card${uncatEnterClass}" data-folder-click="uncategorized"><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${t('uncategorized')}</div><div class="folder-card-count">${uncategorizedCount} ${uncategorizedCount !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn folder-menu-btn" style="visibility:hidden;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>`;
   
-  list.innerHTML += folders.map((f, i) => {
+  // Sort folders by prompt count (descending) — folders with more prompts first
+  const sortedFoldersForTab = [...folders].sort((a, b) => {
+    const countA = state.prompts.filter(p => p.folderId === a.id).length;
+    const countB = state.prompts.filter(p => p.folderId === b.id).length;
+    return countB - countA;
+  });
+  
+  list.innerHTML += sortedFoldersForTab.map((f, i) => {
     const count = state.prompts.filter(p => p.folderId === f.id).length;
     const enterClass = _isFirstRender || !_renderedCardIds.has('folder-' + f.id) ? ' card-entering' : '';
     const delay = enterClass && (i + 1) < MAX_ANIM_ITEMS ? `style="animation-delay:${(i + 1) * 30}ms"` : '';
     _renderedCardIds.add('folder-' + f.id);
     return `<div class="folder-card${enterClass}" data-folder-id="${f.id}" data-folder-click="${f.id}" ${delay}><div class="folder-card-left"><div class="folder-details"><div class="folder-card-name">${escapeHtml(f.name)}</div><div class="folder-card-count">${count} ${count !== 1 ? t('promptsWord') : t('promptWord')}</div></div></div><div class="folder-card-actions"><button class="prompt-action-btn folder-menu-btn" data-folder-menu="${f.id}" title="${t('more') || 'More'}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>`;
   }).join('');
+  
+  // Show folder limit banner for free/guest users
+  const folderLimit = P.getEffectiveFolderLimit();
+  if (folderLimit !== Infinity && folders.length >= folderLimit) {
+    list.innerHTML += `<div class="folder-limit-banner"><span class="folder-limit-text">${t('folderLimitReached') || 'Folder limit reached. Upgrade for more folders.'}</span></div>`;
+  }
 
   // Click on folder card to navigate to prompts in that folder
   document.querySelectorAll('[data-folder-click]').forEach(card => {
@@ -3030,15 +3085,22 @@ function showReviewBanner() {
   // Don't show if already visible
   if (document.getElementById('review-banner')) return;
 
+  const isRu = P.getLang() === 'ru';
+  const bannerText = isRu 
+    ? 'Если не трудно, поставь пж оценку \u2014 это поможет продвижению данного проекта, я старался бро :3'
+    : 'If you enjoy Promptory, please leave a rating \u2014 it really helps the project grow!';
+  const rateText = isRu ? 'Оценить' : 'Rate it';
+  const laterText = isRu ? 'Позже' : 'Later';
+
   const banner = document.createElement('div');
   banner.id = 'review-banner';
   banner.className = 'review-banner';
   banner.innerHTML = `
     <div class="review-banner-content">
-      <span class="review-banner-text">Enjoying Promptory? Rate us ⭐</span>
+      <span class="review-banner-text">${bannerText}</span>
       <div class="review-banner-actions">
-        <button class="btn btn-primary btn-sm ripple" id="review-rate-btn">Rate it</button>
-        <button class="btn btn-ghost btn-sm" id="review-later-btn">Later</button>
+        <button class="btn btn-primary btn-sm ripple" id="review-rate-btn">${rateText}</button>
+        <button class="btn btn-ghost btn-sm" id="review-later-btn">${laterText}</button>
       </div>
     </div>
   `;
@@ -3087,6 +3149,8 @@ window.debugReviewBanner = function() {
   console.log('[Promptory] Force-showing review banner (no date check)');
   showReviewBanner();
 };
+// Alias for convenience
+window.showReviewBanner = window.debugReviewBanner;
 
 window.debugSimulate3Days = function() {
   chrome.storage.local.set({ installDate: Date.now() - (3 * 24 * 60 * 60 * 1000) }, () => {

@@ -247,13 +247,17 @@
   background: var(--glass-bg);
   /* Blur removed for performance */
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   pointer-events: none;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  max-width: calc(100% - 32px);
+  text-align: center;
+  line-height: 1.4;
 }
 
 .toast.visible {
