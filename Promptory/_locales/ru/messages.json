@@ -147,10 +147,10 @@
   "freePlan": { "message": "Бесплатный план" },
   "promptsUsed": { "message": "$1 / $2 промптов использовано", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
   "upgradeInfo": { "message": "Перейдите на Premium для неограниченных промптов, приоритетного доступа и других возможностей." },
-  "folderLimitReached": { "message": "Лимит папок достигнут. Обновите план для большего количества папок." },
+  "folderLimitReached": { "message": "Лимит папок достигнут. Перейдите на Pro для создания неограниченных папок." },
 
   "guestPlan": { "message": "Гостевой план" },
-  "signInForMore": { "message": "Войдите для большего" },
+  "signInForMore": { "message": "Войдите для + промптов" },
   "signInForMoreInfo": { "message": "Войдите через Google для 100 промптов, или перейдите на Pro для безлимита." },
   "signInToUnlock": { "message": "Войдите для разблокировки" },
   "signInForExport": { "message": "Войдите через Google для экспорта/импорта данных" },

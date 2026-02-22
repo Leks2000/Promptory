@@ -86,17 +86,24 @@ function _restoreDraft(draft) {
 // Check for saved draft and offer to restore
 P.checkAndRestoreDraft = async function(opts) {
   return new Promise(resolve => {
-    chrome.storage.local.get([DRAFT_KEY], (result) => {
+    chrome.storage.local.get([DRAFT_KEY], async (result) => {
       const draft = result[DRAFT_KEY];
       if (!draft || !draft.savedAt) { resolve(false); return; }
       // Drafts older than 1 hour are discarded
       if (Date.now() - draft.savedAt > 3600000) { _clearDraft(); resolve(false); return; }
       if (draft.title || draft.text) {
-        // Ask user if they want to restore
+        // Ask user if they want to restore using styled confirm
+        const titleText = P.getLang() === 'ru'
+          ? 'Оповещение расширения "Promptory"'
+          : 'Promptory Notification';
         const msg = P.getLang() === 'ru'
           ? 'У вас есть несохранённый черновик. Восстановить?'
           : 'You have an unsaved draft. Restore it?';
-        if (confirm(msg)) {
+        const okText = 'OK';
+        const cancelBtnText = P.getLang() === 'ru' ? 'Отмена' : 'Cancel';
+        
+        const confirmed = await P.showStyledConfirm(titleText, msg, okText, cancelBtnText);
+        if (confirmed) {
           P.analyticsTrackDraftRestored('prompt');
           P.openPromptEditor(draft.editingId, opts);
           // Restore draft values after modal opens
@@ -156,7 +163,8 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
           <div class="image-upload-container" id="pe-image-container">
             <div class="image-upload-preview" id="pe-image-preview" style="display:${imageUrlValid ? 'block' : 'none'};position:relative;">
               ${imageUrlValid ? `<img id="pe-image-el" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.parentElement.style.display='none';document.getElementById('pe-image-zone').style.display='flex';">
-              <div class="image-loading-indicator" id="pe-image-loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text-tertiary);font-size:12px;">Loading...</div>` : ''}
+              <div class="image-loading-indicator" id="pe-image-loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text-tertiary);font-size:12px;">Loading...</div>
+              <div class="image-replace-hint" style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;padding:3px 8px;border-radius:var(--radius-sm);pointer-events:none;opacity:0.7;">${P.getLang() === 'ru' ? 'Нажмите для замены' : 'Click to replace'}</div>` : ''}
               <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
             </div>
             <div class="image-upload-zone" id="pe-image-zone" style="display:${imageUrlValid ? 'none' : 'flex'};align-items:center;justify-content:center;padding:20px;border:2px dashed var(--border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.2s;">
@@ -183,28 +191,41 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
   setTimeout(() => modal.classList.add('visible'), 10);
   document.getElementById('pe-title').focus();
 
-  // Async: resolve and load image from Supabase Storage
-  if (imageUrlValid && prompt?.imageUrl && resolveImageUrl) {
+  // Async: resolve and load image from Supabase Storage (or set directly for data/http URLs)
+  if (imageUrlValid && prompt?.imageUrl) {
     const imgEl = document.getElementById('pe-image-el');
     const loadingIndicator = document.getElementById('pe-image-loading');
     if (imgEl) {
-      resolveImageUrl(prompt.imageUrl).then(resolvedUrl => {
-        if (resolvedUrl && imgEl) {
-          imgEl.src = resolvedUrl;
-          imgEl.onload = () => { if (loadingIndicator) loadingIndicator.style.display = 'none'; };
-          imgEl.onerror = () => {
-            const preview = document.getElementById('pe-image-preview');
-            const zone = document.getElementById('pe-image-zone');
-            if (preview) preview.style.display = 'none';
-            if (zone) zone.style.display = 'flex';
-          };
-        }
-      }).catch(() => {
-        const preview = document.getElementById('pe-image-preview');
-        const zone = document.getElementById('pe-image-zone');
-        if (preview) preview.style.display = 'none';
-        if (zone) zone.style.display = 'flex';
-      });
+      // For data URLs or simple http URLs, set src directly
+      if (prompt.imageUrl.startsWith('data:') || (prompt.imageUrl.startsWith('http') && !prompt.imageUrl.includes('supabase.co/storage/'))) {
+        imgEl.src = prompt.imageUrl;
+        imgEl.onload = () => { if (loadingIndicator) loadingIndicator.style.display = 'none'; };
+        imgEl.onerror = () => {
+          const preview = document.getElementById('pe-image-preview');
+          const zone = document.getElementById('pe-image-zone');
+          if (preview) preview.style.display = 'none';
+          if (zone) zone.style.display = 'flex';
+        };
+      } else if (resolveImageUrl) {
+        // For Supabase Storage URLs, resolve them
+        resolveImageUrl(prompt.imageUrl).then(resolvedUrl => {
+          if (resolvedUrl && imgEl) {
+            imgEl.src = resolvedUrl;
+            imgEl.onload = () => { if (loadingIndicator) loadingIndicator.style.display = 'none'; };
+            imgEl.onerror = () => {
+              const preview = document.getElementById('pe-image-preview');
+              const zone = document.getElementById('pe-image-zone');
+              if (preview) preview.style.display = 'none';
+              if (zone) zone.style.display = 'flex';
+            };
+          }
+        }).catch(() => {
+          const preview = document.getElementById('pe-image-preview');
+          const zone = document.getElementById('pe-image-zone');
+          if (preview) preview.style.display = 'none';
+          if (zone) zone.style.display = 'flex';
+        });
+      }
     }
   }
 
@@ -227,6 +248,25 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
     const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) _handleImageSelect(file);
   });
+
+  // Allow clicking on preview image to replace it
+  if (imagePreview) {
+    imagePreview.style.cursor = 'pointer';
+    imagePreview.addEventListener('click', (e) => {
+      // Don't trigger if clicking the remove button
+      if (e.target.closest('.image-remove-btn')) return;
+      imageInput.click();
+    });
+    // Drag and drop on preview to replace
+    imagePreview.addEventListener('dragover', (e) => { e.preventDefault(); imagePreview.style.opacity = '0.7'; });
+    imagePreview.addEventListener('dragleave', () => { imagePreview.style.opacity = '1'; });
+    imagePreview.addEventListener('drop', (e) => {
+      e.preventDefault();
+      imagePreview.style.opacity = '1';
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) _handleImageSelect(file);
+    });
+  }
 
   imageInput?.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -263,13 +303,17 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
   document.getElementById('pe-platform')?.addEventListener('change', () => { draftSave(); P.analyticsTrackPromptFieldEdit('platform', !!promptId, promptId); });
 
   // Close with confirmation if there are unsaved changes
-  const confirmAndClose = () => {
+  const confirmAndClose = async () => {
     const hadChanges = _hasDraftChanges(promptId, prompt);
     if (hadChanges) {
+      const titleText = P.getLang() === 'ru' ? 'Несохранённые изменения' : 'Unsaved Changes';
       const msg = P.getLang() === 'ru'
         ? 'У вас есть несохранённые изменения. Закрыть без сохранения? (черновик будет сохранён)'
         : 'You have unsaved changes. Close without saving? (draft will be saved)';
-      if (!confirm(msg)) return;
+      const okText = P.getLang() === 'ru' ? 'Закрыть' : 'Close';
+      const cancelBtnText = P.getLang() === 'ru' ? 'Отмена' : 'Cancel';
+      const confirmed = P.showStyledConfirm ? await P.showStyledConfirm(titleText, msg, okText, cancelBtnText) : confirm(msg);
+      if (!confirmed) return;
       _saveDraft(promptId); // Save draft before closing
     } else {
       _clearDraft(); // No changes, clear any old draft
@@ -305,18 +349,27 @@ function _handleImageSelect(file) {
   const processImage = (dataUrl) => {
     const preview = document.getElementById('pe-image-preview');
     const zone = document.getElementById('pe-image-zone');
+    const replaceHintText = P.getLang() === 'ru' ? 'Нажмите для замены' : 'Click to replace';
     preview.innerHTML = `
       <img src="${dataUrl}" alt="Preview" style="max-width:100%;max-height:150px;border-radius:var(--radius-md);object-fit:cover;display:block;" onerror="this.style.display='none';">
       <div class="image-upload-success" style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:rgba(46,204,113,0.12);border-radius:var(--radius-sm);margin-top:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:12px;color:#2ecc71;font-weight:500;">${t('imageUploaded') || 'Image loaded'}</span></div>
+      <div class="image-replace-hint" style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;padding:3px 8px;border-radius:var(--radius-sm);pointer-events:none;opacity:0.7;">${replaceHintText}</div>
       <button class="btn btn-sm btn-ghost image-remove-btn" id="pe-image-remove" style="position:absolute;top:4px;right:4px;background:var(--bg-primary);" title="${t('remove') || 'Remove'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
     preview.style.display = 'block';
     preview.style.position = 'relative';
+    preview.style.cursor = 'pointer';
     zone.style.display = 'none';
+    // Click on preview to replace image
+    preview.onclick = (ev) => {
+      if (ev.target.closest('.image-remove-btn')) return;
+      document.getElementById('pe-image-input')?.click();
+    };
     document.getElementById('pe-image-remove')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       pendingImageFile = null;
       document.getElementById('pe-image-url').value = '';
       preview.style.display = 'none';
+      preview.onclick = null;
       zone.style.display = 'flex';
     });
   };
