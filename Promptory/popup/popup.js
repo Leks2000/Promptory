@@ -295,7 +295,7 @@ function _renderPromptsImmediate() {
     else uncategorized.push(p);
   });
 
-  // Sort folders: folders with prompts first (by count desc), empty folders hidden
+  // Sort folders: folders with prompts first (by count desc), empty folders at bottom
   const sortedFolders = [...folders].sort((a, b) => {
     const countA = (grouped[a.id] || []).length;
     const countB = (grouped[b.id] || []).length;
@@ -312,8 +312,7 @@ function _renderPromptsImmediate() {
   
   sortedFolders.forEach(f => {
     const fp = grouped[f.id] || [];
-    // Hide empty folders in prompts tab (they are still visible in folders tab)
-    if (fp.length === 0) return;
+    // Show ALL folders (including empty ones), collapsed by default
     frag.appendChild(buildFolderSection(f, fp));
   });
 
@@ -966,6 +965,9 @@ async function shareToLibrary(promptId) {
   if (!state.user || !state.session) { showToast(t('signInToShare'), 'error'); return; }
 
   let selectedImageData = null;
+  // Check if prompt already has an uploaded image
+  const promptHasImage = p.imageUrl && (p.imageUrl.startsWith('http') || p.imageUrl.startsWith('data:') || p.imageUrl.startsWith('supabase-storage://'));
+  let useExistingImage = promptHasImage;
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -980,7 +982,7 @@ async function shareToLibrary(promptId) {
         <div class="form-group">
           <label class="form-label">${t('coverImage') || 'Cover Image'} <span style="color:var(--text-tertiary);font-weight:normal;">(${t('optional') || 'optional'})</span></label>
           <div class="image-upload-area" id="share-image-upload">
-            <div class="image-upload-placeholder" id="share-image-placeholder">
+            <div class="image-upload-placeholder" id="share-image-placeholder" style="display:${promptHasImage ? 'none' : 'flex'};">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                 <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -989,8 +991,8 @@ async function shareToLibrary(promptId) {
               <span>${t('clickToUpload') || 'Click to upload image'}</span>
               <span style="font-size:10px;color:var(--text-tertiary);">PNG, JPG (max 500KB)</span>
             </div>
-            <img id="share-image-preview" class="image-preview" style="display:none;" />
-            <button class="btn btn-icon btn-sm image-remove-btn" id="share-image-remove" style="display:none;" title="${t('remove') || 'Remove'}">×</button>
+            <img id="share-image-preview" class="image-preview" style="display:${promptHasImage ? 'block' : 'none'};" />
+            <button class="btn btn-icon btn-sm image-remove-btn" id="share-image-remove" style="display:${promptHasImage ? 'flex' : 'none'};" title="${t('remove') || 'Remove'}">×</button>
           </div>
           <input type="file" id="share-image-input" accept="image/png,image/jpeg,image/jpg" style="display:none;">
         </div>
@@ -1000,6 +1002,26 @@ async function shareToLibrary(promptId) {
     </div>`;
   document.body.appendChild(modal);
   setTimeout(() => modal.classList.add('visible'), 10);
+
+  // If prompt already has an image, load it into preview
+  if (promptHasImage) {
+    const previewEl = document.getElementById('share-image-preview');
+    if (previewEl) {
+      resolveImageUrl(p.imageUrl).then(resolvedUrl => {
+        if (resolvedUrl && previewEl) {
+          previewEl.src = resolvedUrl;
+        }
+      }).catch(() => {
+        // Can't resolve - hide preview, show placeholder
+        previewEl.style.display = 'none';
+        const ph = document.getElementById('share-image-placeholder');
+        const rm = document.getElementById('share-image-remove');
+        if (ph) ph.style.display = 'flex';
+        if (rm) rm.style.display = 'none';
+        useExistingImage = false;
+      });
+    }
+  }
 
   // Image upload handling
   const imageUpload = document.getElementById('share-image-upload');
@@ -1027,6 +1049,7 @@ async function shareToLibrary(promptId) {
     const reader = new FileReader();
     reader.onload = (e) => {
       selectedImageData = e.target.result;
+      useExistingImage = false; // User uploaded a new image, don't use existing
       imagePreview.src = selectedImageData;
       imagePreview.style.display = 'block';
       imagePlaceholder.style.display = 'none';
@@ -1038,6 +1061,7 @@ async function shareToLibrary(promptId) {
   imageRemove.addEventListener('click', (e) => {
     e.stopPropagation();
     selectedImageData = null;
+    useExistingImage = false;
     imagePreview.style.display = 'none';
     imagePlaceholder.style.display = 'flex';
     imageRemove.style.display = 'none';
@@ -1053,17 +1077,17 @@ async function shareToLibrary(promptId) {
     btn.classList.add('loading');
     
     try {
-      // Upload image to Supabase Storage if selected
+      // Determine image URL: use existing prompt image, new upload, or null
       let imageUrl = null;
+      
       if (selectedImageData) {
+        // User selected a new image — upload it
         try {
-          // Get content type from data URL
           const contentTypeMatch = selectedImageData.match(/^data:(.+?);base64,/);
           const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/png';
           const ext = contentType.split('/')[1] || 'png';
           const fileName = `${state.user.id}/${Date.now()}_cover.${ext}`;
           
-          // Upload via background script (handles auth) - pass base64 directly
           const uploadRes = await supabaseMsg({
             action: 'supabaseRequest',
             method: 'POST',
@@ -1074,7 +1098,6 @@ async function shareToLibrary(promptId) {
           });
           
           if (!uploadRes?.error) {
-            // Use the signed URL or storage path returned by background
             imageUrl = uploadRes?.data?.signedUrl || uploadRes?.data?.publicUrl || `${SUPABASE_URL}/storage/v1/object/public/Lib_img/${fileName}`;
             console.log('✅ Image uploaded:', imageUrl);
           } else {
@@ -1082,8 +1105,25 @@ async function shareToLibrary(promptId) {
           }
         } catch (imgErr) {
           console.warn('⚠️ Image upload error:', imgErr);
-          // Continue without image
         }
+      } else if (useExistingImage && p.imageUrl) {
+        // Use the existing image from the prompt (no re-upload needed)
+        // Resolve supabase-storage:// URLs to public URLs for library
+        if (p.imageUrl.startsWith('supabase-storage://') || isSupabaseStorageUrl(p.imageUrl)) {
+          // Try to get a public URL for the existing image
+          const storagePath = extractStoragePath(p.imageUrl);
+          if (storagePath) {
+            const parts = storagePath.split('/');
+            const bucket = parts[0];
+            const path = parts.slice(1).join('/');
+            imageUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+          } else {
+            imageUrl = p.imageUrl;
+          }
+        } else {
+          imageUrl = p.imageUrl;
+        }
+        console.log('✅ Using existing prompt image:', imageUrl);
       }
       
       // Share prompt to library using RPC function (bypasses RLS issues with SECURITY DEFINER)
@@ -1365,20 +1405,38 @@ function _renderFavoritesImmediate() {
     document.getElementById('fav-browse-btn')?.addEventListener('click', () => document.querySelector('[data-tab="prompts"]').click());
     return;
   }
+  // Independent favorites component — no dependency on prompt-card/folder classes
   let html = `<div class="favorites-header"><span class="favorites-header-title">${t('favorites')}</span><span class="favorites-count">${favorites.length}</span></div>`;
+  html += '<div class="favorites-items">';
   html += favorites.map((p, i) => {
     const enterClass = _isFirstRender || !_renderedCardIds.has('fav-' + p.id) ? ' card-entering' : '';
     const delay = enterClass && i < MAX_ANIM_ITEMS ? `style="animation-delay:${i * 30}ms"` : '';
     _renderedCardIds.add('fav-' + p.id);
-    return `<div class="prompt-card favorite-card${enterClass}" data-prompt-id="${p.id}" ${delay}><div class="prompt-card-header"><div class="prompt-title">${escapeHtml(truncate(p.title, 50))}</div><div class="prompt-actions"><button class="prompt-action-btn" data-fav-copy="${p.id}" title="${t('copy')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button class="prompt-action-btn" data-fav-insert="${p.id}" title="${t('insertToPage')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></button><button class="prompt-action-btn active" data-fav-remove="${p.id}" title="${t('removeFromFavorites')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button></div></div><div class="prompt-meta"><span class="prompt-stat">${t('usedTimes', p.useCount || 0)}</span><span class="prompt-stat">${formatDate(p.updatedAt)}</span></div></div>`;
+    return `<div class="fav-card${enterClass}" data-prompt-id="${p.id}" ${delay} tabindex="0" role="button" aria-label="${escapeHtml(p.title)} - ${t('clickToCopy')}">
+      <div class="fav-card-header">
+        <div class="fav-card-title">${escapeHtml(truncate(p.title, 50))}</div>
+        <div class="fav-card-actions">
+          <button class="prompt-action-btn" data-fav-copy="${p.id}" title="${t('copy')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+          <button class="prompt-action-btn" data-fav-insert="${p.id}" title="${t('insertToPage')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></button>
+          <button class="prompt-action-btn active" data-fav-remove="${p.id}" title="${t('removeFromFavorites')}"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+        </div>
+      </div>
+      <div class="fav-card-meta"><span>${t('usedTimes', p.useCount || 0)}</span><span>${formatDate(p.updatedAt)}</span></div>
+    </div>`;
   }).join('');
+  html += '</div>';
   list.innerHTML = html;
-  document.querySelectorAll('[data-fav-copy]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); copyPrompt(btn.dataset.favCopy); }));
-  document.querySelectorAll('[data-fav-insert]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); insertPromptToPage(btn.dataset.favInsert); }));
-  document.querySelectorAll('[data-fav-remove]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); toggleFavorite(btn.dataset.favRemove); }));
-  document.querySelectorAll('#favorites-list .prompt-card').forEach(card => {
-    card.addEventListener('click', (e) => { if (!e.target.closest('.prompt-action-btn')) copyPrompt(card.dataset.promptId); });
-  });
+  // Event delegation on the favorites list
+  list.onclick = (e) => {
+    const copyBtn = e.target.closest('[data-fav-copy]');
+    if (copyBtn) { e.stopPropagation(); copyPrompt(copyBtn.dataset.favCopy); return; }
+    const insertBtn = e.target.closest('[data-fav-insert]');
+    if (insertBtn) { e.stopPropagation(); insertPromptToPage(insertBtn.dataset.favInsert); return; }
+    const removeBtn = e.target.closest('[data-fav-remove]');
+    if (removeBtn) { e.stopPropagation(); toggleFavorite(removeBtn.dataset.favRemove); return; }
+    const card = e.target.closest('.fav-card');
+    if (card && !e.target.closest('.prompt-action-btn')) { copyPrompt(card.dataset.promptId); }
+  };
 }
 
 // ==================== EXPLORE ====================
