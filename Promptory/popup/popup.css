@@ -315,6 +315,7 @@ body {
   height: calc(600px - 52px - 56px - 40px - 32px); /* height - header - search - tabs - padding */
   overflow-y: auto;
   overflow-x: hidden;
+  padding: 4px 4px 4px 4px; /* Room for hover lift/scale so cards don't clip */
 }
 
 /* Folders list needs to account for the "New Folder" button header */
@@ -322,7 +323,7 @@ body {
   height: calc(600px - 52px - 56px - 40px - 32px - 44px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 8px;
+  padding: 4px 4px 8px 4px; /* Top/side padding for hover lift/scale so cards are not clipped */
 }
 
 /* Explore list — отдельное правило (grid layout) */
@@ -518,14 +519,11 @@ body {
   border-radius: var(--radius-lg);
   cursor: pointer; 
   margin-bottom: var(--space-2);
-  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), z-index 0s;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform 300ms var(--ease-out-expo);
   position: relative;
-  z-index: 1;
-  isolation: isolate;
 }
 
 .folder-card:hover {
-  z-index: 10;
   border-color: rgba(var(--accent-rgb), 0.25);
   background: var(--bg-hover);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
