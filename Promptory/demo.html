@@ -254,5 +254,138 @@
       View on GitHub
     </a>
   </div>
+  <!-- GSAP Core -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  
+  <script>
+  (function() {
+    if (typeof gsap === 'undefined') return;
+    gsap.registerPlugin(ScrollTrigger);
+    
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+    
+    // Header
+    tl.from('.header h1', { y: -60, opacity: 0, duration: 0.8, ease: 'back.out(2)' })
+      .from('.header p', { y: -20, opacity: 0, duration: 0.5 }, '-=0.4')
+      
+      // Note
+      .from('.note', { scale: 0.9, opacity: 0, duration: 0.4, ease: 'back.out(1.5)' }, '-=0.2')
+      
+      // Extension frame: dramatic reveal
+      .from('.extension-frame', {
+        scale: 0.7,
+        opacity: 0,
+        rotationY: -15,
+        duration: 0.8,
+        ease: 'back.out(1.7)'
+      }, '-=0.1')
+      
+      // Info card: slide from right
+      .from('.info-card', {
+        x: 60,
+        opacity: 0,
+        duration: 0.6,
+        ease: 'power3.out'
+      }, '-=0.5')
+      
+      // Info card items stagger
+      .from('.info-card li', {
+        x: 30,
+        opacity: 0,
+        stagger: 0.08,
+        duration: 0.4,
+        ease: 'power3.out'
+      }, '-=0.3');
+    
+    // Features: scroll triggered
+    gsap.utils.toArray('.feature').forEach((feature, i) => {
+      gsap.from(feature, {
+        scrollTrigger: {
+          trigger: feature,
+          start: 'top 90%',
+          toggleActions: 'play none none reverse'
+        },
+        y: 40,
+        opacity: 0,
+        scale: 0.9,
+        rotation: gsap.utils.random(-2, 2),
+        duration: 0.5,
+        delay: i * 0.1,
+        ease: 'back.out(1.5)'
+      });
+      
+      // Magnetic hover
+      feature.addEventListener('mousemove', (e) => {
+        const rect = feature.getBoundingClientRect();
+        const x = e.clientX - rect.left - rect.width / 2;
+        const y = e.clientY - rect.top - rect.height / 2;
+        gsap.to(feature, {
+          x: x * 0.08, y: y * 0.08,
+          boxShadow: `${x * 0.15}px ${y * 0.15}px 25px rgba(124, 58, 237, 0.2)`,
+          duration: 0.3, ease: 'power2.out'
+        });
+      });
+      feature.addEventListener('mouseleave', () => {
+        gsap.to(feature, { x: 0, y: 0, boxShadow: 'none', duration: 0.5, ease: 'elastic.out(1, 0.5)' });
+      });
+    });
+    
+    // Download button
+    gsap.from('.download-btn', {
+      scrollTrigger: { trigger: '.download-btn', start: 'top 95%' },
+      scale: 0.8, opacity: 0, duration: 0.5, ease: 'back.out(2.5)'
+    });
+    
+    const btn = document.querySelector('.download-btn');
+    if (btn) {
+      btn.addEventListener('mouseenter', () => gsap.to(btn, { scale: 1.05, duration: 0.25 }));
+      btn.addEventListener('mouseleave', () => gsap.to(btn, { scale: 1, duration: 0.3, ease: 'elastic.out(1, 0.5)' }));
+    }
+    
+    // Extension frame hover tilt
+    const frame = document.querySelector('.extension-frame');
+    if (frame) {
+      frame.addEventListener('mousemove', (e) => {
+        const rect = frame.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width - 0.5;
+        const y = (e.clientY - rect.top) / rect.height - 0.5;
+        gsap.to(frame, {
+          rotationY: x * 10, rotationX: -y * 10,
+          transformPerspective: 800,
+          boxShadow: `${x * 30}px ${y * 30}px 80px rgba(0,0,0,0.6)`,
+          duration: 0.4, ease: 'power2.out'
+        });
+      });
+      frame.addEventListener('mouseleave', () => {
+        gsap.to(frame, {
+          rotationY: 0, rotationX: 0,
+          boxShadow: '0 25px 80px rgba(0,0,0,0.5)',
+          duration: 0.6, ease: 'elastic.out(1, 0.5)'
+        });
+      });
+    }
+    
+    // Background floating particles
+    for (let i = 0; i < 30; i++) {
+      const dot = document.createElement('div');
+      const size = gsap.utils.random(2, 6);
+      dot.style.cssText = `
+        position: fixed; width: ${size}px; height: ${size}px;
+        background: rgba(124, 58, 237, ${gsap.utils.random(0.1, 0.3)});
+        border-radius: 50%; pointer-events: none; z-index: 0;
+        left: ${gsap.utils.random(0, 100)}%; top: ${gsap.utils.random(0, 100)}%;
+      `;
+      document.body.appendChild(dot);
+      gsap.to(dot, {
+        y: gsap.utils.random(-60, 60), x: gsap.utils.random(-40, 40),
+        duration: gsap.utils.random(4, 9), repeat: -1, yoyo: true,
+        ease: 'sine.inOut', delay: gsap.utils.random(0, 3)
+      });
+    }
+    
+    console.log('GSAP Demo page animations loaded');
+  })();
+  </script>
 </body>
 </html>
