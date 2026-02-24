@@ -40,7 +40,7 @@ const CONFIG = {
   PRO_EXPORT_IMPORT: 'json_csv', // JSON + CSV
 
   // ---------- PRICING (LemonSqueezy) ----------
-  PRICE_MONTHLY: 3,
+  PRICE_MONTHLY: 4.99,
   PRICE_YEARLY: 24.99,
   PRICE_LIFETIME: 39.99,
   
