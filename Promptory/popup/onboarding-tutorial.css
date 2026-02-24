@@ -1,12 +1,12 @@
 /* ============================================
-   Promptory Onboarding Tutorial v13
+   Promptory Onboarding Tutorial v14
    4-panel overlay (no clip-path stacking issues)
    Modal-aware z-index layering
    Spotlight ring + tooltip + proper click-through
-   13-step flow with favorites, folders, settings, hotkeys
+   17-step flow with favorites, favorites tab, folders, edit+folder, settings, hotkeys
    ============================================ */
 
-/* Z-INDEX STACK (v13):
+/* Z-INDEX STACK (v14):
    9998  — base overlay panels (top/right/bottom/left)
    9999  — tut-ancestor-raised (non-modal parents)
    10000 — tut-target-active (highlighted element)
@@ -346,6 +346,35 @@
 
 .tut-final-content .tut-desc strong {
   color: var(--accent, #6366f1);
+}
+
+/* ========== FINAL STEP STAGGERED ANIMATION ========== */
+/* Each .tut-final-anim-item starts invisible and slides up with staggered delay.
+   The JS sets inline transition with per-item delay and triggers by setting opacity:1.
+   This replaces the abrupt appearance with a smooth reveal. */
+.tut-final-anim-item {
+  will-change: opacity, transform;
+}
+
+/* Icon finish special: gentle bounce after reveal */
+.tut-final-content .tut-icon-finish {
+  animation: none; /* Override any inherited icon animation */
+}
+
+/* After all items revealed, add a subtle pulse to the finish icon */
+@keyframes tut-finish-pulse {
+  0%, 100% {
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  }
+  50% {
+    box-shadow: 0 8px 32px rgba(99, 102, 241, 0.65);
+  }
+}
+
+/* Applied after animation completes via JS transition end */
+.tut-final-content .tut-icon-finish[style*="opacity: 1"],
+.tut-final-content .tut-icon-finish[style*="opacity:1"] {
+  animation: tut-finish-pulse 2s ease-in-out infinite 0.8s;
 }
 
 /* ========== LIGHT THEME OVERRIDES ========== */
