@@ -182,6 +182,98 @@
       text-decoration: none;
     }
     
+    /* GSAP initial states - elements hidden before animation */
+    .container { visibility: hidden; }
+    
+    .particles-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .particle {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 50%;
+    }
+    
+    .container { position: relative; z-index: 1; }
+    
+    /* Magnetic hover effect */
+    .feature { will-change: transform; }
+    .btn { will-change: transform; }
+    
+    /* Gradient border shimmer on container */
+    .container::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 22px;
+      background: conic-gradient(from 0deg, transparent, #667eea, #764ba2, transparent);
+      z-index: -1;
+      opacity: 0;
+      animation: none;
+    }
+    .container.shimmer-active::before {
+      opacity: 1;
+      animation: borderRotate 4s linear infinite;
+    }
+    @keyframes borderRotate {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Text split animation helpers */
+    .char { display: inline-block; }
+    
+    /* Floating icon animation override */
+    .icon { will-change: transform; }
+    
+    /* Stat counter */
+    .stat-value { will-change: transform, opacity; }
+    
+    /* Scroll indicator */
+    .scroll-indicator {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      opacity: 0;
+    }
+    .scroll-indicator .mouse {
+      width: 26px;
+      height: 40px;
+      border: 2px solid rgba(255,255,255,0.6);
+      border-radius: 13px;
+      position: relative;
+    }
+    .scroll-indicator .wheel {
+      width: 4px;
+      height: 8px;
+      background: rgba(255,255,255,0.8);
+      border-radius: 2px;
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    
+    /* Cursor glow effect */
+    .cursor-glow {
+      position: fixed;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(102,126,234,0.15) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      transform: translate(-50%, -50%);
+      opacity: 0;
+    }
+    
     @media (max-width: 768px) {
       .container {
         padding: 40px 24px;
@@ -245,15 +337,26 @@
   </script>
 </head>
 <body>
-  <div class="container">
-    <div class="icon">📝</div>
+  <!-- Floating particles background -->
+  <div class="particles-bg" id="particles-bg"></div>
+  
+  <!-- Cursor glow effect -->
+  <div class="cursor-glow" id="cursor-glow"></div>
+  
+  <!-- Scroll indicator -->
+  <div class="scroll-indicator" id="scroll-indicator">
+    <div class="mouse"><div class="wheel"></div></div>
+  </div>
+
+  <div class="container" id="main-container">
+    <div class="icon" id="hero-icon">📝</div>
     
-    <h1>PromptVault</h1>
-    <p class="subtitle">
+    <h1 id="hero-title">PromptVault</h1>
+    <p class="subtitle" id="hero-subtitle">
       Your personal AI prompt manager. Save, organize, and instantly insert prompts into ChatGPT, Claude, Gemini, and more.
     </p>
     
-    <div class="stats">
+    <div class="stats" id="stats-section">
       <div class="stat">
         <div class="stat-value">∞</div>
         <div class="stat-label">Prompts</div>
@@ -268,7 +371,7 @@
       </div>
     </div>
     
-    <div class="features">
+    <div class="features" id="features-grid">
       <div class="feature">
         <div class="feature-icon">📝</div>
         <h3>Smart Organization</h3>
@@ -306,7 +409,7 @@
       </div>
     </div>
     
-    <div class="buttons">
+    <div class="buttons" id="cta-buttons">
       <a href="https://github.com" class="btn btn-primary">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
@@ -321,7 +424,7 @@
       </a>
     </div>
     
-    <div class="footer">
+    <div class="footer" id="footer-section">
       <p>Made with ❤️ for AI power users</p>
       <p style="margin-top: 8px;">
         <a href="#">Documentation</a> •
@@ -329,6 +432,461 @@
         <a href="#">Privacy</a>
       </p>
     </div>
-  </div>
+  <!-- GSAP Core + Plugins -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/TextPlugin.min.js"></script>
+  
+  <script>
+  // ============================================
+  // GSAP ANIMATIONS - Landing Page
+  // Full animation suite: timelines, scroll triggers,
+  // particles, magnetic hover, text effects, parallax
+  // ============================================
+  
+  gsap.registerPlugin(ScrollTrigger, TextPlugin);
+  
+  // ---- Particle system ----
+  (function initParticles() {
+    const container = document.getElementById('particles-bg');
+    const count = 40;
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const size = gsap.utils.random(3, 8);
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.left = gsap.utils.random(0, 100) + '%';
+      p.style.top = gsap.utils.random(0, 100) + '%';
+      p.style.opacity = gsap.utils.random(0.1, 0.5);
+      container.appendChild(p);
+      
+      // Animate each particle with a unique random float
+      gsap.to(p, {
+        y: gsap.utils.random(-80, 80),
+        x: gsap.utils.random(-60, 60),
+        duration: gsap.utils.random(4, 10),
+        repeat: -1,
+        yoyo: true,
+        ease: 'sine.inOut',
+        delay: gsap.utils.random(0, 4)
+      });
+      
+      // Pulse opacity
+      gsap.to(p, {
+        opacity: gsap.utils.random(0.05, 0.4),
+        duration: gsap.utils.random(2, 5),
+        repeat: -1,
+        yoyo: true,
+        ease: 'sine.inOut',
+        delay: gsap.utils.random(0, 3)
+      });
+    }
+  })();
+  
+  // ---- Cursor glow follow ----
+  (function initCursorGlow() {
+    const glow = document.getElementById('cursor-glow');
+    gsap.set(glow, { opacity: 0 });
+    
+    document.addEventListener('mousemove', (e) => {
+      gsap.to(glow, {
+        x: e.clientX,
+        y: e.clientY,
+        opacity: 1,
+        duration: 0.6,
+        ease: 'power2.out'
+      });
+    });
+    
+    document.addEventListener('mouseleave', () => {
+      gsap.to(glow, { opacity: 0, duration: 0.4 });
+    });
+  })();
+  
+  // ---- Scroll Indicator ----
+  (function initScrollIndicator() {
+    const indicator = document.getElementById('scroll-indicator');
+    gsap.to(indicator, { opacity: 1, duration: 1, delay: 3 });
+    
+    // Animate wheel bouncing
+    gsap.to(indicator.querySelector('.wheel'), {
+      y: 12,
+      duration: 1,
+      repeat: -1,
+      yoyo: true,
+      ease: 'power1.inOut'
+    });
+    
+    // Hide on scroll
+    ScrollTrigger.create({
+      start: 'top -50',
+      onEnter: () => gsap.to(indicator, { opacity: 0, duration: 0.3 }),
+      onLeaveBack: () => gsap.to(indicator, { opacity: 1, duration: 0.5 })
+    });
+  })();
+  
+  // ---- Main hero timeline ----
+  (function initHeroTimeline() {
+    const container = document.getElementById('main-container');
+    const tl = gsap.timeline({
+      defaults: { ease: 'power3.out' }
+    });
+    
+    // Make container visible
+    gsap.set(container, { visibility: 'visible' });
+    
+    tl
+      // Container scale-in with elastic bounce
+      .from(container, {
+        scale: 0.8,
+        opacity: 0,
+        duration: 1,
+        ease: 'back.out(1.7)'
+      })
+      
+      // Container border shimmer
+      .add(() => container.classList.add('shimmer-active'), '+=0')
+      
+      // Icon: 3D rotate-in with bounce
+      .from('#hero-icon', {
+        scale: 0,
+        rotation: -180,
+        opacity: 0,
+        duration: 0.8,
+        ease: 'back.out(2)'
+      }, '-=0.5')
+      
+      // Icon continuous float
+      .to('#hero-icon', {
+        y: -10,
+        duration: 2,
+        repeat: -1,
+        yoyo: true,
+        ease: 'sine.inOut'
+      }, '+=0')
+      
+      // Title: letter-by-letter reveal
+      .from('#hero-title', {
+        opacity: 0,
+        y: 40,
+        skewY: 3,
+        duration: 0.7,
+        ease: 'power4.out'
+      }, '-=2')
+      
+      // Subtitle: typewriter-like fade
+      .from('#hero-subtitle', {
+        opacity: 0,
+        y: 20,
+        duration: 0.6,
+      }, '-=1.5')
+      
+      // Stats section: slide up with stagger
+      .from('#stats-section', {
+        opacity: 0,
+        y: 30,
+        duration: 0.5,
+      }, '-=1')
+      
+      // Individual stat values: counter animation
+      .from('.stat-value', {
+        opacity: 0,
+        scale: 0.5,
+        stagger: 0.15,
+        duration: 0.6,
+        ease: 'back.out(2)'
+      }, '-=0.3')
+      
+      .from('.stat-label', {
+        opacity: 0,
+        y: 10,
+        stagger: 0.15,
+        duration: 0.4,
+      }, '-=0.5');
+  })();
+  
+  // ---- Feature cards: staggered reveal with scroll trigger ----
+  (function initFeatureAnimations() {
+    const features = gsap.utils.toArray('.feature');
+    
+    features.forEach((feature, i) => {
+      gsap.from(feature, {
+        scrollTrigger: {
+          trigger: feature,
+          start: 'top 90%',
+          toggleActions: 'play none none reverse'
+        },
+        opacity: 0,
+        y: 60,
+        scale: 0.9,
+        rotation: gsap.utils.random(-3, 3),
+        duration: 0.7,
+        delay: i * 0.1,
+        ease: 'power3.out'
+      });
+      
+      // Feature icon bounce on scroll into view
+      const icon = feature.querySelector('.feature-icon');
+      gsap.from(icon, {
+        scrollTrigger: {
+          trigger: feature,
+          start: 'top 90%',
+          toggleActions: 'play none none reverse'
+        },
+        scale: 0,
+        rotation: -45,
+        duration: 0.5,
+        delay: i * 0.1 + 0.3,
+        ease: 'back.out(3)'
+      });
+    });
+    
+    // Magnetic hover effect on features
+    features.forEach(feature => {
+      feature.addEventListener('mousemove', (e) => {
+        const rect = feature.getBoundingClientRect();
+        const x = e.clientX - rect.left - rect.width / 2;
+        const y = e.clientY - rect.top - rect.height / 2;
+        
+        gsap.to(feature, {
+          x: x * 0.1,
+          y: y * 0.1,
+          rotationX: -y * 0.05,
+          rotationY: x * 0.05,
+          boxShadow: `${x * 0.2}px ${y * 0.2}px 30px rgba(102,126,234,0.2)`,
+          duration: 0.4,
+          ease: 'power2.out'
+        });
+      });
+      
+      feature.addEventListener('mouseleave', () => {
+        gsap.to(feature, {
+          x: 0,
+          y: 0,
+          rotationX: 0,
+          rotationY: 0,
+          boxShadow: 'none',
+          duration: 0.6,
+          ease: 'elastic.out(1, 0.5)'
+        });
+      });
+    });
+  })();
+  
+  // ---- CTA Buttons: elastic entrance + hover effects ----
+  (function initButtonAnimations() {
+    gsap.from('#cta-buttons', {
+      scrollTrigger: {
+        trigger: '#cta-buttons',
+        start: 'top 95%',
+        toggleActions: 'play none none reverse'
+      },
+      opacity: 0,
+      y: 40,
+      duration: 0.6,
+      ease: 'power3.out'
+    });
+    
+    const buttons = gsap.utils.toArray('#cta-buttons .btn');
+    buttons.forEach((btn, i) => {
+      gsap.from(btn, {
+        scrollTrigger: {
+          trigger: '#cta-buttons',
+          start: 'top 95%',
+          toggleActions: 'play none none reverse'
+        },
+        opacity: 0,
+        x: i === 0 ? -30 : 30,
+        scale: 0.9,
+        duration: 0.5,
+        delay: 0.2 + i * 0.15,
+        ease: 'back.out(2)'
+      });
+      
+      // Hover pulse
+      btn.addEventListener('mouseenter', () => {
+        gsap.to(btn, {
+          scale: 1.05,
+          duration: 0.3,
+          ease: 'power2.out'
+        });
+      });
+      
+      btn.addEventListener('mouseleave', () => {
+        gsap.to(btn, {
+          scale: 1,
+          duration: 0.4,
+          ease: 'elastic.out(1, 0.5)'
+        });
+      });
+      
+      // Click ripple
+      btn.addEventListener('click', (e) => {
+        const ripple = document.createElement('div');
+        ripple.style.cssText = `
+          position: absolute; width: 10px; height: 10px;
+          border-radius: 50%; background: rgba(255,255,255,0.6);
+          pointer-events: none;
+          left: ${e.offsetX}px; top: ${e.offsetY}px;
+          transform: translate(-50%, -50%);
+        `;
+        btn.style.position = 'relative';
+        btn.style.overflow = 'hidden';
+        btn.appendChild(ripple);
+        
+        gsap.to(ripple, {
+          scale: 20,
+          opacity: 0,
+          duration: 0.6,
+          ease: 'power2.out',
+          onComplete: () => ripple.remove()
+        });
+      });
+    });
+  })();
+  
+  // ---- Footer: fade in from bottom ----
+  (function initFooterAnimation() {
+    gsap.from('#footer-section', {
+      scrollTrigger: {
+        trigger: '#footer-section',
+        start: 'top 98%',
+        toggleActions: 'play none none reverse'
+      },
+      opacity: 0,
+      y: 20,
+      duration: 0.8,
+      ease: 'power2.out'
+    });
+    
+    // Stagger footer links
+    gsap.from('#footer-section a', {
+      scrollTrigger: {
+        trigger: '#footer-section',
+        start: 'top 98%',
+        toggleActions: 'play none none reverse'
+      },
+      opacity: 0,
+      y: 10,
+      stagger: 0.1,
+      duration: 0.4,
+      delay: 0.3,
+      ease: 'power2.out'
+    });
+  })();
+  
+  // ---- Stats section: parallax tilt on scroll ----
+  (function initStatsParallax() {
+    const stats = document.getElementById('stats-section');
+    if (!stats) return;
+    
+    stats.addEventListener('mousemove', (e) => {
+      const rect = stats.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+      
+      gsap.to(stats, {
+        rotationY: x * 8,
+        rotationX: -y * 8,
+        transformPerspective: 800,
+        duration: 0.5,
+        ease: 'power2.out'
+      });
+    });
+    
+    stats.addEventListener('mouseleave', () => {
+      gsap.to(stats, {
+        rotationY: 0,
+        rotationX: 0,
+        duration: 0.8,
+        ease: 'elastic.out(1, 0.5)'
+      });
+    });
+  })();
+  
+  // ---- Background gradient morph ----
+  (function initBgMorph() {
+    const body = document.body;
+    const colors = [
+      'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      'linear-gradient(135deg, #764ba2 0%, #f093fb 100%)',
+      'linear-gradient(135deg, #f093fb 0%, #667eea 100%)',
+      'linear-gradient(135deg, #667eea 0%, #6c5ce7 100%)',
+    ];
+    let colorIndex = 0;
+    
+    setInterval(() => {
+      colorIndex = (colorIndex + 1) % colors.length;
+      gsap.to(body, {
+        background: colors[colorIndex],
+        duration: 4,
+        ease: 'sine.inOut'
+      });
+    }, 6000);
+  })();
+  
+  // ---- Title shimmer text effect ----
+  (function initTitleShimmer() {
+    const title = document.getElementById('hero-title');
+    if (!title) return;
+    
+    // Continuous subtle shimmer via background position
+    gsap.to(title, {
+      backgroundPosition: '200% center',
+      backgroundSize: '200% 100%',
+      duration: 3,
+      repeat: -1,
+      ease: 'linear'
+    });
+  })();
+  
+  // ---- Icon 3D wobble on hover ----
+  (function initIconHover() {
+    const icon = document.getElementById('hero-icon');
+    if (!icon) return;
+    
+    icon.addEventListener('mouseenter', () => {
+      gsap.to(icon, {
+        rotationY: 15,
+        rotationX: -10,
+        scale: 1.1,
+        boxShadow: '0 20px 50px rgba(35, 131, 226, 0.5)',
+        duration: 0.4,
+        ease: 'power2.out'
+      });
+    });
+    
+    icon.addEventListener('mouseleave', () => {
+      gsap.to(icon, {
+        rotationY: 0,
+        rotationX: 0,
+        scale: 1,
+        boxShadow: '0 10px 30px rgba(35, 131, 226, 0.3)',
+        duration: 0.6,
+        ease: 'elastic.out(1, 0.5)'
+      });
+    });
+  })();
+  
+  // ---- Stagger reveal for all .stat elements ----
+  (function initStatCounterAnimation() {
+    gsap.from('.stat', {
+      scrollTrigger: {
+        trigger: '#stats-section',
+        start: 'top 85%',
+        toggleActions: 'play none none reverse'
+      },
+      y: 30,
+      opacity: 0,
+      scale: 0.8,
+      stagger: 0.2,
+      duration: 0.6,
+      ease: 'back.out(1.7)'
+    });
+  })();
+  
+  console.log('GSAP Landing Page animations loaded successfully');
+  </script>
 </body>
 </html>
