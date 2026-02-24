@@ -1,16 +1,13 @@
-// Promptory Onboarding Tutorial Module v13
+// Promptory Onboarding Tutorial Module v14
 // REWRITE — 4-panel overlay approach (no clip-path z-index issues)
-// Flow: Create prompt -> Favorites -> Folders -> Edit -> Settings -> Hotkeys -> Final
-// KEY FIX v13:
-// 1. Modal-aware z-index layering (from v12).
-// 2. Fixed state persistence: only saves progress on SUCCESSFUL step completion,
-//    marks complete ONLY when user clicks "Finish" on final step or "Skip".
-//    On popup reopen, resumes from last completed step (not current step).
-// 3. Fixed memory leaks: _waitForEl uses setTimeout instead of RAF spin-loop,
-//    all cleanup paths properly release ResizeObserver and event listeners.
-// 4. Fixed folder creation: waitForTab properly waits for tab content to render.
-// 5. Final step: simple checkmark with "Get Started" button.
-// 6. Removed duplicate _renderFinalStep method.
+// Flow: Create prompt -> Favorites -> View Favorites Tab -> Folders -> Edit (scroll to folder) -> Settings -> Hotkeys -> Final
+// KEY FIX v14:
+// 1. All fixes from v13 (modal-aware z-index, state persistence, memory leaks, etc.)
+// 2. Fixed Step 1: tooltip position changed to 'left' so it doesn't overlap the "+ New" button.
+// 3. Fixed Step 3: auto-expands collapsed folder sections so prompt card is visible.
+// 4. Added Steps 4-5: navigate to Favorites tab to show where favorites are stored.
+// 5. Improved edit flow (Steps 9-12): scroll to folder dropdown in editor, select folder, then save.
+// 6. Improved final step animation: smooth reveal with staggered elements instead of abrupt appearance.
 //
 // Z-index stack: base panels (9998) < modal raised (10001/10002) <
 //   inside-modal panels (10003) < spotlight (10004) < tooltip (10005).
@@ -20,7 +17,7 @@
 
 const DEBUG = false;
 function log(...args) {
-  if (DEBUG) console.log('[Tutorial v13]', ...args);
+  if (DEBUG) console.log('[Tutorial v14]', ...args);
 }
 
 // ==================== STEP DEFINITIONS ====================
@@ -36,7 +33,7 @@ function buildSteps() {
       },
       target: '#new-prompt-btn',
       action: 'click',
-      tooltipPosition: 'bottom',
+      tooltipPosition: 'left',
       icon: 'create',
       badge: null
     },
@@ -67,14 +64,44 @@ function buildSteps() {
       target: '.prompt-card:first-child [data-action="toggle-fav"]',
       action: 'click',
       waitForPrompt: true,
+      expandFolderSection: true,
       tooltipPosition: 'left',
       icon: 'favorite',
       badge: { en: 'FAVORITES', ru: 'ИЗБРАННОЕ' },
       switchTab: 'prompts'
     },
-    // === STEP 4: Go to Folders tab ===
+    // === STEP 4: Go to Favorites tab ===
     {
       id: 4,
+      title: { en: 'View Favorites', ru: 'Просмотрите Избранное' },
+      description: {
+        en: 'Let\'s see where your favorites are stored. Click the "Favorites" tab.',
+        ru: 'Давайте посмотрим, где хранятся избранные. Перейдите на вкладку "Favorites".'
+      },
+      target: '[data-tab="favorites"]',
+      action: 'click',
+      tooltipPosition: 'bottom',
+      icon: 'favorite',
+      badge: { en: 'FAVORITES', ru: 'ИЗБРАННОЕ' }
+    },
+    // === STEP 5: Show favorites storage ===
+    {
+      id: 5,
+      title: { en: 'Your Favorites', ru: 'Ваши избранные' },
+      description: {
+        en: 'Here all your favorite prompts are stored! You can quickly find and use them from this tab.',
+        ru: 'Здесь хранятся все ваши избранные промпты! Вы можете быстро найти и использовать их из этой вкладки.'
+      },
+      target: '#favorites-list',
+      action: 'observe',
+      waitForTab: 'favorites',
+      tooltipPosition: 'top',
+      icon: 'favorite',
+      badge: { en: 'FAVORITES', ru: 'ИЗБРАННОЕ' }
+    },
+    // === STEP 6: Go to Folders tab ===
+    {
+      id: 6,
       title: { en: 'Create a Folder', ru: 'Создайте папку' },
       description: {
         en: 'Organize your prompts into folders! Switch to the Folders tab first.',
@@ -86,9 +113,9 @@ function buildSteps() {
       icon: 'folder',
       badge: { en: 'ORGANIZE', ru: 'ОРГАНИЗАЦИЯ' }
     },
-    // === STEP 5: Click New Folder button ===
+    // === STEP 7: Click New Folder button ===
     {
-      id: 5,
+      id: 7,
       title: { en: 'New Folder', ru: 'Новая папка' },
       description: {
         en: 'Click "New Folder" to create a folder for your prompts.',
@@ -101,9 +128,9 @@ function buildSteps() {
       icon: 'create',
       badge: null
     },
-    // === STEP 6: Auto-fill folder name and save ===
+    // === STEP 8: Auto-fill folder name and save ===
     {
-      id: 6,
+      id: 8,
       title: { en: 'Name Your Folder', ru: 'Назовите папку' },
       description: {
         en: 'We filled in a name. Click "Create" to save the folder.',
@@ -117,10 +144,10 @@ function buildSteps() {
       icon: 'save',
       badge: null
     },
-    // === STEP 7: Edit prompt — add to folder ===
+    // === STEP 9: Edit prompt — click edit button ===
     {
-      id: 7,
-      title: { en: 'Move Prompt to Folder', ru: 'Переместите промпт в папку' },
+      id: 9,
+      title: { en: 'Edit Your Prompt', ru: 'Редактируйте промпт' },
       description: {
         en: 'Now let\'s move your prompt into the folder. Click the edit button on your prompt.',
         ru: 'Теперь переместим промпт в папку. Нажмите кнопку редактирования на промпте.'
@@ -128,29 +155,60 @@ function buildSteps() {
       target: '.prompt-card:first-child [data-action="edit"]',
       action: 'click',
       switchTab: 'prompts',
+      expandFolderSection: true,
       tooltipPosition: 'left',
       icon: 'edit',
       badge: { en: 'EDIT', ru: 'РЕДАКТИРОВАНИЕ' }
     },
-    // === STEP 8: Select folder in editor and save ===
+    // === STEP 10: Scroll to folder dropdown in editor (observe) ===
     {
-      id: 8,
-      title: { en: 'Select Folder & Save', ru: 'Выберите папку и сохраните' },
+      id: 10,
+      title: { en: 'Folder Settings', ru: 'Настройка папки' },
       description: {
-        en: 'Select your folder from the dropdown, then click "Save Changes" to move the prompt.',
-        ru: 'Выберите папку из списка, затем нажмите "Сохранить", чтобы переместить промпт.'
+        en: 'This is the folder dropdown. Here you can choose which folder to save the prompt in.',
+        ru: 'Это выпадающий список папок. Здесь вы можете выбрать, в какую папку сохранить промпт.'
+      },
+      target: '#pe-folder',
+      action: 'observe',
+      waitForModal: true,
+      scrollInEditor: true,
+      tooltipPosition: 'top',
+      icon: 'folder',
+      badge: { en: 'FOLDER', ru: 'ПАПКА' }
+    },
+    // === STEP 11: Select folder in dropdown ===
+    {
+      id: 11,
+      title: { en: 'Select Folder', ru: 'Выберите папку' },
+      description: {
+        en: 'Select your folder from the dropdown to move the prompt there.',
+        ru: 'Выберите папку из списка, чтобы переместить туда промпт.'
+      },
+      target: '#pe-folder',
+      action: 'change',
+      autoSelectFolder: true,
+      tooltipPosition: 'top',
+      icon: 'select',
+      badge: { en: 'SELECT', ru: 'ВЫБОР' }
+    },
+    // === STEP 12: Save edited prompt ===
+    {
+      id: 12,
+      title: { en: 'Save Changes', ru: 'Сохраните изменения' },
+      description: {
+        en: 'Great! Now click "Save Changes" to move the prompt into the folder.',
+        ru: 'Отлично! Нажмите "Сохранить", чтобы переместить промпт в папку.'
       },
       target: '#pe-save-btn',
       action: 'click',
-      autoSelectFolder: true,
-      waitForModal: true,
+      scrollToBottom: true,
       tooltipPosition: 'top',
       icon: 'save',
       badge: { en: 'SAVE', ru: 'СОХРАНЕНИЕ' }
     },
-    // === STEP 9: Open Settings ===
+    // === STEP 13: Open Settings ===
     {
-      id: 9,
+      id: 13,
       title: { en: 'Open Settings', ru: 'Откройте Настройки' },
       description: {
         en: 'Now let\'s set up Quick Insert — your main power feature! Click the Settings button.',
@@ -164,9 +222,9 @@ function buildSteps() {
       badge: { en: 'SETTINGS', ru: 'НАСТРОЙКИ' },
       switchTab: 'prompts'
     },
-    // === STEP 10: Focus on Quick Insert section ===
+    // === STEP 14: Focus on Quick Insert section ===
     {
-      id: 10,
+      id: 14,
       title: { en: 'Quick Insert Hotkeys', ru: 'Горячие клавиши' },
       description: {
         en: 'This is the Quick Insert section. You can assign any prompt to Alt+1, Alt+2 or Alt+3 for instant insertion into any AI chat!',
@@ -180,9 +238,9 @@ function buildSteps() {
       icon: 'hotkey',
       badge: { en: 'QUICK INSERT', ru: 'БЫСТРАЯ ВСТАВКА' }
     },
-    // === STEP 11: Select prompt in Slot 1 dropdown ===
+    // === STEP 15: Select prompt in Slot 1 dropdown ===
     {
-      id: 11,
+      id: 15,
       title: { en: 'Assign a Prompt', ru: 'Назначьте промпт' },
       description: {
         en: 'Click the dropdown and select your prompt to assign it to a hotkey slot.',
@@ -195,9 +253,9 @@ function buildSteps() {
       icon: 'select',
       badge: { en: 'SELECT PROMPT', ru: 'ВЫБОР ПРОМПТА' }
     },
-    // === STEP 12: Save Settings ===
+    // === STEP 16: Save Settings ===
     {
-      id: 12,
+      id: 16,
       title: { en: 'Save Settings', ru: 'Сохраните настройки' },
       description: {
         en: 'Great! Now click "Save Changes" to apply your hotkey settings.',
@@ -210,9 +268,9 @@ function buildSteps() {
       icon: 'save',
       badge: { en: 'SAVE', ru: 'СОХРАНЕНИЕ' }
     },
-    // === STEP 13: Final — You're Ready! ===
+    // === STEP 17: Final — You're Ready! ===
     {
-      id: 13,
+      id: 17,
       title: { en: 'You\'re Ready!', ru: 'Вы готовы!' },
       description: {
         en: 'final_custom',
@@ -295,7 +353,7 @@ class OnboardingTutorial {
     }
     this.currentStep = resumeStep;
 
-    log(`=== STARTING TUTORIAL v13 (${this.steps.length} steps) ===`);
+    log(`=== STARTING TUTORIAL v14 (${this.steps.length} steps) ===`);
 
     // Create 4 overlay panels
     const panelNames = ['top', 'right', 'bottom', 'left'];
@@ -368,6 +426,42 @@ class OnboardingTutorial {
     }
   }
 
+  // ==================== EXPAND FOLDER SECTIONS ====================
+  // Expand all collapsed folder sections so prompt cards are visible
+  _expandFolderSections() {
+    log('Expanding collapsed folder sections...');
+    const collapsedSections = document.querySelectorAll('.folder-section:not(.expanded)');
+    collapsedSections.forEach(section => {
+      section.classList.add('expanded');
+      const header = section.querySelector('.folder-header');
+      if (header) header.setAttribute('aria-expanded', 'true');
+    });
+    // Also store expand state so it persists
+    collapsedSections.forEach(section => {
+      const fId = section.dataset.folderId;
+      if (fId) {
+        try { localStorage.setItem(`pv-folder-${fId}`, 'true'); } catch (e) { /* silent */ }
+      }
+    });
+  }
+
+  // ==================== SCROLL INSIDE EDITOR MODAL ====================
+  async _smoothScrollInEditor(target) {
+    log('Smooth scrolling to target in editor modal');
+    const modalBody = target.closest('.modal-body');
+    if (!modalBody) return;
+
+    const targetRect = target.getBoundingClientRect();
+    const modalRect = modalBody.getBoundingClientRect();
+    const scrollTop = modalBody.scrollTop + (targetRect.top - modalRect.top) - modalRect.height / 3;
+
+    modalBody.scrollTo({
+      top: Math.max(0, scrollTop),
+      behavior: 'smooth'
+    });
+    await this._wait(600);
+  }
+
   // ==================== SHOW STEP ====================
   async _showStep(index) {
     if (this._destroyed) return;
@@ -414,6 +508,13 @@ class OnboardingTutorial {
       if (this._destroyed) return;
     }
 
+    // Expand folder sections if needed (fix for step 3 and step 9 — cards hidden in collapsed folders)
+    if (step.expandFolderSection) {
+      this._expandFolderSections();
+      await this._wait(300);
+      if (this._destroyed) return;
+    }
+
     // Wait for settings modal if needed
     if (step.waitForSettings) {
       log('Waiting for settings modal...');
@@ -457,6 +558,12 @@ class OnboardingTutorial {
     // Scroll to target inside settings modal if needed
     if (step.scrollInSettings && target) {
       await this._smoothScrollInSettings(target);
+      if (this._destroyed) return;
+    }
+
+    // Scroll to target inside editor modal if needed (for folder dropdown)
+    if (step.scrollInEditor && target) {
+      await this._smoothScrollInEditor(target);
       if (this._destroyed) return;
     }
 
@@ -574,11 +681,11 @@ class OnboardingTutorial {
   _renderFinalStep(lang, total) {
     const isRu = lang === 'ru';
     return `
-      <div class="tut-content tut-final-content">
-        <div class="tut-step-num" style="text-align:center;margin:0 auto 12px;">${total}/${total}</div>
-        <div class="tut-icon tut-icon-primary tut-icon-finish">${ICONS.finish}</div>
-        <div class="tut-title" style="text-align:center;">${isRu ? 'Вы готовы!' : "You're Ready!"}</div>
-        <div class="tut-desc" style="text-align:center;">
+      <div class="tut-content tut-final-content" id="tut-final-container">
+        <div class="tut-step-num tut-final-anim-item" style="text-align:center;margin:0 auto 12px;opacity:0;">${total}/${total}</div>
+        <div class="tut-icon tut-icon-primary tut-icon-finish tut-final-anim-item" style="opacity:0;">${ICONS.finish}</div>
+        <div class="tut-title tut-final-anim-item" style="text-align:center;opacity:0;">${isRu ? 'Вы готовы!' : "You're Ready!"}</div>
+        <div class="tut-desc tut-final-anim-item" style="text-align:center;opacity:0;">
           ${isRu
             ? 'Вы настроили Promptory!<br><br>' +
               '<strong>Alt+1/2/3</strong> — мгновенная вставка промптов<br>' +
@@ -589,10 +696,37 @@ class OnboardingTutorial {
               '<strong>Alt+S</strong> — quick search on any AI site<br><br>' +
               'Happy prompting!'}
         </div>
-        <button class="tut-btn-finish" id="tut-finish">${isRu ? 'Начать работу' : 'Get Started'}</button>
-        <div class="tut-progress"><div class="tut-progress-bar" style="width:100%"></div></div>
+        <button class="tut-btn-finish tut-final-anim-item" id="tut-finish" style="opacity:0;">${isRu ? 'Начать работу' : 'Get Started'}</button>
+        <div class="tut-progress tut-final-anim-item" style="opacity:0;"><div class="tut-progress-bar" style="width:100%"></div></div>
       </div>
     `;
+  }
+
+  // ==================== ANIMATE FINAL STEP ====================
+  _animateFinalStep() {
+    const items = document.querySelectorAll('.tut-final-anim-item');
+    if (!items.length) return;
+
+    items.forEach((item, i) => {
+      const delay = 120 * i;
+      item.style.transition = `opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms`;
+      item.style.transform = 'translateY(18px)';
+
+      // Special: icon gets a scale effect
+      if (item.classList.contains('tut-icon-finish')) {
+        item.style.transform = 'translateY(18px) scale(0.6)';
+      }
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          item.style.opacity = '1';
+          item.style.transform = 'translateY(0)';
+          if (item.classList.contains('tut-icon-finish')) {
+            item.style.transform = 'translateY(0) scale(1)';
+          }
+        });
+      });
+    });
   }
 
   // ==================== HIGHLIGHT TARGET (4-panel approach, modal-aware) ====================
@@ -774,6 +908,10 @@ class OnboardingTutorial {
 
     // Final step
     if (step.action === 'final') {
+      // Trigger staggered animation for final step
+      const tid = setTimeout(() => this._animateFinalStep(), 100);
+      this._waitTimers.push(tid);
+
       document.getElementById('tut-finish')?.addEventListener('click', () => {
         this._finish();
       });
@@ -824,33 +962,35 @@ class OnboardingTutorial {
       target.addEventListener('change', handler);
       this._cleanup = () => target.removeEventListener('change', handler);
 
-      // Also support clicking other slot dropdowns
-      const allSlots = document.querySelectorAll('[data-hotkey-slot]');
-      const otherHandlers = [];
-      allSlots.forEach(sel => {
-        if (sel === target) return;
-        const h = () => {
-          allSlots.forEach(s => s.removeEventListener('change', h));
-          target.removeEventListener('change', handler);
-          const sid = sel.dataset.hotkeySlot;
-          const sn = sid.replace('slot', '');
-          this.assignedSlot = sid;
-          this._detectHotkey(sn).then(hotkey => {
-            this.assignedHotkey = hotkey;
-          });
-          this._saveCompletedStep(this.currentStep);
-          const tid = setTimeout(() => this._nextStep(), 500);
-          this._waitTimers.push(tid);
-        };
-        sel.addEventListener('change', h);
-        otherHandlers.push({ el: sel, handler: h });
-      });
+      // Also support clicking other slot dropdowns (for hotkey step only)
+      if (target.dataset.hotkeySlot) {
+        const allSlots = document.querySelectorAll('[data-hotkey-slot]');
+        const otherHandlers = [];
+        allSlots.forEach(sel => {
+          if (sel === target) return;
+          const h = () => {
+            allSlots.forEach(s => s.removeEventListener('change', h));
+            target.removeEventListener('change', handler);
+            const sid = sel.dataset.hotkeySlot;
+            const sn = sid.replace('slot', '');
+            this.assignedSlot = sid;
+            this._detectHotkey(sn).then(hotkey => {
+              this.assignedHotkey = hotkey;
+            });
+            this._saveCompletedStep(this.currentStep);
+            const tid = setTimeout(() => this._nextStep(), 500);
+            this._waitTimers.push(tid);
+          };
+          sel.addEventListener('change', h);
+          otherHandlers.push({ el: sel, handler: h });
+        });
 
-      const prevCleanup = this._cleanup;
-      this._cleanup = () => {
-        prevCleanup();
-        otherHandlers.forEach(({ el, handler }) => el.removeEventListener('change', handler));
-      };
+        const prevCleanup = this._cleanup;
+        this._cleanup = () => {
+          prevCleanup();
+          otherHandlers.forEach(({ el, handler }) => el.removeEventListener('change', handler));
+        };
+      }
     }
     else if (step.action === 'focus') {
       const handler = () => {
