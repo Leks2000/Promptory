@@ -28,7 +28,7 @@ const CONFIG = {
   // Google account (free, signed in)
   FREE_PROMPT_LIMIT: 50,
   FREE_FOLDER_LIMIT: 10,
-  FREE_QUICK_INSERT_SLOTS: 1,
+  FREE_QUICK_INSERT_SLOTS: 3,
   FREE_VARIABLE_TEMPLATES: 3,    // max prompt templates with variables
   FREE_VARIABLE_USES_PER_DAY: 3,
   FREE_SYNC: true,       // cloud sync
