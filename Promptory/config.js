@@ -16,17 +16,21 @@ const CONFIG = {
 
   // ---------- PLAN LIMITS ----------
   // Guest (local only, no account)
-  GUEST_PROMPT_LIMIT: 25,
-  GUEST_FOLDER_LIMIT: 5,
+  GUEST_PROMPT_LIMIT: 10,
+  GUEST_FOLDER_LIMIT: 3,
   GUEST_QUICK_INSERT_SLOTS: 1,
+  GUEST_VARIABLE_TEMPLATES: 1,   // max prompt templates with variables
+  GUEST_VARIABLE_USES_PER_DAY: 3,
   GUEST_SYNC: false,
   GUEST_LIBRARY: false,
   GUEST_EXPORT_IMPORT: false,
 
   // Google account (free, signed in)
-  FREE_PROMPT_LIMIT: 100,
-  FREE_FOLDER_LIMIT: 25,
-  FREE_QUICK_INSERT_SLOTS: 3,
+  FREE_PROMPT_LIMIT: 50,
+  FREE_FOLDER_LIMIT: 10,
+  FREE_QUICK_INSERT_SLOTS: 1,
+  FREE_VARIABLE_TEMPLATES: 3,    // max prompt templates with variables
+  FREE_VARIABLE_USES_PER_DAY: 3,
   FREE_SYNC: true,       // cloud sync
   FREE_LIBRARY: true,
   FREE_EXPORT_IMPORT: 'json', // JSON only
@@ -34,7 +38,9 @@ const CONFIG = {
   // Pro (paid subscription)
   PRO_PROMPT_LIMIT: Infinity,
   PRO_FOLDER_LIMIT: Infinity,
-  PRO_QUICK_INSERT_SLOTS: 3,
+  PRO_QUICK_INSERT_SLOTS: Infinity,
+  PRO_VARIABLE_TEMPLATES: Infinity,
+  PRO_VARIABLE_USES_PER_DAY: Infinity,
   PRO_SYNC: true,        // priority sync
   PRO_LIBRARY: true,
   PRO_EXPORT_IMPORT: 'json_csv', // JSON + CSV
@@ -62,6 +68,8 @@ CONFIG.getLimits = function(isPremium, isLoggedIn) {
       prompts: CONFIG.PRO_PROMPT_LIMIT,
       folders: CONFIG.PRO_FOLDER_LIMIT,
       quickInsertSlots: CONFIG.PRO_QUICK_INSERT_SLOTS,
+      variableTemplates: CONFIG.PRO_VARIABLE_TEMPLATES,
+      variableUsesPerDay: CONFIG.PRO_VARIABLE_USES_PER_DAY,
       sync: CONFIG.PRO_SYNC,
       library: CONFIG.PRO_LIBRARY,
       exportImport: CONFIG.PRO_EXPORT_IMPORT,
@@ -73,6 +81,8 @@ CONFIG.getLimits = function(isPremium, isLoggedIn) {
       prompts: CONFIG.FREE_PROMPT_LIMIT,
       folders: CONFIG.FREE_FOLDER_LIMIT,
       quickInsertSlots: CONFIG.FREE_QUICK_INSERT_SLOTS,
+      variableTemplates: CONFIG.FREE_VARIABLE_TEMPLATES,
+      variableUsesPerDay: CONFIG.FREE_VARIABLE_USES_PER_DAY,
       sync: CONFIG.FREE_SYNC,
       library: CONFIG.FREE_LIBRARY,
       exportImport: CONFIG.FREE_EXPORT_IMPORT,
@@ -83,6 +93,8 @@ CONFIG.getLimits = function(isPremium, isLoggedIn) {
     prompts: CONFIG.GUEST_PROMPT_LIMIT,
     folders: CONFIG.GUEST_FOLDER_LIMIT,
     quickInsertSlots: CONFIG.GUEST_QUICK_INSERT_SLOTS,
+    variableTemplates: CONFIG.GUEST_VARIABLE_TEMPLATES,
+    variableUsesPerDay: CONFIG.GUEST_VARIABLE_USES_PER_DAY,
     sync: CONFIG.GUEST_SYNC,
     library: CONFIG.GUEST_LIBRARY,
     exportImport: CONFIG.GUEST_EXPORT_IMPORT,

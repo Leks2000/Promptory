@@ -91,6 +91,32 @@ P.checkAndRestoreDraft = async function(opts) {
       if (!draft || !draft.savedAt) { resolve(false); return; }
       // Drafts older than 1 hour are discarded
       if (Date.now() - draft.savedAt > 3600000) { _clearDraft(); resolve(false); return; }
+      // If draft is for an existing prompt, check if it was already saved (stale draft)
+      if (draft.editingId) {
+        const existingPrompt = state.prompts.find(p => p.id === draft.editingId);
+        if (existingPrompt) {
+          // Compare draft content with current saved prompt — if they match, draft is stale
+          const titleMatch = (draft.title || '').trim() === (existingPrompt.title || '').trim();
+          const textMatch = (draft.text || '').trim() === (existingPrompt.text || '').trim();
+          if (titleMatch && textMatch) {
+            _clearDraft();
+            resolve(false);
+            return;
+          }
+        }
+      } else if (draft.title || draft.text) {
+        // New prompt draft: check if a prompt with matching title+text already exists (was already created)
+        const draftTitle = (draft.title || '').trim();
+        const draftText = (draft.text || '').trim();
+        const alreadyCreated = state.prompts.some(p =>
+          (p.title || '').trim() === draftTitle && (p.text || '').trim() === draftText
+        );
+        if (alreadyCreated) {
+          _clearDraft();
+          resolve(false);
+          return;
+        }
+      }
       if (draft.title || draft.text) {
         // Ask user if they want to restore using styled confirm
         const titleText = P.getLang() === 'ru'
@@ -324,7 +350,6 @@ P.openPromptEditor = function(promptId = null, opts = {}) {
   };
 
   document.getElementById('pe-save-btn').addEventListener('click', () => {
-    _clearDraft(); // Clear draft on successful save
     _savePrompt(promptId, opts);
   });
   document.getElementById('pe-delete-btn')?.addEventListener('click', async () => {
@@ -503,6 +528,9 @@ async function _savePrompt(editingId, opts) {
   if (setSuppressRender) setSuppressRender(true);
   await saveData('prompts', state.prompts);
   if (setSuppressRender) setSuppressRender(false);
+
+  // Clear draft AFTER successful save to prevent stale "restore draft" dialogs
+  _clearDraft();
 
   saveBtn.classList.remove('loading');
   pendingImageFile = null;

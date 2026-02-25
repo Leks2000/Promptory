@@ -151,7 +151,7 @@
 
   "guestPlan": { "message": "Guest Plan" },
   "signInForMore": { "message": "Sign in for more" },
-  "signInForMoreInfo": { "message": "Sign in with Google for 100 prompts, or upgrade to Pro for unlimited." },
+  "signInForMoreInfo": { "message": "Sign in with Google for 50 prompts, or upgrade to Pro for unlimited." },
   "signInToUnlock": { "message": "Sign in to unlock" },
   "signInForExport": { "message": "Sign in with Google to export/import data" },
 
@@ -248,6 +248,8 @@
   "premiumFeature2": { "message": "Full cloud sync across devices" },
   "premiumFeature3": { "message": "Priority access to new features" },
   "premiumFeature4": { "message": "Early access to AI integrations" },
+  "premiumFeature5": { "message": "Unlimited variables usage" },
+  "premiumFeature6": { "message": "All Quick Insert hotkey slots" },
   "premiumNote": { "message": "Pro is currently in early access. Contact us via Telegram to get started. Pricing will be announced soon." },
   "earlyAccess": { "message": "Early Access" },
   "contactForPremium": { "message": "Contact via Telegram" },

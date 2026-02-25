@@ -747,7 +747,7 @@ async function insertPromptToPage(id) {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) throw new Error('No tab');
-    await chrome.tabs.sendMessage(tab.id, { action: 'insertPrompt', text: p.text, variables: p.variables || [] });
+    await chrome.tabs.sendMessage(tab.id, { action: 'insertPrompt', text: p.text, variables: p.variables || [], promptId: p.id });
     p.useCount = (p.useCount || 0) + 1;
     p.updatedAt = Date.now();
     _suppressStorageRender = true;
@@ -1328,13 +1328,13 @@ function openFolderEditor(folderId = null) {
   document.getElementById('fe-save-btn').addEventListener('click', async () => {
     const name = document.getElementById('fe-name').value.trim();
     if (!name) { document.getElementById('fe-name-err').style.display = 'block'; return; }
-    // Clear folder draft on save
-    try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
     if (folderId) { const f = state.folders.find(x => x.id === folderId); if (f) { f.name = name; f.updatedAt = Date.now(); syncFolderToSupabase(f); P.analyticsTrackFolderUpdated(f); } }
     else { const newF = { id: crypto.randomUUID(), name, createdAt: Date.now(), updatedAt: Date.now() }; state.folders.push(newF); syncFolderToSupabase(newF); P.analyticsTrackFolderCreated(newF); P.analyticsTrackFolderCreatedEvent(newF); }
     _suppressStorageRender = true;
     await saveData('folders', state.folders);
     _suppressStorageRender = false;
+    // Clear folder draft AFTER successful save to prevent stale "restore draft" dialogs
+    try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
     showToast(folderId ? t('folderUpdated') : t('folderCreated'), 'success');
     closeModal('folder-editor-modal');
     // For edits: try in-place name update (no flicker). Full re-render only for new folders
@@ -1915,7 +1915,7 @@ function renderStats() {
     <div class="stats-section"><div class="stats-section-title">${t('mostUsedPrompts')}</div>${topPrompts.length > 0 ? topPrompts.map((p, i) => `<div class="top-prompt-item"><span class="top-prompt-rank">${i + 1}</span><span class="top-prompt-name">${escapeHtml(truncate(p.title, 30))}</span><span class="top-prompt-uses">${p.useCount} ${t('uses')}</span></div>`).join('') : `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:8px 0;">${t('noUsageData')}</div>`}</div>
     ${platforms.length > 0 ? `<div class="stats-section"><div class="stats-section-title">${t('usageByPlatform')}</div><div class="platform-stats">${platforms.map(([name, count]) => `<div class="platform-stat-row"><span class="platform-stat-name">${escapeHtml(name)}</span><div class="platform-stat-bar-bg"><div class="platform-stat-bar" style="width:${(count / maxPlatform) * 100}%;"></div></div><span class="platform-stat-count">${count}</span></div>`).join('')}</div></div>` : ''}
     ${topTags.length > 0 ? `<div class="stats-section"><div class="stats-section-title">${t('topTags')}</div><div class="tags" style="flex-wrap:wrap;">${topTags.map(([tag, count]) => `<span class="tag">#${escapeHtml(tag)} (${count})</span>`).join('')}</div></div>` : ''}
-    ${!state.isPremium ? `<div class="stats-section" style="border-color:rgba(var(--accent-rgb),0.3);"><div class="stats-section-title">${state.user ? t('freePlan') : (t('guestPlan') || 'Guest Plan')}</div><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">${t('promptsUsed', state.prompts.length, getEffectiveLimit())}<div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;"><div style="height:100%;width:${Math.min((state.prompts.length / getEffectiveLimit()) * 100, 100)}%;background:${state.prompts.length >= getEffectiveLimit() ? 'var(--error)' : 'var(--accent-gradient)'};border-radius:var(--radius-full);transition:width 500ms var(--ease-out-expo);"></div></div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">${state.user ? t('upgradeInfo') : (t('signInForMoreInfo') || 'Sign in with Google for 100 prompts, or upgrade to Pro for unlimited.')}</div></div></div>` : ''}
+    ${!state.isPremium ? `<div class="stats-section" style="border-color:rgba(var(--accent-rgb),0.3);"><div class="stats-section-title">${state.user ? t('freePlan') : (t('guestPlan') || 'Guest Plan')}</div><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;">${t('promptsUsed', state.prompts.length, getEffectiveLimit())}<div style="margin-top:8px;height:6px;background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;"><div style="height:100%;width:${Math.min((state.prompts.length / getEffectiveLimit()) * 100, 100)}%;background:${state.prompts.length >= getEffectiveLimit() ? 'var(--error)' : 'var(--accent-gradient)'};border-radius:var(--radius-full);transition:width 500ms var(--ease-out-expo);"></div></div><div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;">${state.user ? t('upgradeInfo') : (t('signInForMoreInfo') || 'Sign in with Google for 50 prompts, or upgrade to Pro for unlimited.')}</div></div></div>` : ''}
   </div>`;
 }
 
@@ -2433,6 +2433,8 @@ function showUpgradeModal() {
         <div class="upgrade-features-list">
           <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature1')}</span></div>
           <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature2')}</span></div>
+          <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature5')}</span></div>
+          <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature6')}</span></div>
           <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature3')}</span></div>
           <div class="upgrade-feature-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature4')}</span></div>
         </div>
@@ -3074,6 +3076,15 @@ async function init() {
     }
     // Folder draft check (max 1 hour old)
     else if (folderDraft && folderDraft.savedAt && (Date.now() - folderDraft.savedAt < 3600000) && folderDraft.name) {
+      // If draft is for an existing folder, check if it was already saved (stale draft)
+      if (folderDraft.folderId) {
+        const existingFolder = state.folders.find(f => f.id === folderDraft.folderId);
+        if (existingFolder && existingFolder.name.trim() === folderDraft.name.trim()) {
+          // Draft matches current saved state — discard silently
+          try { chrome.storage.local.remove('folderEditorDraft'); } catch (e) { /* silent */ }
+          return; // Skip showing the restore dialog
+        }
+      }
       setTimeout(async () => {
         const titleText = P.getLang() === 'ru'
           ? 'Оповещение расширения "Promptory"'

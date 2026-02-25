@@ -134,7 +134,7 @@ P.openSettingsModal = function(opts = {}) {
         const assigned = slot.promptId ? state.prompts.find(p => p.id === slot.promptId) : null;
         const isLocked = n > maxSlots;
         if (isLocked) {
-          return `<div class="hotkey-item" style="opacity:0.5;"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)} 🔒</div><div class="hotkey-description">${t('signInToUnlock') || 'Sign in to unlock'}</div></div><div class="hotkey-key"><div class="hotkey-badge">Alt+${n}</div></div></div>`;
+          return `<div class="hotkey-item" style="opacity:0.5;"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)} 🔒</div><div class="hotkey-description">${state.user ? (t('upgradeToPro') || 'Upgrade to Pro') : (t('signInToUnlock') || 'Sign in to unlock')}</div></div><div class="hotkey-key"><div class="hotkey-badge">Alt+${n}</div></div></div>`;
         }
         return `<div class="hotkey-item"><div class="hotkey-info"><div class="hotkey-name">${t('slot', n)}</div><div class="hotkey-description">${assigned ? escapeHtml(P.truncate(assigned.title, 25)) : t('noPromptAssigned')}</div></div><div class="hotkey-key"><select class="hotkey-prompt-select" data-hotkey-slot="${slotId}"><option value="">${t('selectPrompt')}</option>${P.getSettingsPromptOptions(slot.promptId)}</select><div class="hotkey-badge">Alt+${n}</div></div></div>`;
       }).join('');
@@ -164,6 +164,8 @@ P.openSettingsModal = function(opts = {}) {
         ${!state.isPremium ? `<div class="pro-settings-features">
           <div class="pro-feature-mini"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature1')}</span></div>
           <div class="pro-feature-mini"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature2')}</span></div>
+          <div class="pro-feature-mini"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature5')}</span></div>
+          <div class="pro-feature-mini"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature6')}</span></div>
           <div class="pro-feature-mini"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>${t('premiumFeature3')}</span></div>
         </div>` : ''}
         <button class="btn ${state.isPremium ? 'btn-secondary' : 'btn-primary'} ripple" id="settings-upgrade-btn" style="width:100%;justify-content:center;gap:6px;margin-top:12px;">
@@ -255,7 +257,7 @@ P.openSettingsModal = function(opts = {}) {
     if (result?.success) {
       state.user = result.user;
       state.session = result.session;
-      // Update limit to free tier (100) immediately on sign-in
+      // Update limit to free tier immediately on sign-in
       if (!state.isPremium) {
         state.promptLimit = CONFIG.FREE_PROMPT_LIMIT;
         await saveData('promptLimit', state.promptLimit);

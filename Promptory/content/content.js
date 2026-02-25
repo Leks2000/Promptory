@@ -34,7 +34,9 @@ const _contentStrings = {
     noPrompts: 'No prompts yet. Create some in the extension popup.',
     enterToInsert: 'Enter to insert',
     escToClose: 'Esc to close',
-    enter: 'Enter'
+    enter: 'Enter',
+    variableLimitReached: 'Variable usage limit reached. Upgrade to Pro for unlimited.',
+    variableTemplateLimitReached: 'Variable template limit reached. Upgrade to Pro for more.'
   },
   ru: {
     fillInVariables: 'Заполните переменные',
@@ -48,7 +50,9 @@ const _contentStrings = {
     noPrompts: 'Пока нет промптов. Создайте их в расширении.',
     enterToInsert: 'Enter — вставить',
     escToClose: 'Esc — закрыть',
-    enter: 'Введите'
+    enter: 'Введите',
+    variableLimitReached: 'Лимит использования переменных исчерпан. Перейдите на Pro для безлимита.',
+    variableTemplateLimitReached: 'Лимит шаблонов с переменными исчерпан. Перейдите на Pro.'
   }
 };
 
@@ -64,7 +68,7 @@ function ct(key) {
 // ---------- Message Listener ----------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'insertPrompt') {
-    insertPrompt(message.text, message.variables);
+    insertPrompt(message.text, message.variables, message.promptId);
     sendResponse({ success: true });
   }
   if (message.action === 'openSearchOverlay') {
@@ -78,10 +82,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ---------- Insert Prompt ----------
-async function insertPrompt(text, variables) {
+async function insertPrompt(text, variables, promptId) {
   if (variables && variables.length > 0) {
-    text = await showVariableDialog(text, variables);
-    if (!text) return;
+    // Check variable usage limits before showing the dialog
+    try {
+      const usageCheck = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'checkVariableUsage', promptId: promptId || null }, (res) => {
+          resolve(res || { allowed: true });
+        });
+      });
+      if (!usageCheck.allowed) {
+        const msg = usageCheck.reason === 'template_limit'
+          ? ct('variableTemplateLimitReached')
+          : ct('variableLimitReached');
+        showNotification(msg);
+        // Insert prompt text without variable substitution (raw text with {variable} placeholders)
+      } else {
+        text = await showVariableDialog(text, variables);
+        if (!text) return;
+        // Record variable usage after successful fill
+        try {
+          chrome.runtime.sendMessage({ action: 'recordVariableUsage', promptId: promptId || null });
+        } catch (e) { /* silent */ }
+      }
+    } catch (e) {
+      // If check fails, allow usage (fail open)
+      text = await showVariableDialog(text, variables);
+      if (!text) return;
+    }
   }
   const inputField = findInputField();
   if (!inputField) {
@@ -391,7 +419,7 @@ function renderSearchResultsOptimized(prompts, query) {
       if (prompt) {
         const overlay = document.getElementById('promptvault-search-overlay');
         if (overlay) closeSearchOverlay(overlay, 150);
-        insertPrompt(prompt.text, prompt.variables || []);
+        insertPrompt(prompt.text, prompt.variables || [], prompt.id);
         // Fire and forget usage update
         chrome.storage.local.get(['prompts'], (res) => {
           const stored = res.prompts || [];
