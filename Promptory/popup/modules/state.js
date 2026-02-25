@@ -6,7 +6,7 @@ window.Promptory = window.Promptory || {};
 (function(P) {
 'use strict';
 
-// Tiered limits: Guest (25) < Free/Google (100) < Pro (unlimited)
+// Tiered limits: Guest (10) < Free/Google (50) < Pro (unlimited)
 const GUEST_PROMPT_LIMIT = CONFIG.GUEST_PROMPT_LIMIT;
 const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT;
 
@@ -99,9 +99,9 @@ P.loadData = async function() {
 };
 
 // ==================== TIERED LIMIT SYSTEM ====================
-// Guest (no account): 25 prompts, 5 folders, 1 quick-insert slot
-// Free (Google account): 100 prompts, 25 folders, 3 quick-insert slots
-// Pro (paid): unlimited prompts & folders, 3 quick-insert slots
+// Guest (no account): 10 prompts, 3 folders, 1 quick-insert slot, limited variables
+// Free (Google account): 50 prompts, 10 folders, 1 quick-insert slot, limited variables
+// Pro (paid): unlimited prompts, folders, quick-insert slots, variables
 
 P.getUserTier = function() {
   if (P.state.isPremium) return 'pro';
@@ -127,7 +127,8 @@ P.getEffectiveFolderLimit = function() {
 };
 
 P.getQuickInsertSlots = function() {
-  if (P.state.isPremium || P.state.user) return CONFIG.FREE_QUICK_INSERT_SLOTS; // 3
+  if (P.state.isPremium) return CONFIG.PRO_QUICK_INSERT_SLOTS; // Infinity
+  if (P.state.user) return CONFIG.FREE_QUICK_INSERT_SLOTS; // 1
   return CONFIG.GUEST_QUICK_INSERT_SLOTS; // 1
 };
 
@@ -154,6 +155,13 @@ P.canExportImport = function() {
   if (P.state.isPremium) return 'json_csv';
   if (P.state.user) return 'json';
   return false;
+};
+
+// ==================== VARIABLE USAGE LIMITS ====================
+P.getVariableLimits = function() {
+  if (P.state.isPremium) return { templates: Infinity, usesPerDay: Infinity };
+  if (P.state.user) return { templates: CONFIG.FREE_VARIABLE_TEMPLATES, usesPerDay: CONFIG.FREE_VARIABLE_USES_PER_DAY };
+  return { templates: CONFIG.GUEST_VARIABLE_TEMPLATES, usesPerDay: CONFIG.GUEST_VARIABLE_USES_PER_DAY };
 };
 
 // ==================== THEME ====================

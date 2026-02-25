@@ -5,8 +5,8 @@ importScripts('../config.js');
 
 const SUPABASE_URL = CONFIG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CONFIG.SUPABASE_ANON_KEY;
-const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT || 100;
-const GUEST_PROMPT_LIMIT = CONFIG.GUEST_PROMPT_LIMIT || 25;
+const FREE_PROMPT_LIMIT = CONFIG.FREE_PROMPT_LIMIT || 50;
+const GUEST_PROMPT_LIMIT = CONFIG.GUEST_PROMPT_LIMIT || 10;
 
 // ---------- Mixpanel HTTP API (lightweight, for service worker) ----------
 const MIXPANEL_TOKEN = 'c86143cd74824a2d516134f860745000';
@@ -223,7 +223,8 @@ chrome.commands.onCommand.addListener(async (command) => {
           const sendInsert = () => chrome.tabs.sendMessage(tab.id, {
             action: 'insertPrompt',
             text: prompt.text,
-            variables: prompt.variables || []
+            variables: prompt.variables || [],
+            promptId: prompt.id
           });
           try {
             await sendInsert();
@@ -289,6 +290,73 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  // Variable usage limit checking for content script
+  if (message.action === 'checkVariableUsage') {
+    (async () => {
+      try {
+        const result = await chrome.storage.local.get(['isPremium', 'user', 'variableUsageToday']);
+        const isPremium = result.isPremium || false;
+        const isLoggedIn = !!result.user;
+        if (isPremium) {
+          sendResponse({ allowed: true });
+          return;
+        }
+        const limits = isPremium
+          ? { templates: Infinity, usesPerDay: Infinity }
+          : isLoggedIn
+            ? { templates: CONFIG.FREE_VARIABLE_TEMPLATES, usesPerDay: CONFIG.FREE_VARIABLE_USES_PER_DAY }
+            : { templates: CONFIG.GUEST_VARIABLE_TEMPLATES, usesPerDay: CONFIG.GUEST_VARIABLE_USES_PER_DAY };
+        const today = new Date().toISOString().split('T')[0];
+        const usage = result.variableUsageToday || {};
+        // Reset if it's a new day
+        if (usage.date !== today) {
+          sendResponse({ allowed: true, remaining: limits.usesPerDay, templateLimit: limits.templates });
+          return;
+        }
+        const promptId = message.promptId;
+        const usedTemplates = Object.keys(usage.prompts || {});
+        const isNewTemplate = promptId && !usedTemplates.includes(promptId);
+        const totalUsesToday = Object.values(usage.prompts || {}).reduce((s, c) => s + c, 0);
+        // Check template limit
+        if (isNewTemplate && usedTemplates.length >= limits.templates) {
+          sendResponse({ allowed: false, reason: 'template_limit', limit: limits.templates });
+          return;
+        }
+        // Check daily usage limit
+        if (totalUsesToday >= limits.usesPerDay) {
+          sendResponse({ allowed: false, reason: 'daily_limit', limit: limits.usesPerDay });
+          return;
+        }
+        sendResponse({ allowed: true, remaining: limits.usesPerDay - totalUsesToday, templateLimit: limits.templates });
+      } catch (e) {
+        sendResponse({ allowed: true }); // Fail open
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === 'recordVariableUsage') {
+    (async () => {
+      try {
+        const result = await chrome.storage.local.get(['variableUsageToday']);
+        const today = new Date().toISOString().split('T')[0];
+        let usage = result.variableUsageToday || {};
+        // Reset if it's a new day
+        if (usage.date !== today) {
+          usage = { date: today, prompts: {} };
+        }
+        const promptId = message.promptId || 'unknown';
+        if (!usage.prompts) usage.prompts = {};
+        usage.prompts[promptId] = (usage.prompts[promptId] || 0) + 1;
+        await chrome.storage.local.set({ variableUsageToday: usage });
+        sendResponse({ success: true });
+      } catch (e) {
+        sendResponse({ success: false });
+      }
+    })();
+    return true;
+  }
+
   if (message.action === 'insertPromptToTab') {
     (async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -297,7 +365,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           await chrome.tabs.sendMessage(tab.id, {
             action: 'insertPrompt',
             text: message.text,
-            variables: message.variables || []
+            variables: message.variables || [],
+            promptId: message.promptId || null
           });
           sendResponse({ success: true });
         } catch (_e) {
@@ -316,7 +385,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             await chrome.tabs.sendMessage(tab.id, {
               action: 'insertPrompt',
               text: message.text,
-              variables: message.variables || []
+              variables: message.variables || [],
+              promptId: message.promptId || null
             });
             sendResponse({ success: true });
           } catch (injectErr) {

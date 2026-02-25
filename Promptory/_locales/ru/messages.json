@@ -151,7 +151,7 @@
 
   "guestPlan": { "message": "Гостевой план" },
   "signInForMore": { "message": "Войдите для + промптов" },
-  "signInForMoreInfo": { "message": "Войдите через Google для 100 промптов, или перейдите на Pro для безлимита." },
+  "signInForMoreInfo": { "message": "Войдите через Google для 50 промптов, или перейдите на Pro для безлимита." },
   "signInToUnlock": { "message": "Войдите для разблокировки" },
   "signInForExport": { "message": "Войдите через Google для экспорта/импорта данных" },
 
@@ -248,6 +248,8 @@
   "premiumFeature2": { "message": "Полная облачная синхронизация" },
   "premiumFeature3": { "message": "Приоритетный доступ к новым функциям" },
   "premiumFeature4": { "message": "Ранний доступ к AI-интеграциям" },
+  "premiumFeature5": { "message": "Безлимитное использование переменных" },
+  "premiumFeature6": { "message": "Все слоты быстрой вставки" },
   "premiumNote": { "message": "Pro сейчас в раннем доступе. Свяжитесь с нами в Telegram для активации. Цены будут объявлены позже." },
   "earlyAccess": { "message": "Ранний доступ" },
   "contactForPremium": { "message": "Написать в Telegram" },
