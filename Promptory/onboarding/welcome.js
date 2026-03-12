@@ -55,7 +55,7 @@
       termsLink.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation(); // Prevent checkbox toggle
-        try { chrome.tabs.create({ url: chrome.runtime.getURL('terms.html') }); }
+        try { chrome.tabs.create({ url: 'https://leks2000.github.io/promptory-privacy/terms.html' }); }
         catch (err) { console.warn('[Promptory] openExtPage error:', err); }
       });
     }
@@ -64,7 +64,7 @@
       privacyLink.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation(); // Prevent checkbox toggle
-        try { chrome.tabs.create({ url: chrome.runtime.getURL('privacy.html') }); }
+        try { chrome.tabs.create({ url: 'https://leks2000.github.io/promptory-privacy' }); }
         catch (err) { console.warn('[Promptory] openExtPage error:', err); }
       });
     }
