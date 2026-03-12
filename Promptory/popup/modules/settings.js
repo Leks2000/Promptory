@@ -212,7 +212,7 @@ P.openSettingsModal = function(opts = {}) {
       <button class="btn btn-sm btn-danger" id="request-deletion-btn" style="width:100%;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>${t('requestDeletion')}</button></div>
     </div><div class="divider"></div>
     ` : ''}
-    <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v${CONFIG.VERSION}<br>${t('aboutDescription')}<div style="margin-top:8px;display:flex;gap:12px;"><a href="${chrome.runtime.getURL('privacy.html')}" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Privacy Policy</a><a href="${chrome.runtime.getURL('terms.html')}" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Terms of Service</a></div></div></div>
+    <div class="form-group"><label class="form-label">${t('about')}</label><div style="font-size:var(--font-size-sm);color:var(--text-secondary);line-height:1.6;"><strong>Promptory</strong> v${CONFIG.VERSION}<br>${t('aboutDescription')}<div style="margin-top:8px;display:flex;gap:12px;"><a href="https://leks2000.github.io/promptory-privacy" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Privacy Policy</a><a href="https://leks2000.github.io/promptory-privacy/terms.html" target="_blank" style="color:var(--accent);font-size:var(--font-size-xs);">Terms of Service</a></div></div></div>
   `;
   body.appendChild(remainingSections);
   modalInner.appendChild(body);
