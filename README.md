@@ -29,65 +29,34 @@ Whether you're generating images in Stable Diffusion, writing with ChatGPT, or b
 > Your prompts are processed through **your own API keys** and stored **locally in your browser**. Nothing goes through our servers.
 
 ---
-
-## Table of Contents
-
-- [Key Features](#key-features)
-- [Three Prompt Improvement Modes](#three-prompt-improvement-modes)
-- [Image Analysis → Prompt Generation](#image-analysis--prompt-generation)
-- [Prompt Library & History](#prompt-library--history)
-- [Supported AI Platforms](#supported-ai-platforms)
-- [Supported API Providers](#supported-api-providers)
-- [Installation](#installation)
-- [Privacy](#privacy)
-- [Tech Stack](#tech-stack)
-- [Contributing](#contributing)
-
+ 
+## Screenshots
+ 
+| Quick Search Overlay | Prompt Library | Pro Features | Dynamic Variables |
+|---|---|---|---|
+| ![Alt+S overlay](screenshots/overlay.png) | ![Library](screenshots/library.png) | ![Pro](screenshots/pro.png) | ![Variables](screenshots/variables.png) |
+ 
 ---
-
-## Key Features
-
-| Feature | Description |
-|---|---|
-| ✍️ **3 Prompt Modes** | Image generation, conversational AI, and universal improvement |
-| 🖼️ **Image → Prompt** | Analyze any image and generate a prompt in all three formats |
-| 📚 **Prompt Library** | Save, tag, search, and export your best prompts |
-| 🔗 **Prompt Sharing** | Share prompts via public links, QR codes, or Telegram/X |
-| 🔒 **Privacy First** | Your own API keys, local storage, no data collection |
-| 🆓 **Free & Open Source** | MIT license, no paywalls on core features |
-
----
-
-## Three Prompt Improvement Modes
-
-### 🎨 Image Generation — Stable Diffusion / Midjourney / Civitai / DALL·E
-Rewrites your prompt with proper style tags, composition details, quality modifiers, and technical parameters. Output is always in English for maximum model compatibility.
-
-**Before:** `a girl in a forest`  
-**After:** `portrait of a young woman in an enchanted forest, soft volumetric lighting, f/1.8 bokeh, detailed foliage, photorealistic, 8k, trending on ArtStation, shot on Canon EOS R5`
-
----
-
-### 🌐 Universal — Any AI Task
-Improves any prompt for any AI model — adds context, structure, and examples so the model understands exactly what you need. Works for research, writing, coding, analysis, and more.
-
----
-
-### 💬 Conversational — ChatGPT / Claude / Gemini / Copilot
-Structures your prompt as a proper instruction: defines the AI role, expected output format, tone, and interaction style. Gets you consistent, on-target responses every time.
-
----
-
-## Image Analysis → Prompt Generation
-
-Drop any image into Promtly and instantly get a ready-to-use prompt in **all three formats**:
-
-- 🎨 **Stable Diffusion prompt** — recreate the image style in any diffusion model
-- 🌐 **Universal description** — detailed visual description for any text-based AI
-- 💬 **Conversational prompt** — ask an AI to generate something similar
-
-**Use cases:** recreating a style in ComfyUI, generating image variants, reverse-engineering reference images, or describing visuals to a text-only model.
-
+ 
+## Features
+ 
+### ⚡ Instant Access
+- **`Alt+S`** — open prompt search overlay on any AI page
+- **`Alt+1` / `Alt+2` / `Alt+3`** — quick-insert your top 3 prompts without even opening the overlay
+- **`Enter`** to insert, **`Esc`** to close — keyboard-first workflow
+### 📁 Organize Everything
+- Save prompts in **folders** with tags and favorites
+- **Stats** — see which prompts you use most
+- **Community Library** — browse prompts shared by other users
+- **Export / Import** as JSON or CSV
+### 🔧 Power User Features
+- **`{variables}`** — define placeholders that pop up as a form before inserting, so you fill in the dynamic parts without editing the prompt manually
+- **Right-click any text** → "Save as Prompt" — capture prompts instantly while browsing
+- Works **100% offline** — your prompts never leave your browser unless you opt into sync
+### 🔒 Privacy First
+- Prompts stored **locally in your browser** by default
+- Cloud sync is **optional and encrypted** (Pro)
+- No data selling, no tracking
 ---
 
 ## Prompt Library & History
