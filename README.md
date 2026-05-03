@@ -6,7 +6,7 @@
 
 **AI Prompt Improver & Image Analyzer — Free Chrome Extension for ChatGPT, Claude, Gemini & Stable Diffusion**
 
-[![Install on Chrome](https://img.shields.io/badge/Install_on_Chrome-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://github.com/Leks2000/Promtly)
+[![Install on Chrome](https://img.shields.io/badge/Install_on_Chrome-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/promptory/enmooiddeabgnpkkcohphpicijjeogfo?pli=1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c3aed?style=flat-square)](LICENSE)
 [![React 18](https://img.shields.io/badge/React_18-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
