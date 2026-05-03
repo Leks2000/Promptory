@@ -12,7 +12,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Open Source](https://img.shields.io/badge/Open_Source-✓-brightgreen?style=flat-square)](https://github.com/Leks2000/Promtly)
 
-[**→ Install Promtly for Chrome**](https://github.com/Leks2000/Promtly) · [Report a Bug](https://github.com/Leks2000/Promtly/issues) · [Request a Feature](https://github.com/Leks2000/Promtly/issues)
+[**→ Install Promtly for Chrome**](https://chromewebstore.google.com/detail/promptory/enmooiddeabgnpkkcohphpicijjeogfo?pli=1) · [Report a Bug](https://github.com/Leks2000/Promptory/issues) · [Request a Feature](https://github.com/Leks2000/Promptory/issues)
 
 </div>
 
